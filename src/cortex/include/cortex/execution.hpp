@@ -17,13 +17,12 @@ namespace cortex {
 /**
  * @brief The `forced_unwind` struct represents an exception used for forced context unwinding.
  */
-struct forced_unwind {
+struct forced_unwind : public error {
     machine::context_t context {nullptr};
 
-    forced_unwind() = default;
-
     explicit forced_unwind(machine::context_t ctx)
-        : context(ctx) {}
+        : error(std::string())
+        , context(ctx) {}
 };
 
 template <typename Alloc>
@@ -154,7 +153,7 @@ void execution::frame<StackAlloc>::entry(machine::transfer_t transfer) noexcept 
         // start executing
         disabler dis(transfer, transfer.fctx);
         fr->run(dis);
-    } catch (forced_unwind const& ex) {
+    } catch (const forced_unwind& ex) {
         transfer = {ex.context, nullptr};
     }
     assert(nullptr != transfer.fctx);
