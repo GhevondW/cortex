@@ -19,11 +19,9 @@ function(add_cortex_test target_name source_file)
   add_executable(${target_name} ${source_file})
   target_link_libraries(
     ${target_name}
-    PRIVATE cortex::cortex_warnings
-            cortex::cortex_options
-            cortex::lib
-            Boost::context
-            Boost::unit_test_framework)
+    PRIVATE cortex::cortex_options
+            Boost::unit_test_framework
+            cortex::lib)
 
   if(WIN32 AND BUILD_SHARED_LIBS)
     add_custom_command(
@@ -36,4 +34,4 @@ function(add_cortex_test target_name source_file)
   add_test(NAME ${target_name} COMMAND ${target_name})
 endfunction()
 
-add_cortex_test(tests tests.cpp)
+add_cortex_test(just_works_test just_works_test.cpp)
