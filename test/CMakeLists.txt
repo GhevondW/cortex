@@ -35,3 +35,4 @@ function(add_cortex_test target_name source_file)
 endfunction()
 
 add_cortex_test(just_works_test just_works_test.cpp)
+add_cortex_test(memory_leak_test memory_leak_test.cpp)

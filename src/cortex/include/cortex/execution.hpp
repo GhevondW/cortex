@@ -26,6 +26,10 @@ struct forced_unwind {
         : context(ctx) {}
 };
 
+template <typename Alloc>
+inline static constexpr bool
+    is_deallocate_noexcept_v = noexcept(std::declval<std::decay_t<Alloc>>().deallocate(std::declval<stack&>()));
+
 /**
  * @brief The `disabler` class provides a mechanism for disabling the execution flow of a context.
  */
@@ -179,6 +183,8 @@ void execution::frame<StackAlloc>::destroy() {
 
 template <typename StackAlloc>
 execution execution::create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow) {
+    static_assert(is_deallocate_noexcept_v<StackAlloc>);
+
     if (flow == nullptr) {
         throw execution::invalid_flow("The input flow is nullptr.");
     }

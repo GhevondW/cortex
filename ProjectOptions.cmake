@@ -1,4 +1,5 @@
 include(cmake/SystemLink.cmake)
+include(cmake/StaticAnalyzers.cmake)
 include(CMakeDependentOption)
 include(CheckCXXCompilerFlag)
 
@@ -110,6 +111,8 @@ macro(cortex_local_options)
 
   add_library(cortex_warnings INTERFACE)
   add_library(cortex_options INTERFACE)
+
+  cortex_enable_cppcheck(cortex_options ${CORTEX_WARNINGS_AS_ERRORS} "")
 
   include(cmake/CompilerWarnings.cmake)
   cortex_set_project_warnings(

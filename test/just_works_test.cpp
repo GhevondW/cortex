@@ -51,6 +51,27 @@ BOOST_AUTO_TEST_CASE(just_works) {
     execution.enable();
 }
 
-// Add more test cases as needed
+BOOST_AUTO_TEST_CASE(just_works_partial) {
+    using namespace cortex;
+
+    int counter = 0;
+
+    auto flow = basic_flow::make([&counter](api::disabler& dis) {
+        BOOST_CHECK_EQUAL(++counter, 2);
+        std::cout << "Step 2" << '\n';
+        dis.disable();
+
+        BOOST_CHECK(false); // We must not reach here
+    });
+
+    auto execution = execution::create(stack_allocator {1000000}, std::move(flow));
+
+    BOOST_CHECK_EQUAL(++counter, 1);
+    std::cout << "Step 1" << '\n';
+    execution.enable();
+
+    BOOST_CHECK_EQUAL(++counter, 3);
+    std::cout << "Step 3" << '\n';
+}
 
 BOOST_AUTO_TEST_SUITE_END()
