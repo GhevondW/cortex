@@ -91,6 +91,14 @@ public:
     };
 
     /**
+     * @brief The `invalid_flow` class represents an exception for an invalid stack size.
+     */
+    class invalid_stack_size : public error {
+    public:
+        using error::error;
+    };
+
+    /**
      * @brief Default constructor for the `execution` class.
      */
     execution() = default;
@@ -191,6 +199,12 @@ execution execution::create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow)
 
     auto stack = alloc.allocate();
     using frame_t = frame<StackAlloc>;
+
+    static constexpr std::size_t min_stack_size = 128000; // 128 KB
+    if (stack.size() < min_stack_size) {
+        alloc.deallocate(stack);
+        throw invalid_stack_size("The allocated stack size is small, must be 128 KB min.");
+    }
 
     // reserve space for control structure
     void* storage =

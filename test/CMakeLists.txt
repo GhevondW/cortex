@@ -36,3 +36,4 @@ endfunction()
 
 add_cortex_test(just_works_test just_works_test.cpp)
 add_cortex_test(memory_leak_test memory_leak_test.cpp)
+add_cortex_test(nested_execution_test nested_execution_test.cpp)

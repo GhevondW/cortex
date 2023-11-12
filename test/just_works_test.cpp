@@ -74,4 +74,11 @@ BOOST_AUTO_TEST_CASE(just_works_partial) {
     std::cout << "Step 3" << '\n';
 }
 
+BOOST_AUTO_TEST_CASE(create_exceptions) {
+    using namespace cortex;
+    BOOST_CHECK_THROW(execution::create(stack_allocator {1000000}, nullptr), execution::invalid_flow);
+    BOOST_CHECK_THROW(execution::create(stack_allocator {100}, basic_flow::make([](api::disabler& dis) {})),
+                      execution::invalid_stack_size);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
