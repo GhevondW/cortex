@@ -14,6 +14,9 @@
 
 namespace cortex {
 
+/**
+ * @brief The `forced_unwind` struct represents an exception used for forced context unwinding.
+ */
 struct forced_unwind {
     machine::context_t context {nullptr};
 
@@ -23,6 +26,9 @@ struct forced_unwind {
         : context(ctx) {}
 };
 
+/**
+ * @brief The `disabler` class provides a mechanism for disabling the execution flow of a context.
+ */
 struct disabler : public api::disabler {
     explicit disabler(machine::transfer_t& t, machine::context_t c)
         : transfer(t)
@@ -44,6 +50,9 @@ private:
     machine::context_t caller;
 };
 
+/**
+ * @brief The `execution` class provides control over the execution flow and context management.
+ */
 class execution {
 private:
     template <typename StackAlloc>
@@ -69,11 +78,17 @@ private:
     };
 
 public:
+    /**
+     * @brief The `invalid_flow` class represents an exception for an invalid execution flow.
+     */
     class invalid_flow : public error {
     public:
         using error::error;
     };
 
+    /**
+     * @brief Default constructor for the `execution` class.
+     */
     execution() = default;
 
     execution(const execution&) = delete;
@@ -81,15 +96,37 @@ public:
     execution& operator=(const execution&) = delete;
     execution& operator=(execution&&) = delete;
 
+    /**
+     * @brief Creates a new `execution` with the specified stack allocator and execution flow.
+     *
+     * @tparam StackAlloc The type of the stack allocator.
+     * @param alloc The stack allocator instance.
+     * @param flow The execution flow to be associated with the execution.
+     * @return A new `execution` instance.
+     * @throws invalid_flow if the input flow is nullptr.
+     */
     template <typename StackAlloc>
     static execution create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow);
 
+    /**
+     * @brief Destructor for the `execution` class.
+     */
     ~execution() noexcept;
+
+    /**
+     * @brief Enables the execution flow of the context.
+     */
     void enable();
 
 private:
+    /**
+     * @brief Private constructor for creating an `execution` with the specified machine context.
+     *
+     * @param context The machine context associated with the execution.
+     */
     explicit execution(machine::context_t context);
 
+    /// The machine context associated with the execution.
     machine::context_t _context = nullptr;
 };
 
