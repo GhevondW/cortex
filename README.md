@@ -9,7 +9,7 @@ Cortex is a C++ library built on top of Boost.Context that provides a lightweigh
 - **Stack Allocation:** Customize stack allocation for execution contexts.
 - **Forced Unwind:** Gracefully handle forced context unwinding.
 
-## Installation
+## Build
 
 Clone the repository and build the library using CMake:
 
@@ -33,7 +33,8 @@ make
 ```c++
 auto coroutine = cortex::execution::create(cortex::stack_allocator{1000000}, cortex::basic_flow::make([](cortex::api::disabler& dis) {
     // Your coroutine code here.
-    // disable and jump back with dis.disable() if needed.
+    // Disable and jump back with dis.disable() if needed.
+    // Ensure that exceptions thrown in this coroutine are inherited from std::exception.
 }));
 ```
 
@@ -41,3 +42,8 @@ auto coroutine = cortex::execution::create(cortex::stack_allocator{1000000}, cor
 ```c++
 coroutine.enable();
 ```
+
+<details>
+<summary>⚠️ Warning: </summary>
+<p>Users must only use exceptions inherited from `std::exception` in their coroutine body.</p>
+</details>

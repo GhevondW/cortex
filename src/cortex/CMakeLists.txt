@@ -16,6 +16,8 @@ add_library(cortex::lib ALIAS cortex_lib)
 
 target_link_libraries(cortex_lib PRIVATE cortex_options cortex_warnings)
 target_link_system_libraries(cortex_lib PUBLIC Boost::context)
+# TODO : add this flag when needed.
+target_compile_definitions(cortex_lib PRIVATE BOOST_USE_ASAN)
 
 target_include_directories(cortex_lib ${WARNING_GUARD} PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/cortex/include>)

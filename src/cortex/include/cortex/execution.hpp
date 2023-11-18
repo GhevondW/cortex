@@ -80,6 +80,11 @@ private:
         std::unique_ptr<api::flow> _flow;
     };
 
+    /**
+     * @brief Default constructor for the `execution` class.
+     */
+    execution() = default;
+
 public:
     /**
      * @brief The `invalid_flow` class represents an exception for an invalid execution flow.
@@ -96,11 +101,6 @@ public:
     public:
         using error::error;
     };
-
-    /**
-     * @brief Default constructor for the `execution` class.
-     */
-    execution() = default;
 
     execution(const execution&) = delete;
     execution(execution&&) = delete;
@@ -126,6 +126,7 @@ public:
 
     /**
      * @brief Enables the execution flow of the context.
+     * @rethrows the uncaught exception during execution.
      */
     void enable();
 
@@ -147,6 +148,8 @@ void execution::frame<StackAlloc>::entry(machine::transfer_t transfer) noexcept 
     auto fr = static_cast<frame*>(transfer.data);
     assert(nullptr != transfer.fctx);
     assert(nullptr != fr);
+
+    std::exception_ptr exception;
     try {
         // jump back to `create_context()`
         transfer = machine::jump_to_context(transfer.fctx, nullptr);
@@ -155,8 +158,21 @@ void execution::frame<StackAlloc>::entry(machine::transfer_t transfer) noexcept 
         fr->run(dis);
     } catch (const forced_unwind& ex) {
         transfer = {ex.context, nullptr};
+    } catch (const std::exception& ex) {
+        exception = std::current_exception();
     }
     assert(nullptr != transfer.fctx);
+
+    if (exception != nullptr) {
+        // This one is for forced_unwind.
+        try {
+            // jump back to the caller context with exception.
+            transfer = machine::jump_to_context(transfer.fctx, static_cast<void*>(&exception));
+        } catch (const forced_unwind& ex) {
+            transfer = {ex.context, nullptr};
+        }
+    }
+
     // destroy context-stack of `this`context on next context
     [[maybe_unused]] auto res = machine::ontop_context(transfer.fctx, fr, &exit);
     assert(false); // context already terminated
