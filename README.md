@@ -33,7 +33,7 @@ make
 ```c++
 auto coroutine = cortex::execution::create(cortex::stack_allocator{1000000}, cortex::basic_flow::make([](cortex::api::disabler& dis) {
     // Your coroutine code here.
-    // disable and jum back with dis.disable() if needed.
+    // disable and jump back with dis.disable() if needed.
 }));
 ```
 

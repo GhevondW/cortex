@@ -5,14 +5,6 @@ Note about install commands:
 - for MacOS, we use [brew](https://brew.sh/).
 - In case of an error in cmake, make sure that the dependencies are on the PATH.
 
-
-### Too Long, Didn't Install
-
-This is a really long list of dependencies, and it's easy to mess up. That's why:
-
-#### Docker
-We have a Docker image that's already set up for you. See the [Docker instructions](./README_docker.md).
-
 #### Setup-cpp
 
 We have [setup-cpp](https://github.com/aminya/setup-cpp) that is a cross-platform tool to install all the compilers and dependencies on the system.

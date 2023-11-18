@@ -1,16 +1,19 @@
+#include <cortex/error.hpp>
 #include <cortex/stack_allocator.hpp>
 
 #include <cassert>
-#include <stdexcept>
 
 namespace cortex {
 
-stack_allocator::stack_allocator(std::size_t size)
-    : _size(size) {
-    if (_size == 0) {
-        throw std::invalid_argument("The input size is zero.");
+stack_allocator stack_allocator::create(std::size_t size) {
+    if (size == 0) {
+        throw error("The input size is zero.");
     }
+    return stack_allocator(size);
 }
+
+stack_allocator::stack_allocator(std::size_t size)
+    : _size(size) {}
 
 [[nodiscard]] stack stack_allocator::allocate() const {
     void* ptr = std::malloc(_size);

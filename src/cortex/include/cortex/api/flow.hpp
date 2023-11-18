@@ -46,6 +46,7 @@ struct flow {
      * It is responsible for running the execution flow with an option to disable execution.
      *
      * @param dis A reference to a `disabler` object that can be used to disable the execution flow if needed.
+     * @internal Consider making it noexcept.
      */
     virtual void run(disabler& dis) = 0;
 };

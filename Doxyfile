@@ -1,0 +1,14 @@
+# Doxyfile for Cortex project
+
+# Project information
+PROJECT_NAME           = "Cortex"
+PROJECT_NUMBER         = 0.0.1
+
+# Output directory
+OUTPUT_DIRECTORY       = ./doc
+
+# Input sources
+INPUT                  = ./src
+
+# Recurse into subdirectories
+RECURSIVE              = YES
