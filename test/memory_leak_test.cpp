@@ -43,7 +43,7 @@ BOOST_AUTO_TEST_CASE(no_memory_leak) {
             BOOST_CHECK(false); // We must not reach here
         });
 
-        auto execution = execution::create(stack_allocator {1000000}, std::move(flow));
+        auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
         std::cout << "Step 1" << '\n';
         execution.enable();

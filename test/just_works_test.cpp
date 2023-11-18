@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(just_works) {
         dis.disable();
     });
 
-    auto execution = execution::create(stack_allocator {1000000}, std::move(flow));
+    auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
     BOOST_CHECK_EQUAL(++counter, 1);
     std::cout << "Step 1" << '\n';
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(just_works_partial) {
         BOOST_CHECK(false); // We must not reach here
     });
 
-    auto execution = execution::create(stack_allocator {1000000}, std::move(flow));
+    auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
     BOOST_CHECK_EQUAL(++counter, 1);
     std::cout << "Step 1" << '\n';
@@ -76,8 +76,8 @@ BOOST_AUTO_TEST_CASE(just_works_partial) {
 
 BOOST_AUTO_TEST_CASE(create_exceptions) {
     using namespace cortex;
-    BOOST_CHECK_THROW(execution::create(stack_allocator {1000000}, nullptr), execution::invalid_flow);
-    BOOST_CHECK_THROW(execution::create(stack_allocator {100}, basic_flow::make([](api::disabler& dis) {})),
+    BOOST_CHECK_THROW(execution::create(stack_allocator::create(1000000), nullptr), execution::invalid_flow);
+    BOOST_CHECK_THROW(execution::create(stack_allocator::create(100), basic_flow::make([](api::disabler& dis) {})),
                       execution::invalid_stack_size);
 }
 

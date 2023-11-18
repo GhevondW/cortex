@@ -5,13 +5,19 @@ include(cmake/CPM.cmake)
 # targets
 function(cortex_setup_dependencies)
 
-  # boost is a huge project and will take a while to download
-  # using `CPM_SOURCE_CACHE` is strongly recommended
-  CPMAddPackage(
-    NAME Boost
-    VERSION 1.81.0
-    GITHUB_REPOSITORY "boostorg/boost"
-    GIT_TAG "boost-1.81.0"
-  )
+  # Check if Boost is already available
+  find_package(Boost QUIET)
+
+  # If Boost is not found, add it
+  if(NOT Boost_FOUND)
+    # boost is a huge project and will take a while to download
+    # using `CPM_SOURCE_CACHE` is strongly recommended
+    CPMAddPackage(
+            NAME Boost
+            VERSION 1.81.0
+            GITHUB_REPOSITORY "boostorg/boost"
+            GIT_TAG "boost-1.81.0"
+    )
+  endif()
 
 endfunction()

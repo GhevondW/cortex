@@ -3,7 +3,6 @@ include(cmake/StaticAnalyzers.cmake)
 include(CMakeDependentOption)
 include(CheckCXXCompilerFlag)
 
-
 macro(cortex_supports_sanitizers)
   if((CMAKE_CXX_COMPILER_ID MATCHES ".*Clang.*" OR CMAKE_CXX_COMPILER_ID MATCHES ".*GNU.*") AND NOT WIN32)
     set(SUPPORTS_UBSAN ON)
@@ -30,39 +29,32 @@ macro(cortex_setup_options)
 
   cortex_supports_sanitizers()
 
-  if(NOT PROJECT_IS_TOP_LEVEL OR CORTEX_PACKAGING_MAINTAINER_MODE)
-    option(CORTEX_ENABLE_IPO "Enable IPO/LTO" OFF)
+  if(PROJECT_IS_TOP_LEVEL)
+    option(CORTEX_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
+    option(CORTEX_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
+    option(CORTEX_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" ON)
+    option(CORTEX_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" ${SUPPORTS_UBSAN})
+    option(CORTEX_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
+    option(CORTEX_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
+    option(CORTEX_ENABLE_CLANG_TIDY "Enable clang-tidy" ON)
+    option(CORTEX_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
+    option(CORTEX_ENABLE_PCH "Enable precompiled headers" OFF)
+    option(CORTEX_ENABLE_CACHE "Enable ccache" ON)
+  else()
     option(CORTEX_WARNINGS_AS_ERRORS "Treat Warnings As Errors" OFF)
-    option(CORTEX_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
     option(CORTEX_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
     option(CORTEX_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
     option(CORTEX_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" OFF)
     option(CORTEX_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
     option(CORTEX_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
-    option(CORTEX_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
     option(CORTEX_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
     option(CORTEX_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
     option(CORTEX_ENABLE_PCH "Enable precompiled headers" OFF)
     option(CORTEX_ENABLE_CACHE "Enable ccache" OFF)
-  else()
-    option(CORTEX_ENABLE_IPO "Enable IPO/LTO" OFF)
-    option(CORTEX_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
-    option(CORTEX_ENABLE_USER_LINKER "Enable user-selected linker" OFF)
-    option(CORTEX_ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" ${SUPPORTS_ASAN})
-    option(CORTEX_ENABLE_SANITIZER_LEAK "Enable leak sanitizer" OFF)
-    option(CORTEX_ENABLE_SANITIZER_UNDEFINED "Enable undefined sanitizer" ${SUPPORTS_UBSAN})
-    option(CORTEX_ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
-    option(CORTEX_ENABLE_SANITIZER_MEMORY "Enable memory sanitizer" OFF)
-    option(CORTEX_ENABLE_UNITY_BUILD "Enable unity builds" OFF)
-    option(CORTEX_ENABLE_CLANG_TIDY "Enable clang-tidy" OFF)
-    option(CORTEX_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
-    option(CORTEX_ENABLE_PCH "Enable precompiled headers" OFF)
-    option(CORTEX_ENABLE_CACHE "Enable ccache" ON)
   endif()
 
   if(NOT PROJECT_IS_TOP_LEVEL)
     mark_as_advanced(
-      CORTEX_ENABLE_IPO
       CORTEX_WARNINGS_AS_ERRORS
       CORTEX_ENABLE_USER_LINKER
       CORTEX_ENABLE_SANITIZER_ADDRESS
@@ -70,7 +62,6 @@ macro(cortex_setup_options)
       CORTEX_ENABLE_SANITIZER_UNDEFINED
       CORTEX_ENABLE_SANITIZER_THREAD
       CORTEX_ENABLE_SANITIZER_MEMORY
-      CORTEX_ENABLE_UNITY_BUILD
       CORTEX_ENABLE_CLANG_TIDY
       CORTEX_ENABLE_CPPCHECK
       CORTEX_ENABLE_COVERAGE
@@ -81,11 +72,6 @@ macro(cortex_setup_options)
 endmacro()
 
 macro(cortex_global_options)
-  if(CORTEX_ENABLE_IPO)
-    include(cmake/InterproceduralOptimization.cmake)
-    cortex_enable_ipo()
-  endif()
-
   cortex_supports_sanitizers()
 
   if(CORTEX_ENABLE_HARDENING AND CORTEX_ENABLE_GLOBAL_HARDENING)
@@ -123,11 +109,6 @@ macro(cortex_local_options)
     ""
     "")
 
-  if(CORTEX_ENABLE_USER_LINKER)
-    include(cmake/Linker.cmake)
-    configure_linker(cortex_options)
-  endif()
-
   include(cmake/Sanitizers.cmake)
   cortex_enable_sanitizers(
     cortex_options
@@ -136,8 +117,6 @@ macro(cortex_local_options)
     ${CORTEX_ENABLE_SANITIZER_UNDEFINED}
     ${CORTEX_ENABLE_SANITIZER_THREAD}
     ${CORTEX_ENABLE_SANITIZER_MEMORY})
-
-  set_target_properties(cortex_options PROPERTIES UNITY_BUILD ${CORTEX_ENABLE_UNITY_BUILD})
 
   if(CORTEX_ENABLE_PCH)
     target_precompile_headers(
