@@ -19,7 +19,15 @@ execution::~execution() noexcept {
 }
 
 void execution::enable() {
-    _context = machine::jump_to_context(_context, nullptr).fctx;
+    assert(_context);
+
+    machine::transfer_t transfer = machine::jump_to_context(_context, nullptr);
+
+    _context = transfer.fctx;
+
+    if (transfer.data != nullptr) { // Exception is happened.
+        std::rethrow_exception(*static_cast<std::exception_ptr*>(transfer.data));
+    }
 }
 
 execution::execution(machine::context_t context)

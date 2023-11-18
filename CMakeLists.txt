@@ -54,6 +54,6 @@ endif()
 # Adding the tests:
 include(CTest)
 
-if(BUILD_TESTING)
+if(CORTEX_BUILD_TESTING)
   add_subdirectory(test)
 endif()
