@@ -58,16 +58,17 @@ private:
  */
 class execution {
 private:
-    template <typename StackAlloc>
+    template <typename StackAlloc, typename Flow>
     class frame {
         friend class execution;
         using stack_allocator_t = std::decay_t<StackAlloc>;
+        using flow_t = Flow;
 
         static void entry(machine::transfer_t transfer) noexcept;
         static machine::transfer_t exit(machine::transfer_t transfer) noexcept;
 
     public:
-        frame(stack_allocator_t&& alloc, stack st, std::unique_ptr<api::flow> flow);
+        frame(stack_allocator_t&& alloc, stack st, flow_t flow);
         frame() = default;
 
         void run(api::disabler& dis);
@@ -77,7 +78,7 @@ private:
     private:
         stack_allocator_t _allocator;
         stack _stack;
-        std::unique_ptr<api::flow> _flow;
+        flow_t _flow;
     };
 
     /**
@@ -120,6 +121,19 @@ public:
     static execution create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow);
 
     /**
+     * @brief Creates a new `execution` with the specified stack allocator and raw execution flow pointer.
+     * Note: The user must be careful with the lifetimes of execution and the flow.
+     *
+     * @tparam StackAlloc The type of the stack allocator.
+     * @param alloc The stack allocator instance.
+     * @param flow The execution flow to be associated with the execution.
+     * @return A new `execution` instance.
+     * @throws invalid_flow if the input flow is nullptr.
+     */
+    template <typename StackAlloc>
+    static execution create_with_raw_flow(StackAlloc&& alloc, api::flow* flow);
+
+    /**
      * @brief Destructor for the `execution` class.
      */
     ~execution() noexcept;
@@ -131,6 +145,9 @@ public:
     void enable();
 
 private:
+    template <typename StackAlloc, typename Flow>
+    static execution create(StackAlloc&& alloc, Flow flow);
+
     /**
      * @brief Private constructor for creating an `execution` with the specified machine context.
      *
@@ -142,8 +159,8 @@ private:
     machine::context_t _context = nullptr;
 };
 
-template <typename StackAlloc>
-void execution::frame<StackAlloc>::entry(machine::transfer_t transfer) noexcept {
+template <typename StackAlloc, typename Flow>
+void execution::frame<StackAlloc, Flow>::entry(machine::transfer_t transfer) noexcept {
     // transfer control structure to the context-stack
     auto fr = static_cast<frame*>(transfer.data);
     assert(nullptr != transfer.fctx);
@@ -178,34 +195,44 @@ void execution::frame<StackAlloc>::entry(machine::transfer_t transfer) noexcept 
     assert(false); // context already terminated
 }
 
-template <typename StackAlloc>
-machine::transfer_t execution::frame<StackAlloc>::exit(machine::transfer_t transfer) noexcept {
+template <typename StackAlloc, typename Flow>
+machine::transfer_t execution::frame<StackAlloc, Flow>::exit(machine::transfer_t transfer) noexcept {
     auto fr = static_cast<frame*>(transfer.data);
     // destroy context stack
     fr->destroy();
     return {nullptr, nullptr};
 }
 
-template <typename StackAlloc>
-execution::frame<StackAlloc>::frame(stack_allocator_t&& alloc, stack st, std::unique_ptr<api::flow> flow)
+template <typename StackAlloc, typename Flow>
+execution::frame<StackAlloc, Flow>::frame(stack_allocator_t&& alloc, stack st, Flow flow)
     : _allocator(std::move(alloc))
     , _stack(st)
     , _flow(std::move(flow)) {}
 
-template <typename StackAlloc>
-void execution::frame<StackAlloc>::run(api::disabler& dis) {
+template <typename StackAlloc, typename Flow>
+void execution::frame<StackAlloc, Flow>::run(api::disabler& dis) {
     assert(_flow);
     _flow->run(dis);
 }
 
-template <typename StackAlloc>
-void execution::frame<StackAlloc>::destroy() {
+template <typename StackAlloc, typename Flow>
+void execution::frame<StackAlloc, Flow>::destroy() {
     this->~frame();
     _allocator.deallocate(_stack);
 }
 
 template <typename StackAlloc>
 execution execution::create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow) {
+    return create(std::forward<StackAlloc>(alloc), std::move(flow));
+}
+
+template <typename StackAlloc>
+execution execution::create_with_raw_flow(StackAlloc&& alloc, api::flow* flow) {
+    return create(std::forward<StackAlloc>(alloc), flow);
+}
+
+template <typename StackAlloc, typename Flow>
+execution execution::create(StackAlloc&& alloc, Flow flow) {
     static_assert(is_deallocate_noexcept_v<StackAlloc>);
 
     if (flow == nullptr) {
@@ -213,7 +240,7 @@ execution execution::create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow)
     }
 
     auto stack = alloc.allocate();
-    using frame_t = frame<StackAlloc>;
+    using frame_t = frame<StackAlloc, Flow>;
 
     static constexpr std::size_t min_stack_size = 128000; // 128 KB
     if (stack.size() < min_stack_size) {
