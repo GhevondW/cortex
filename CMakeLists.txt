@@ -34,8 +34,8 @@ cortex_local_options()
 
 target_compile_features(cortex_options INTERFACE cxx_std_${CMAKE_CXX_STANDARD})
 
-add_library(cortex::cortex_options ALIAS cortex_options)
-add_library(cortex::cortex_warnings ALIAS cortex_warnings)
+add_library(cortex::options ALIAS cortex_options)
+add_library(cortex::warnings ALIAS cortex_warnings)
 
 #add_library(cortex::cortex_options INTERFACE IMPORTED)
 #add_library(cortex::cortex_warnings INTERFACE IMPORTED)

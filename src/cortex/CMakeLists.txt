@@ -1,20 +1,22 @@
 add_library(cortex_lib
-            include/cortex/api/disabler.hpp
+            include/cortex/api/suspendable.hpp
             include/cortex/api/flow.hpp
             include/cortex/basic_flow.hpp
             include/cortex/error.hpp
             include/cortex/execution.hpp
             include/cortex/machine_context.hpp
+            include/cortex/naive_coroutine.hpp
             include/cortex/stack_allocator.hpp
             include/cortex/stack.hpp
             src/basic_flow.cpp
             src/execution.cpp
             src/machine_context.cpp
+            src/naive_coroutine.cpp
             src/stack_allocator.cpp)
 
 add_library(cortex::lib ALIAS cortex_lib)
 
-target_link_libraries(cortex_lib PRIVATE cortex_options cortex_warnings)
+target_link_libraries(cortex_lib PRIVATE cortex::options cortex::warnings)
 target_link_system_libraries(cortex_lib PUBLIC Boost::context)
 # TODO : add this flag when needed.
 target_compile_definitions(cortex_lib PRIVATE BOOST_USE_ASAN)

@@ -32,13 +32,13 @@ BOOST_AUTO_TEST_CASE(no_memory_leak) {
     int counter = 0;
 
     {
-        auto flow = basic_flow::make([&counter](api::disabler& dis) mutable {
+        auto flow = basic_flow::make([&counter](api::suspendable& suspender) mutable {
             std::cout << "Step 2" << '\n';
 
             std::unique_ptr<echo> e(new echo(&counter));
             BOOST_CHECK_EQUAL(counter, 111);
 
-            dis.disable();
+            suspender.suspend();
 
             BOOST_CHECK(false); // We must not reach here
         });
@@ -46,7 +46,7 @@ BOOST_AUTO_TEST_CASE(no_memory_leak) {
         auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
         std::cout << "Step 1" << '\n';
-        execution.enable();
+        execution.resume();
         BOOST_CHECK_EQUAL(counter, 111);
 
         std::cout << "Step 3" << '\n';

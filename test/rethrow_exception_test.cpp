@@ -31,18 +31,18 @@ BOOST_AUTO_TEST_CASE(just_rethrows_unhandled_exception) {
 
     int counter = 0;
 
-    auto flow = basic_flow::make([&counter](api::disabler& dis) {
+    auto flow = basic_flow::make([&counter](api::suspendable& suspender) {
         BOOST_CHECK_EQUAL(++counter, 2);
         std::cout << "Step 2" << '\n';
-        dis.disable();
+        suspender.suspend();
 
         BOOST_CHECK_EQUAL(++counter, 4);
         std::cout << "Step 4" << '\n';
-        dis.disable();
+        suspender.suspend();
 
         BOOST_CHECK_EQUAL(++counter, 6);
         std::cout << "Step 6" << '\n';
-        dis.disable();
+        suspender.suspend();
 
         throw aux::my_error("My Error");
     });
@@ -51,20 +51,20 @@ BOOST_AUTO_TEST_CASE(just_rethrows_unhandled_exception) {
 
     BOOST_CHECK_EQUAL(++counter, 1);
     std::cout << "Step 1" << '\n';
-    execution.enable();
+    execution.resume();
 
     BOOST_CHECK_EQUAL(++counter, 3);
     std::cout << "Step 3" << '\n';
-    execution.enable();
+    execution.resume();
 
     BOOST_CHECK_EQUAL(++counter, 5);
     std::cout << "Step 5" << '\n';
-    execution.enable();
+    execution.resume();
 
     BOOST_CHECK_EQUAL(++counter, 7);
     std::cout << "Step 7" << '\n';
 
-    BOOST_CHECK_THROW(execution.enable(), aux::my_error);
+    BOOST_CHECK_THROW(execution.resume(), aux::my_error);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

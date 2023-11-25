@@ -1,28 +1,28 @@
-#ifndef SRC_CORTEX_INCLUDE_CORTEX_API_DISABLER_HPP
-#define SRC_CORTEX_INCLUDE_CORTEX_API_DISABLER_HPP
+#ifndef SRC_CORTEX_INCLUDE_CORTEX_API_SUSPENDABLE_HPP
+#define SRC_CORTEX_INCLUDE_CORTEX_API_SUSPENDABLE_HPP
 
 namespace cortex::api {
 
 /**
- * @brief The `disabler` interface provides a mechanism to stop the current execution flow.
+ * @brief The `suspendable` interface provides a mechanism to stop the current execution flow.
  * It is designed to be used in scenarios where pausing or disabling the current execution is necessary.
  */
-struct disabler {
+struct suspendable {
     /**
-     * @brief Default constructor for the `disabler` class.
+     * @brief Default constructor for the `suspendable` class.
      */
-    disabler() = default;
+    suspendable() = default;
 
     /**
      * @brief Virtual destructor for proper cleanup in derived classes.
      */
-    virtual ~disabler() = default;
+    virtual ~suspendable() = default;
 
     /**
      * @brief Pure virtual function that must be implemented by derived classes.
      * It is responsible for stopping the current execution.
      */
-    virtual void disable() = 0;
+    virtual void suspend() = 0;
 };
 
 }; // namespace cortex::api
