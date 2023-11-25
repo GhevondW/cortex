@@ -1,8 +1,8 @@
 #ifndef SRC_CORTEX_INCLUDE_CORTEX_CONTEXT_HPP
 #define SRC_CORTEX_INCLUDE_CORTEX_CONTEXT_HPP
 
-#include <cortex/api/disabler.hpp>
 #include <cortex/api/flow.hpp>
+#include <cortex/api/suspendable.hpp>
 #include <cortex/error.hpp>
 #include <cortex/machine_context.hpp>
 #include <cortex/stack.hpp>
@@ -17,12 +17,15 @@ namespace cortex {
 /**
  * @brief The `forced_unwind` struct represents an exception used for forced context unwinding.
  */
-struct forced_unwind : public error {
+struct forced_unwind : public std::exception {
     machine::context_t context {nullptr};
 
     explicit forced_unwind(machine::context_t ctx)
-        : error(std::string())
-        , context(ctx) {}
+        : context(ctx) {}
+
+    virtual const char* what() const noexcept override {
+        return nullptr;
+    }
 };
 
 template <typename Alloc>
@@ -30,21 +33,21 @@ inline static constexpr bool
     is_deallocate_noexcept_v = noexcept(std::declval<std::decay_t<Alloc>>().deallocate(std::declval<stack&>()));
 
 /**
- * @brief The `disabler` class provides a mechanism for disabling the execution flow of a context.
+ * @brief The `suspender` class provides a mechanism for disabling the execution flow of a context.
  */
-struct disabler : public api::disabler {
-    explicit disabler(machine::transfer_t& t, machine::context_t c)
+struct suspender : public api::suspendable {
+    explicit suspender(machine::transfer_t& t, machine::context_t c)
         : transfer(t)
         , caller(c) {}
 
-    disabler(const disabler&) = delete;
-    disabler(disabler&&) = delete;
-    disabler& operator=(const disabler&) = delete;
-    disabler& operator=(disabler&&) = delete;
+    suspender(const suspender&) = delete;
+    suspender(suspender&&) = delete;
+    suspender& operator=(const suspender&) = delete;
+    suspender& operator=(suspender&&) = delete;
 
-    ~disabler() override = default;
+    ~suspender() override = default;
 
-    void disable() override {
+    void suspend() override {
         transfer = machine::jump_to_context(caller, nullptr);
     }
 
@@ -71,7 +74,7 @@ private:
         frame(stack_allocator_t&& alloc, stack st, flow_t flow);
         frame() = default;
 
-        void run(api::disabler& dis);
+        void run(api::suspendable& suspender);
 
         void destroy();
 
@@ -96,7 +99,7 @@ public:
     };
 
     /**
-     * @brief The `invalid_flow` class represents an exception for an invalid stack size.
+     * @brief The `invalid_stack_size` class represents an exception for an invalid stack size.
      */
     class invalid_stack_size : public error {
     public:
@@ -139,14 +142,14 @@ public:
     ~execution() noexcept;
 
     /**
-     * @brief Enables the execution flow of the context.
+     * @brief Resumes the execution flow of the context.
      * @rethrows the uncaught exception during execution.
      */
-    void enable();
+    void resume();
 
 private:
     template <typename StackAlloc, typename Flow>
-    static execution create(StackAlloc&& alloc, Flow flow);
+    static execution pcreate(StackAlloc&& alloc, Flow flow);
 
     /**
      * @brief Private constructor for creating an `execution` with the specified machine context.
@@ -171,8 +174,8 @@ void execution::frame<StackAlloc, Flow>::entry(machine::transfer_t transfer) noe
         // jump back to `create_context()`
         transfer = machine::jump_to_context(transfer.fctx, nullptr);
         // start executing
-        disabler dis(transfer, transfer.fctx);
-        fr->run(dis);
+        suspender s(transfer, transfer.fctx);
+        fr->run(s);
     } catch (const forced_unwind& ex) {
         transfer = {ex.context, nullptr};
     } catch (const std::exception& ex) {
@@ -210,9 +213,9 @@ execution::frame<StackAlloc, Flow>::frame(stack_allocator_t&& alloc, stack st, F
     , _flow(std::move(flow)) {}
 
 template <typename StackAlloc, typename Flow>
-void execution::frame<StackAlloc, Flow>::run(api::disabler& dis) {
+void execution::frame<StackAlloc, Flow>::run(api::suspendable& suspender) {
     assert(_flow);
-    _flow->run(dis);
+    _flow->run(suspender);
 }
 
 template <typename StackAlloc, typename Flow>
@@ -223,16 +226,16 @@ void execution::frame<StackAlloc, Flow>::destroy() {
 
 template <typename StackAlloc>
 execution execution::create(StackAlloc&& alloc, std::unique_ptr<api::flow> flow) {
-    return create(std::forward<StackAlloc>(alloc), std::move(flow));
+    return pcreate(std::forward<StackAlloc>(alloc), std::move(flow));
 }
 
 template <typename StackAlloc>
 execution execution::create_with_raw_flow(StackAlloc&& alloc, api::flow* flow) {
-    return create(std::forward<StackAlloc>(alloc), flow);
+    return pcreate(std::forward<StackAlloc>(alloc), flow);
 }
 
 template <typename StackAlloc, typename Flow>
-execution execution::create(StackAlloc&& alloc, Flow flow) {
+execution execution::pcreate(StackAlloc&& alloc, Flow flow) {
     static_assert(is_deallocate_noexcept_v<StackAlloc>);
 
     if (flow == nullptr) {

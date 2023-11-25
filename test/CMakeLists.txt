@@ -19,7 +19,7 @@ function(add_cortex_test target_name source_file)
   add_executable(${target_name} ${source_file})
   target_link_libraries(
     ${target_name}
-    PRIVATE cortex::cortex_options
+    PRIVATE cortex::options
             Boost::unit_test_framework
             cortex::lib)
 
@@ -36,6 +36,7 @@ endfunction()
 
 add_cortex_test(just_works_test just_works_test.cpp)
 add_cortex_test(memory_leak_test memory_leak_test.cpp)
+add_cortex_test(naive_coroutine_test naive_coroutine_test.cpp)
 add_cortex_test(nested_execution_test nested_execution_test.cpp)
 add_cortex_test(rethrow_exception_test rethrow_exception_test.cpp)
 add_cortex_test(stack_allocator_test stack_allocator_test.cpp)

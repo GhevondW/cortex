@@ -13,12 +13,12 @@ namespace cortex {
  */
 struct basic_flow : public api::flow {
     /**
-     * @brief Creates a new instance of `basic_flow` with the provided flow function.
+     * @brief Creates a new instance of `basic_flow` with the provided execution flow function.
      *
      * @param flow The function representing the execution flow.
      * @return A unique pointer to the created `basic_flow`.
      */
-    static std::unique_ptr<api::flow> make(std::function<void(api::disabler& dis)> flow);
+    static std::unique_ptr<api::flow> make(std::function<void(api::suspendable& suspender)> flow);
 
     /**
      * @brief Destructor for the `basic_flow` class.
@@ -27,21 +27,21 @@ struct basic_flow : public api::flow {
 
 private:
     /**
-     * @brief Private constructor for creating a `basic_flow` with the provided flow function.
+     * @brief Private constructor for creating a `basic_flow` with the provided execution flow function.
      *
      * @param flow The function representing the execution flow.
      */
-    explicit basic_flow(std::function<void(api::disabler& dis)> flow);
+    explicit basic_flow(std::function<void(api::suspendable& suspender)> flow);
 
     /**
-     * @brief Runs the execution flow using the provided disabler.
+     * @brief Runs the execution flow using the provided suspendable object.
      *
-     * @param dis A reference to a `disabler` object that can be used to control the flow.
+     * @param suspender A reference to a `suspendable` object that can be used to control the flow.
      */
-    void run(api::disabler& dis) override;
+    void run(api::suspendable& suspender) override;
 
     /// The function representing the execution flow.
-    std::function<void(api::disabler& dis)> _flow;
+    std::function<void(api::suspendable& suspender)> _flow;
 };
 
 } // namespace cortex

@@ -1,7 +1,7 @@
 #ifndef SRC_CORTEX_INCLUDE_CORTEX_API_FLOW_HPP
 #define SRC_CORTEX_INCLUDE_CORTEX_API_FLOW_HPP
 
-#include "disabler.hpp"
+#include <cortex/api/suspendable.hpp>
 
 namespace cortex::api {
 
@@ -45,10 +45,10 @@ struct flow {
      * @brief Pure virtual function that must be implemented by derived classes.
      * It is responsible for running the execution flow with an option to disable execution.
      *
-     * @param dis A reference to a `disabler` object that can be used to disable the execution flow if needed.
+     * @param suspender A reference to a `suspendable` object that can be used to disable the execution flow if needed.
      * @internal Consider making it noexcept.
      */
-    virtual void run(disabler& dis) = 0;
+    virtual void run(api::suspendable& suspender) = 0;
 };
 
 } // namespace cortex::api

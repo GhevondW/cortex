@@ -31,9 +31,9 @@ make
 
 - **Create a Stackful Coroutine** Create a stackful coroutine with a custom stack allocator and a basic flow:
 ```c++
-auto coroutine = cortex::execution::create(cortex::stack_allocator{1000000}, cortex::basic_flow::make([](cortex::api::disabler& dis) {
+auto coroutine = cortex::execution::create(cortex::stack_allocator{1000000}, cortex::basic_flow::make([](cortex::api::suspendable& suspender) {
     // Your coroutine code here.
-    // Disable and jump back with dis.disable() if needed.
+    // Disable and jump back with suspender.suspend() if needed.
     // Ensure that exceptions thrown in this coroutine are inherited from std::exception.
 }));
 ```

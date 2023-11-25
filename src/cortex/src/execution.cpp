@@ -18,7 +18,7 @@ execution::~execution() noexcept {
     }
 }
 
-void execution::enable() {
+void execution::resume() {
     assert(_context);
 
     machine::transfer_t transfer = machine::jump_to_context(_context, nullptr);
