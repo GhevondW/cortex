@@ -76,9 +76,62 @@ BOOST_AUTO_TEST_CASE(just_works_partial) {
 
 BOOST_AUTO_TEST_CASE(create_exceptions) {
     using namespace cortex;
-    BOOST_CHECK_THROW(execution::create(stack_allocator::create(1000000), nullptr), execution::invalid_flow);
+    BOOST_CHECK_THROW(execution::create_with_raw_flow(stack_allocator::create(1000000), nullptr),
+                      execution::invalid_flow);
     BOOST_CHECK_THROW(execution::create(stack_allocator::create(100), basic_flow::make([](api::disabler& dis) {})),
                       execution::invalid_stack_size);
+}
+
+BOOST_AUTO_TEST_CASE(create_with_raw_flow) {
+    using namespace cortex;
+
+    int counter = 0;
+
+    class flow_class : public api::flow {
+    public:
+        flow_class(int& counter)
+            : _counter(counter) {}
+
+        void run(api::disabler& dis) {
+            BOOST_CHECK_EQUAL(++_counter, 2);
+            std::cout << "Step 2" << '\n';
+            dis.disable();
+
+            BOOST_CHECK_EQUAL(++_counter, 4);
+            std::cout << "Step 4" << '\n';
+            dis.disable();
+
+            BOOST_CHECK_EQUAL(++_counter, 6);
+            std::cout << "Step 6" << '\n';
+            dis.disable();
+
+            BOOST_CHECK_EQUAL(++_counter, 8);
+            std::cout << "Step 8" << '\n';
+            dis.disable();
+        }
+
+    private:
+        int& _counter;
+    };
+
+    flow_class flow(counter);
+    execution exec = execution::create_with_raw_flow(stack_allocator::create(1000000), &flow);
+
+    BOOST_CHECK_EQUAL(++counter, 1);
+    std::cout << "Step 1" << '\n';
+    exec.enable();
+
+    BOOST_CHECK_EQUAL(++counter, 3);
+    std::cout << "Step 3" << '\n';
+    exec.enable();
+
+    BOOST_CHECK_EQUAL(++counter, 5);
+    std::cout << "Step 5" << '\n';
+    exec.enable();
+
+    BOOST_CHECK_EQUAL(++counter, 7);
+    std::cout << "Step 7" << '\n';
+    exec.enable();
 }
 
 BOOST_AUTO_TEST_SUITE_END()
