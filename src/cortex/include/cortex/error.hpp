@@ -36,6 +36,11 @@ private:
     std::string _what;
 };
 
+class invalid_argument_error : public error {
+public:
+    using error::error;
+};
+
 }; // namespace cortex
 
 #endif
