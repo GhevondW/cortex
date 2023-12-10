@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15...3.23)
 
 project(CmakeConfigPackageTests LANGUAGES CXX)
 
-# ---- Test as standalone project the exported config package ----
+#-- -- Test as standalone project the exported config package -- --
 
 if(PROJECT_IS_TOP_LEVEL OR TEST_INSTALLED_VERSION)
   enable_testing()
@@ -34,6 +34,7 @@ function(add_cortex_test target_name source_file)
   add_test(NAME ${target_name} COMMAND ${target_name})
 endfunction()
 
+add_cortex_test(coroutine_test coroutine_test.cpp)
 add_cortex_test(just_works_test just_works_test.cpp)
 add_cortex_test(memory_leak_test memory_leak_test.cpp)
 add_cortex_test(naive_coroutine_test naive_coroutine_test.cpp)
