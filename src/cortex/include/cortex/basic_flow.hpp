@@ -18,7 +18,7 @@ struct basic_flow : public api::flow {
      * @param flow The function representing the execution flow.
      * @return A unique pointer to the created `basic_flow`.
      */
-    static std::unique_ptr<api::flow> make(std::function<void(api::suspendable& suspender)> flow);
+    static std::unique_ptr<api::flow> make(std::function<void(api::suspendable& suspender)> in_flow);
 
     /**
      * @brief Destructor for the `basic_flow` class.
@@ -31,7 +31,7 @@ private:
      *
      * @param flow The function representing the execution flow.
      */
-    explicit basic_flow(std::function<void(api::suspendable& suspender)> flow);
+    explicit basic_flow(std::function<void(api::suspendable& suspender)> in_flow);
 
     /**
      * @brief Runs the execution flow using the provided suspendable object.

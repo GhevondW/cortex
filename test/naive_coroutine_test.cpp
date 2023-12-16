@@ -1,12 +1,10 @@
-#define BOOST_TEST_MODULE cortex_naive_coroutine_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/naive_coroutine.hpp>
+#include <gtest/gtest.h>
 
 #include <thread>
 
 using namespace cortex;
 
-namespace {
 struct TreeNode;
 
 using TreeNodePtr = std::shared_ptr<TreeNode>;
@@ -29,8 +27,6 @@ struct TreeNode {
         return std::make_shared<TreeNode>(std::move(data), nullptr, nullptr);
     }
 };
-
-//////////////////////////////////////////////////////////////////////
 
 class TreeIterator {
 public:
@@ -67,60 +63,56 @@ private:
 
 struct Threads {
     template <typename F>
-    void run(F task) {
+    static void run(F task) {
         std::thread t([task = std::move(task)]() mutable { task(); });
         t.join();
     }
 };
 
-} // namespace
-
-BOOST_AUTO_TEST_SUITE(cortex_naive_coroutine_test_suite)
-
-BOOST_AUTO_TEST_CASE(just_works) {
+TEST(CortexNaiveCoroutineTest, JustWorks) {
     auto co = naive_coroutine::create([](api::suspendable& s) { s.suspend(); });
 
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_EQUAL(co.is_completed(), true);
+    EXPECT_EQ(co.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(interleaving) {
+TEST(CortexNaiveCoroutineTest, Interleaving) {
     int step = 0;
 
     auto a = naive_coroutine::create([&](api::suspendable& s) {
-        BOOST_CHECK_EQUAL(step, 0);
+        EXPECT_EQ(step, 0);
         step = 1;
         s.suspend();
-        BOOST_CHECK_EQUAL(step, 2);
+        EXPECT_EQ(step, 2);
         step = 3;
     });
 
     auto b = naive_coroutine::create([&](api::suspendable& s) {
-        BOOST_CHECK_EQUAL(step, 1);
+        EXPECT_EQ(step, 1);
         step = 2;
         s.suspend();
-        BOOST_CHECK_EQUAL(step, 3);
+        EXPECT_EQ(step, 3);
         step = 4;
     });
 
     a.resume();
     b.resume();
 
-    BOOST_CHECK_EQUAL(step, 2);
+    EXPECT_EQ(step, 2);
 
     a.resume();
     b.resume();
 
-    BOOST_CHECK_EQUAL(a.is_completed(), true);
-    BOOST_CHECK_EQUAL(b.is_completed(), true);
+    EXPECT_EQ(a.is_completed(), true);
+    EXPECT_EQ(b.is_completed(), true);
 
-    BOOST_CHECK_EQUAL(step, 4);
+    EXPECT_EQ(step, 4);
 }
 
-BOOST_AUTO_TEST_CASE(threads_test) {
+TEST(CortexNaiveCoroutineTest, ThreadsTest) {
     size_t steps = 0;
 
     auto co = naive_coroutine::create([&steps](api::suspendable& s) {
@@ -142,10 +134,10 @@ BOOST_AUTO_TEST_CASE(threads_test) {
     threads.run(resume);
     threads.run(resume);
 
-    BOOST_CHECK_EQUAL(steps, 3);
+    EXPECT_EQ(steps, 3);
 }
 
-BOOST_AUTO_TEST_CASE(tree_walk) {
+TEST(CortexNaiveCoroutineTest, TreeWalk) {
     auto root = TreeNode::Fork(
         "B",
         TreeNode::Leaf("A"),
@@ -158,10 +150,10 @@ BOOST_AUTO_TEST_CASE(tree_walk) {
         traversal << iter.Data();
     }
 
-    BOOST_CHECK_EQUAL(traversal.str(), "ABCDEFG");
+    EXPECT_EQ(traversal.str(), "ABCDEFG");
 }
 
-BOOST_AUTO_TEST_CASE(pipeline) {
+TEST(CortexNaiveCoroutineTest, Pipeline) {
     const size_t kSteps = 123;
 
     size_t step_count = 0;
@@ -184,45 +176,45 @@ BOOST_AUTO_TEST_CASE(pipeline) {
         a.resume();
     }
 
-    BOOST_CHECK_EQUAL(step_count, kSteps);
+    EXPECT_EQ(step_count, kSteps);
 }
 
 struct MyException : std::exception {};
 
-BOOST_AUTO_TEST_CASE(exception) {
+TEST(CortexNaiveCoroutineTest, Exception) {
     auto co = naive_coroutine::create([&](api::suspendable& s) {
         s.suspend();
         throw MyException {};
         s.suspend();
     });
 
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_THROW(co.resume(), MyException);
-    BOOST_CHECK_EQUAL(co.is_completed(), true);
+    EXPECT_THROW(co.resume(), MyException);
+    EXPECT_EQ(co.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(nested_exception1) {
+TEST(CortexNaiveCoroutineTest, NestedException1) {
     naive_coroutine a = naive_coroutine::create([&](api::suspendable& s) {
         naive_coroutine b = naive_coroutine::create([](api::suspendable& s) { throw MyException(); });
-        BOOST_CHECK_THROW(b.resume(), MyException);
+        EXPECT_THROW(b.resume(), MyException);
     });
 
     a.resume();
 }
 
-BOOST_AUTO_TEST_CASE(nested_exception2) {
+TEST(CortexNaiveCoroutineTest, NestedException2) {
     naive_coroutine a = naive_coroutine::create([&](api::suspendable& s) {
         naive_coroutine b = naive_coroutine::create([](api::suspendable& s) { throw MyException(); });
         b.resume();
     });
 
-    BOOST_CHECK_THROW(a.resume(), MyException);
+    EXPECT_THROW(a.resume(), MyException);
 
-    BOOST_CHECK_EQUAL(a.is_completed(), true);
+    EXPECT_EQ(a.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(exceptions_in_thread) {
+TEST(CortexNaiveCoroutineTest, ExceptionsInThread) {
     int score = 0;
 
     naive_coroutine a = naive_coroutine::create([&](api::suspendable& s) { throw MyException(); });
@@ -236,40 +228,10 @@ BOOST_AUTO_TEST_CASE(exceptions_in_thread) {
     });
     t.join();
 
-    BOOST_CHECK_EQUAL(score, 1);
+    EXPECT_EQ(score, 1);
 }
 
-// TODO: fix test
-// BOOST_AUTO_TEST_CASE(exceptions_hard) {
-//    int score = 0;
-//
-//    naive_coroutine a = naive_coroutine::create([&](api::suspendable& s) {
-//        naive_coroutine b = naive_coroutine::create([](api::suspendable& s) { throw MyException(); });
-//        try {
-//            b.resume();
-//        } catch (const std::exception& exp) {
-//            ++score;
-//            // Context switch during stack unwinding
-//            s.suspend();
-//            throw;
-//        }
-//    });
-//
-//    a.resume();
-//
-//    std::thread t([&] {
-//        try {
-//            a.resume();
-//        } catch (const std::exception& exp) {
-//            ++score;
-//        }
-//    });
-//    t.join();
-//
-//    BOOST_CHECK_EQUAL(score, 2);
-//}
-
-BOOST_AUTO_TEST_CASE(memory_leak) {
+TEST(CortexNaiveCoroutineTest, MemoryLeak) {
     auto shared_ptr = std::make_shared<int>(42);
     std::weak_ptr<int> weak_ptr = shared_ptr;
 
@@ -280,16 +242,16 @@ BOOST_AUTO_TEST_CASE(memory_leak) {
         co.resume();
     }
 
-    BOOST_CHECK_EQUAL(weak_ptr.expired(), true);
+    EXPECT_EQ(weak_ptr.expired(), true);
 }
 
-BOOST_AUTO_TEST_CASE(sample_not_started) {
+TEST(CortexNaiveCoroutineTest, SampleNotStarted) {
     int shared_counter = 0;
     auto co = naive_coroutine::create(([&shared_counter](api::suspendable& s) { shared_counter = 1; }));
-    BOOST_CHECK_EQUAL(shared_counter, 0);
+    EXPECT_EQ(shared_counter, 0);
 }
 
-BOOST_AUTO_TEST_CASE(sample_started_but_not_ended) {
+TEST(CortexNaiveCoroutineTest, SampleStartedButNotEnded) {
     int shared_counter = 0;
     auto co = naive_coroutine::create([&shared_counter](api::suspendable& s) {
         shared_counter = 1;
@@ -297,12 +259,12 @@ BOOST_AUTO_TEST_CASE(sample_started_but_not_ended) {
         shared_counter = 2;
     });
     co.resume();
-    BOOST_CHECK_EQUAL(shared_counter, 1);
+    EXPECT_EQ(shared_counter, 1);
 }
 
-BOOST_AUTO_TEST_CASE(sample_started_but_not_ended_stack_unwinding) {
+TEST(CortexNaiveCoroutineTest, SampleStartedButNotEndedStackUnwinding) {
     struct lifetime {
-        lifetime(int& r)
+        explicit lifetime(int& r)
             : ref(r) {}
         ~lifetime() {
             ref = 12;
@@ -319,10 +281,13 @@ BOOST_AUTO_TEST_CASE(sample_started_but_not_ended_stack_unwinding) {
             shared_counter = 2;
         });
         co.resume();
-        BOOST_CHECK_EQUAL(shared_counter, 1);
+        EXPECT_EQ(shared_counter, 1);
     }
 
-    BOOST_CHECK_EQUAL(shared_counter, 12);
+    EXPECT_EQ(shared_counter, 12);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

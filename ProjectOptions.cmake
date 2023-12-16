@@ -18,14 +18,7 @@ macro(cortex_supports_sanitizers)
 endmacro()
 
 macro(cortex_setup_options)
-  option(CORTEX_ENABLE_HARDENING "Enable hardening" ON)
   option(CORTEX_ENABLE_COVERAGE "Enable coverage reporting" OFF)
-  cmake_dependent_option(
-    CORTEX_ENABLE_GLOBAL_HARDENING
-    "Attempt to push hardening options to built dependencies"
-    ON
-    CORTEX_ENABLE_HARDENING
-    OFF)
 
   cortex_supports_sanitizers()
 
@@ -81,25 +74,6 @@ macro(cortex_setup_options)
       CORTEX_ENABLE_CACHE)
   endif()
 
-endmacro()
-
-macro(cortex_global_options)
-  cortex_supports_sanitizers()
-
-  if(CORTEX_ENABLE_HARDENING AND CORTEX_ENABLE_GLOBAL_HARDENING)
-    include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
-       OR CORTEX_ENABLE_SANITIZER_UNDEFINED
-       OR CORTEX_ENABLE_SANITIZER_ADDRESS
-       OR CORTEX_ENABLE_SANITIZER_THREAD
-       OR CORTEX_ENABLE_SANITIZER_LEAK)
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
-    else()
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
-    endif()
-    message("${CORTEX_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${CORTEX_ENABLE_SANITIZER_UNDEFINED}")
-    cortex_enable_hardening(cortex_options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
-  endif()
 endmacro()
 
 macro(cortex_local_options)
@@ -165,20 +139,6 @@ macro(cortex_local_options)
       # This is not working consistently, so disabling for now
       # target_link_options(cortex_options INTERFACE -Wl,--fatal-warnings)
     endif()
-  endif()
-
-  if(CORTEX_ENABLE_HARDENING AND NOT CORTEX_ENABLE_GLOBAL_HARDENING)
-    include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
-       OR CORTEX_ENABLE_SANITIZER_UNDEFINED
-       OR CORTEX_ENABLE_SANITIZER_ADDRESS
-       OR CORTEX_ENABLE_SANITIZER_THREAD
-       OR CORTEX_ENABLE_SANITIZER_LEAK)
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME FALSE)
-    else()
-      set(ENABLE_UBSAN_MINIMAL_RUNTIME TRUE)
-    endif()
-    cortex_enable_hardening(cortex_options OFF ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
 
 endmacro()

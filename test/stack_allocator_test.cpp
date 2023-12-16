@@ -1,39 +1,40 @@
-#define BOOST_TEST_MODULE cortex_stack_allocator_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/error.hpp>
 #include <cortex/stack_allocator.hpp>
+#include <gtest/gtest.h>
 
 using namespace cortex;
 
-BOOST_AUTO_TEST_SUITE(cortex_stack_allocator_test_suite)
-
-BOOST_AUTO_TEST_CASE(constructor_valid_size) {
-    BOOST_CHECK_NO_THROW(stack_allocator::create(512));
+TEST(CortexStackAllocatorTest, ConstructorValidSize) {
+    ASSERT_NO_THROW(stack_allocator::create(512));
 }
 
-BOOST_AUTO_TEST_CASE(constructor_zero_size) {
-    BOOST_CHECK_THROW(stack_allocator::create(0), cortex::error);
+TEST(CortexStackAllocatorTest, ConstructorZeroSize) {
+    ASSERT_THROW(stack_allocator::create(0), cortex::error);
 }
 
-BOOST_AUTO_TEST_CASE(allocate_valid_size) {
+TEST(CortexStackAllocatorTest, AllocateValidSize) {
     auto allocator = stack_allocator::create(512);
     stack st;
-    BOOST_CHECK(st.empty());
-    BOOST_CHECK(st.size() == 0);
-    BOOST_CHECK(st.top() == nullptr);
+    EXPECT_TRUE(st.empty());
+    EXPECT_EQ(st.size(), 0);
+    EXPECT_EQ(st.top(), nullptr);
+
     try {
         st = allocator.allocate();
     } catch (...) {
-        BOOST_CHECK(false); // We must not reach here.
+        EXPECT_FALSE(true); // We must not reach here.
     }
 
     allocator.deallocate(st);
 }
 
-BOOST_AUTO_TEST_CASE(deallocate_valid_stack) {
+TEST(CortexStackAllocatorTest, DeallocateValidStack) {
     auto allocator = stack_allocator::create(512);
-    stack stack = allocator.allocate();
-    BOOST_CHECK_NO_THROW(allocator.deallocate(stack));
+    stack st = allocator.allocate();
+    ASSERT_NO_THROW(allocator.deallocate(st));
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

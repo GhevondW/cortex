@@ -1,14 +1,13 @@
-#define BOOST_TEST_MODULE cortex_coroutine_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/coroutine.hpp>
-
+#include <gtest/gtest.h>
+#include <sstream>
 #include <thread>
 
 using namespace cortex;
 
 namespace {
-struct TreeNode;
 
+struct TreeNode;
 using TreeNodePtr = std::shared_ptr<TreeNode>;
 
 struct TreeNode {
@@ -29,8 +28,6 @@ struct TreeNode {
         return std::make_shared<TreeNode>(std::move(data), nullptr, nullptr);
     }
 };
-
-//////////////////////////////////////////////////////////////////////
 
 class TreeIterator {
 public:
@@ -69,7 +66,7 @@ private:
 
 struct Threads {
     template <typename F>
-    void run(F task) {
+    static void run(F task) {
         std::thread t([task = std::move(task)]() mutable { task(); });
         t.join();
     }
@@ -77,40 +74,38 @@ struct Threads {
 
 } // namespace
 
-BOOST_AUTO_TEST_SUITE(cortex_coroutine_test_suite)
-
-BOOST_AUTO_TEST_CASE(just_works) {
+TEST(CortexCoroutineTest, JustWorks) {
     coroutine* ptr = nullptr;
     auto routine = coroutine::make_routine([&]() { ptr->suspend(); });
     auto co = coroutine::create(routine.get());
     ptr = &co;
 
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_EQUAL(co.is_completed(), true);
+    EXPECT_EQ(co.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(interleaving) {
+TEST(CortexCoroutineTest, Interleaving) {
     int step = 0;
 
     coroutine* aptr = nullptr;
     coroutine* bptr = nullptr;
 
     auto a = coroutine::make_routine([&]() {
-        BOOST_CHECK_EQUAL(step, 0);
+        EXPECT_EQ(step, 0);
         step = 1;
         aptr->suspend();
-        BOOST_CHECK_EQUAL(step, 2);
+        EXPECT_EQ(step, 2);
         step = 3;
     });
 
     auto b = coroutine::make_routine([&]() {
-        BOOST_CHECK_EQUAL(step, 1);
+        EXPECT_EQ(step, 1);
         step = 2;
         bptr->suspend();
-        BOOST_CHECK_EQUAL(step, 3);
+        EXPECT_EQ(step, 3);
         step = 4;
     });
 
@@ -122,18 +117,18 @@ BOOST_AUTO_TEST_CASE(interleaving) {
     acoro.resume();
     bcoro.resume();
 
-    BOOST_CHECK_EQUAL(step, 2);
+    EXPECT_EQ(step, 2);
 
     acoro.resume();
     bcoro.resume();
 
-    BOOST_CHECK_EQUAL(acoro.is_completed(), true);
-    BOOST_CHECK_EQUAL(bcoro.is_completed(), true);
+    EXPECT_EQ(acoro.is_completed(), true);
+    EXPECT_EQ(bcoro.is_completed(), true);
 
-    BOOST_CHECK_EQUAL(step, 4);
+    EXPECT_EQ(step, 4);
 }
 
-BOOST_AUTO_TEST_CASE(threads_test) {
+TEST(CortexCoroutineTest, ThreadsTest) {
     size_t steps = 0;
 
     coroutine* ptr = nullptr;
@@ -158,10 +153,10 @@ BOOST_AUTO_TEST_CASE(threads_test) {
     threads.run(resume);
     threads.run(resume);
 
-    BOOST_CHECK_EQUAL(steps, 3);
+    EXPECT_EQ(steps, 3);
 }
 
-BOOST_AUTO_TEST_CASE(tree_walk) {
+TEST(CortexCoroutineTest, TreeWalk) {
     auto root = TreeNode::Fork(
         "B",
         TreeNode::Leaf("A"),
@@ -174,10 +169,10 @@ BOOST_AUTO_TEST_CASE(tree_walk) {
         traversal << iter.Data();
     }
 
-    BOOST_CHECK_EQUAL(traversal.str(), "ABCDEFG");
+    EXPECT_EQ(traversal.str(), "ABCDEFG");
 }
 
-BOOST_AUTO_TEST_CASE(pipeline) {
+TEST(CortexCoroutineTest, Pipeline) {
     const size_t kSteps = 123;
 
     size_t step_count = 0;
@@ -208,12 +203,12 @@ BOOST_AUTO_TEST_CASE(pipeline) {
         a.resume();
     }
 
-    BOOST_CHECK_EQUAL(step_count, kSteps);
+    EXPECT_EQ(step_count, kSteps);
 }
 
 struct MyException : std::exception {};
 
-BOOST_AUTO_TEST_CASE(exception) {
+TEST(CortexCoroutineTest, Exception) {
     coroutine* ptr = nullptr;
     auto routine = coroutine::basic_routine::make([&]() {
         ptr->suspend();
@@ -224,17 +219,17 @@ BOOST_AUTO_TEST_CASE(exception) {
     auto co = coroutine::create(routine.get());
     ptr = &co;
 
-    BOOST_CHECK_EQUAL(co.is_completed(), false);
+    EXPECT_EQ(co.is_completed(), false);
     co.resume();
-    BOOST_CHECK_THROW(co.resume(), MyException);
-    BOOST_CHECK_EQUAL(co.is_completed(), true);
+    EXPECT_THROW(co.resume(), MyException);
+    EXPECT_EQ(co.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(nested_exception1) {
+TEST(CortexCoroutineTest, NestedException1) {
     auto a_routine = coroutine::make_routine([&]() {
         auto b_routine = coroutine::make_routine([]() { throw MyException(); });
         coroutine b = coroutine::create(b_routine.get());
-        BOOST_CHECK_THROW(b.resume(), MyException);
+        EXPECT_THROW(b.resume(), MyException);
     });
 
     coroutine a = coroutine::create(a_routine.get());
@@ -242,7 +237,7 @@ BOOST_AUTO_TEST_CASE(nested_exception1) {
     a.resume();
 }
 
-BOOST_AUTO_TEST_CASE(nested_exception2) {
+TEST(CortexCoroutineTest, NestedException2) {
     auto a_routine = coroutine::make_routine([&]() {
         auto b_routine = coroutine::make_routine([]() { throw MyException(); });
         coroutine b = coroutine::create(b_routine.get());
@@ -251,12 +246,12 @@ BOOST_AUTO_TEST_CASE(nested_exception2) {
 
     coroutine a = coroutine::create(a_routine.get());
 
-    BOOST_CHECK_THROW(a.resume(), MyException);
+    EXPECT_THROW(a.resume(), MyException);
 
-    BOOST_CHECK_EQUAL(a.is_completed(), true);
+    EXPECT_EQ(a.is_completed(), true);
 }
 
-BOOST_AUTO_TEST_CASE(ExceptionsInThread) {
+TEST(CortexCoroutineTest, ExceptionsInThread) {
     int score = 0;
 
     auto a_routine = coroutine::make_routine([&]() { throw MyException(); });
@@ -271,52 +266,17 @@ BOOST_AUTO_TEST_CASE(ExceptionsInThread) {
     });
     t.join();
 
-    BOOST_CHECK_EQUAL(score, 1);
+    EXPECT_EQ(score, 1);
 }
 
-//// TODO: fix test
-// BOOST_AUTO_TEST_CASE(ExceptionsHard) {
-//     int score = 0;
-//
-//     coroutine* ptr = nullptr;
-//     auto a_routine = coroutine::make_routine([&]() {
-//         auto b_routine = coroutine::make_routine([&]() { throw MyException(); });
-//         coroutine b = coroutine::create(b_routine.get());
-//         try {
-//             b.resume();
-//         } catch (const std::exception& exp) {
-//             ++score;
-//             // Context switch during stack unwinding
-//             ptr->suspend();
-//             throw;
-//         }
-//     });
-//
-//     coroutine a = coroutine::create(a_routine.get());
-//     ptr = &a;
-//
-//     a.resume();
-//
-//     std::thread t([&] {
-//         try {
-//             a.resume();
-//         } catch (const std::exception& exp) {
-//             ++score;
-//         }
-//     });
-//     t.join();
-//
-//     BOOST_CHECK_EQUAL(score, 2);
-// }
-
-BOOST_AUTO_TEST_CASE(sample_not_started) {
+TEST(CortexCoroutineTest, SampleNotStarted) {
     int shared_counter = 0;
     auto routine = coroutine::make_routine([&shared_counter]() { shared_counter = 1; });
     auto co = coroutine::create(routine.get());
-    BOOST_CHECK_EQUAL(shared_counter, 0);
+    EXPECT_EQ(shared_counter, 0);
 }
 
-BOOST_AUTO_TEST_CASE(sample_started_but_not_ended) {
+TEST(CortexCoroutineTest, SampleStartedButNotEnded) {
     int shared_counter = 0;
     coroutine* ptr = nullptr;
     auto routine = coroutine::make_routine([&]() {
@@ -328,13 +288,12 @@ BOOST_AUTO_TEST_CASE(sample_started_but_not_ended) {
     ptr = &co;
 
     co.resume();
-    BOOST_CHECK_EQUAL(shared_counter, 1);
+    EXPECT_EQ(shared_counter, 1);
 }
 
-// Stack unwinding does not work in sure, so always end the routine.
-BOOST_AUTO_TEST_CASE(sample_started_but_not_ended_stack_unwinding) {
+TEST(CortexCoroutineTest, SampleStartedButNotEndedStackUnwinding) {
     struct lifetime {
-        lifetime(int& r)
+        explicit lifetime(int& r)
             : ref(r) {}
         ~lifetime() {
             ref = 12;
@@ -356,10 +315,13 @@ BOOST_AUTO_TEST_CASE(sample_started_but_not_ended_stack_unwinding) {
         ptr = &co;
 
         co.resume();
-        BOOST_CHECK_EQUAL(shared_counter, 1);
+        EXPECT_EQ(shared_counter, 1);
     }
 
-    BOOST_CHECK_EQUAL(shared_counter, 12);
+    EXPECT_EQ(shared_counter, 12);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
