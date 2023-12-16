@@ -20,7 +20,9 @@ function(add_cortex_test target_name source_file)
   target_link_libraries(
     ${target_name}
     PRIVATE cortex::options
-            Boost::unit_test_framework
+            gtest 
+            gtest_main 
+            gmock
             cortex::lib)
 
   if(WIN32 AND BUILD_SHARED_LIBS)

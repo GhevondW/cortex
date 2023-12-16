@@ -1,111 +1,106 @@
-#define BOOST_TEST_MODULE cortex_just_works_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/basic_flow.hpp>
 #include <cortex/execution.hpp>
 #include <cortex/stack_allocator.hpp>
+#include <gtest/gtest.h>
 #include <iostream>
 
 // Define a test suite for the cortex library
-BOOST_AUTO_TEST_SUITE(cortex_just_works_test_suite)
-
-// Test case for basic execution flow
-BOOST_AUTO_TEST_CASE(just_works) {
+TEST(CortexJustWorksTest, JustWorks) {
     using namespace cortex;
 
     int counter = 0;
 
     auto flow = basic_flow::make([&counter](api::suspendable& suspender) {
-        BOOST_CHECK_EQUAL(++counter, 2);
+        EXPECT_EQ(++counter, 2);
         std::cout << "Step 2" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK_EQUAL(++counter, 4);
+        EXPECT_EQ(++counter, 4);
         std::cout << "Step 4" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK_EQUAL(++counter, 6);
+        EXPECT_EQ(++counter, 6);
         std::cout << "Step 6" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK_EQUAL(++counter, 8);
+        EXPECT_EQ(++counter, 8);
         std::cout << "Step 8" << '\n';
         suspender.suspend();
     });
 
     auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
-    BOOST_CHECK_EQUAL(++counter, 1);
+    EXPECT_EQ(++counter, 1);
     std::cout << "Step 1" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 3);
+    EXPECT_EQ(++counter, 3);
     std::cout << "Step 3" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 5);
+    EXPECT_EQ(++counter, 5);
     std::cout << "Step 5" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 7);
+    EXPECT_EQ(++counter, 7);
     std::cout << "Step 7" << '\n';
     execution.resume();
 }
 
-BOOST_AUTO_TEST_CASE(just_works_partial) {
+TEST(CortexJustWorksTest, JustWorksPartial) {
     using namespace cortex;
 
     int counter = 0;
 
     auto flow = basic_flow::make([&counter](api::suspendable& suspender) {
-        BOOST_CHECK_EQUAL(++counter, 2);
+        EXPECT_EQ(++counter, 2);
         std::cout << "Step 2" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK(false); // We must not reach here
+        EXPECT_FALSE(true); // We must not reach here
     });
 
     auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
-    BOOST_CHECK_EQUAL(++counter, 1);
+    EXPECT_EQ(++counter, 1);
     std::cout << "Step 1" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 3);
+    EXPECT_EQ(++counter, 3);
     std::cout << "Step 3" << '\n';
 }
 
-BOOST_AUTO_TEST_CASE(create_exceptions) {
+TEST(CortexJustWorksTest, CreateExceptions) {
     using namespace cortex;
-    BOOST_CHECK_THROW(execution::create_with_raw_flow(stack_allocator::create(1000000), nullptr),
-                      execution::invalid_flow);
-    BOOST_CHECK_THROW(execution::create(stack_allocator::create(100), basic_flow::make([](api::suspendable& s) {})),
-                      execution::invalid_stack_size);
+    EXPECT_THROW(execution::create_with_raw_flow(stack_allocator::create(1000000), nullptr), execution::invalid_flow);
+    EXPECT_THROW(execution::create(stack_allocator::create(100), basic_flow::make([](api::suspendable& s) {})),
+                 execution::invalid_stack_size);
 }
 
-BOOST_AUTO_TEST_CASE(create_with_raw_flow) {
+TEST(CortexJustWorksTest, CreateWithRawFlow) {
     using namespace cortex;
 
     int counter = 0;
 
     class flow_class : public api::flow {
     public:
-        flow_class(int& counter)
+        explicit flow_class(int& counter)
             : _counter(counter) {}
 
-        void run(api::suspendable& suspender) {
-            BOOST_CHECK_EQUAL(++_counter, 2);
+        void run(api::suspendable& suspender) override {
+            EXPECT_EQ(++_counter, 2);
             std::cout << "Step 2" << '\n';
             suspender.suspend();
 
-            BOOST_CHECK_EQUAL(++_counter, 4);
+            EXPECT_EQ(++_counter, 4);
             std::cout << "Step 4" << '\n';
             suspender.suspend();
 
-            BOOST_CHECK_EQUAL(++_counter, 6);
+            EXPECT_EQ(++_counter, 6);
             std::cout << "Step 6" << '\n';
             suspender.suspend();
 
-            BOOST_CHECK_EQUAL(++_counter, 8);
+            EXPECT_EQ(++_counter, 8);
             std::cout << "Step 8" << '\n';
             suspender.suspend();
         }
@@ -117,21 +112,24 @@ BOOST_AUTO_TEST_CASE(create_with_raw_flow) {
     flow_class flow(counter);
     execution exec = execution::create_with_raw_flow(stack_allocator::create(1000000), &flow);
 
-    BOOST_CHECK_EQUAL(++counter, 1);
+    EXPECT_EQ(++counter, 1);
     std::cout << "Step 1" << '\n';
     exec.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 3);
+    EXPECT_EQ(++counter, 3);
     std::cout << "Step 3" << '\n';
     exec.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 5);
+    EXPECT_EQ(++counter, 5);
     std::cout << "Step 5" << '\n';
     exec.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 7);
+    EXPECT_EQ(++counter, 7);
     std::cout << "Step 7" << '\n';
     exec.resume();
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

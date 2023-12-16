@@ -252,9 +252,8 @@ execution execution::pcreate(StackAlloc&& alloc, Flow flow) {
     }
 
     // reserve space for control structure
-    void* storage =
-        reinterpret_cast<void*>((reinterpret_cast<uintptr_t>(stack.top()) - static_cast<uintptr_t>(sizeof(frame_t))) &
-                                ~static_cast<uintptr_t>(0xff));
+    void* storage = reinterpret_cast<void*>((reinterpret_cast<uintptr_t>(stack.top()) - sizeof(frame_t)) &
+                                            ~static_cast<uintptr_t>(0xff));
     // placment new for control structure on context stack
     [[maybe_unused]] frame_t* fr = new (storage) frame_t {std::forward<StackAlloc>(alloc), stack, std::move(flow)};
     // 64byte gab between control structure and stack top

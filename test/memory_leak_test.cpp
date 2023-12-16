@@ -1,16 +1,16 @@
-#define BOOST_TEST_MODULE cortex_memory_leak_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/basic_flow.hpp>
 #include <cortex/execution.hpp>
 #include <cortex/stack_allocator.hpp>
+#include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
 
 namespace {
 
 struct echo {
-    echo(int* c)
-        : counter(c) {
+    explicit echo(int* c)
+        : counter(c)
+        , arr() {
         *counter = 111;
     }
 
@@ -24,9 +24,7 @@ struct echo {
 
 } // namespace
 
-BOOST_AUTO_TEST_SUITE(cortex_memory_leak_test_suite)
-
-BOOST_AUTO_TEST_CASE(no_memory_leak) {
+TEST(CortexMemoryLeakTest, NoMemoryLeak) {
     using namespace cortex;
 
     int counter = 0;
@@ -36,23 +34,26 @@ BOOST_AUTO_TEST_CASE(no_memory_leak) {
             std::cout << "Step 2" << '\n';
 
             std::unique_ptr<echo> e(new echo(&counter));
-            BOOST_CHECK_EQUAL(counter, 111);
+            EXPECT_EQ(counter, 111);
 
             suspender.suspend();
 
-            BOOST_CHECK(false); // We must not reach here
+            EXPECT_FALSE(true); // We must not reach here
         });
 
         auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
         std::cout << "Step 1" << '\n';
         execution.resume();
-        BOOST_CHECK_EQUAL(counter, 111);
+        EXPECT_EQ(counter, 111);
 
         std::cout << "Step 3" << '\n';
     }
 
-    BOOST_CHECK_EQUAL(counter, 222);
+    EXPECT_EQ(counter, 222);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

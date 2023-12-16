@@ -1,13 +1,10 @@
-#define BOOST_TEST_MODULE cortex_rethrow_exception_test
-#include <boost/test/included/unit_test.hpp>
 #include <cortex/basic_flow.hpp>
 #include <cortex/error.hpp>
 #include <cortex/execution.hpp>
 #include <cortex/stack_allocator.hpp>
+#include <gtest/gtest.h>
 
 using namespace cortex;
-
-BOOST_AUTO_TEST_SUITE(cortex_cortex_rethrow_exception_test_suite)
 
 namespace aux {
 
@@ -26,21 +23,21 @@ private:
 
 } // namespace aux
 
-BOOST_AUTO_TEST_CASE(just_rethrows_unhandled_exception) {
+TEST(CortexRethrowExceptionTest, JustRethrowsUnhandledException) {
     using namespace cortex;
 
     int counter = 0;
 
     auto flow = basic_flow::make([&counter](api::suspendable& suspender) {
-        BOOST_CHECK_EQUAL(++counter, 2);
+        EXPECT_EQ(++counter, 2);
         std::cout << "Step 2" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK_EQUAL(++counter, 4);
+        EXPECT_EQ(++counter, 4);
         std::cout << "Step 4" << '\n';
         suspender.suspend();
 
-        BOOST_CHECK_EQUAL(++counter, 6);
+        EXPECT_EQ(++counter, 6);
         std::cout << "Step 6" << '\n';
         suspender.suspend();
 
@@ -49,22 +46,25 @@ BOOST_AUTO_TEST_CASE(just_rethrows_unhandled_exception) {
 
     auto execution = execution::create(stack_allocator::create(1000000), std::move(flow));
 
-    BOOST_CHECK_EQUAL(++counter, 1);
+    EXPECT_EQ(++counter, 1);
     std::cout << "Step 1" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 3);
+    EXPECT_EQ(++counter, 3);
     std::cout << "Step 3" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 5);
+    EXPECT_EQ(++counter, 5);
     std::cout << "Step 5" << '\n';
     execution.resume();
 
-    BOOST_CHECK_EQUAL(++counter, 7);
+    EXPECT_EQ(++counter, 7);
     std::cout << "Step 7" << '\n';
 
-    BOOST_CHECK_THROW(execution.resume(), aux::my_error);
+    EXPECT_THROW(execution.resume(), aux::my_error);
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

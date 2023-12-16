@@ -26,7 +26,6 @@ include(ProjectOptions.cmake)
 
 cortex_setup_options()
 
-cortex_global_options()
 include(Dependencies.cmake)
 cortex_setup_dependencies()
 
