@@ -220,6 +220,7 @@ TEST(CortexCoroutineTest, Exception) {
     ptr = &co;
 
     EXPECT_EQ(co.is_completed(), false);
+    co.resume();
     EXPECT_THROW(co.resume(), MyException);
     EXPECT_EQ(co.is_completed(), true);
 }
