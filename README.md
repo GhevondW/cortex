@@ -14,7 +14,7 @@ Cortex is a C++ library built on top of Boost.Context that provides a lightweigh
 Clone the repository and build the library using CMake:
 
 ```bash
-git clone https://gitlab.com/ghevond.98/cortex.git
+git clone https://github.com/GhevondW/cortex.git
 cd cortex
 mkdir build && cd build
 cmake ..
