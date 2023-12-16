@@ -1,6 +1,8 @@
 #include <cortex/naive_coroutine.hpp>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 using namespace cortex;
 
 struct TreeNode;
