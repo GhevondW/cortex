@@ -46,13 +46,13 @@ docker compose up serve-example
 
 ## Development
 
-For detailed development instructions, see [DEV.md](DEV.md).
+For detailed development instructions, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ### IDE Setup
 
 The project includes configurations for:
 - **VSCode**: `.devcontainer/` for container development, `.vscode/` for tasks and settings
-- **CLion**: Docker toolchain setup instructions in [DEV.md](DEV.md)
+- **CLion**: Docker toolchain setup instructions in [DEVELOPMENT.md](DEVELOPMENT.md)
 
 Quick start with VSCode:
 1. Install "Remote - Containers" extension
