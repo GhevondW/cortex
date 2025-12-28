@@ -1,0 +1,112 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Native (Docker)",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["test-native"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Build WASM (Docker)",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["test-wasm"],
+            "group": "build",
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Build All Tests (Docker)",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["test-all"],
+            "group": "build",
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run Native Example",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["example-native"],
+            "group": "test",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Run WASM Example",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["example-wasm"],
+            "group": "test",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Serve WASM Example",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["serve"],
+            "group": "test",
+            "problemMatcher": [],
+            "isBackground": true,
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Format Code",
+            "type": "shell",
+            "command": "./format",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "silent"
+            }
+        },
+        {
+            "label": "Clean Build",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["clean"],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always"
+            }
+        },
+        {
+            "label": "Open Docker Shell",
+            "type": "shell",
+            "command": "./dev.sh",
+            "args": ["shell"],
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}
+

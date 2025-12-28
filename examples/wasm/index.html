@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>Cortex WASM Demo</h1>
+    <p>Result of 10 + 20 from C++: <b id="out">Loading...</b></p>
+    <script src="wasm_example.js"></script>
+    <script>
+        Module.onRuntimeInitialized = () => {
+            const result = Module._cortex_add(10, 20);
+            document.getElementById('out').innerText = result;
+        };
+    </script>
+</body>
+</html>

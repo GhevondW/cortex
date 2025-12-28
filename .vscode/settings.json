@@ -1,0 +1,28 @@
+{
+    "files.associations": {
+        "*.hpp": "cpp",
+        "*.cpp": "cpp"
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.cppStandard": "c++23",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/build/native/_deps/*/include"
+    ],
+    "cmake.buildDirectory": "${workspaceFolder}/build/native",
+    "cmake.configureSettings": {
+        "CORTEX_BUILD_TESTS": "ON",
+        "CORTEX_BUILD_EXAMPLES": "ON"
+    },
+    "cmake.configureOnOpen": false,
+    "editor.formatOnSave": false,
+    "files.exclude": {
+        "**/.git": true,
+        "**/build": true
+    },
+    "search.exclude": {
+        "**/build": true,
+        "**/.git": true
+    }
+}
+

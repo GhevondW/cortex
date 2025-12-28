@@ -1,0 +1,63 @@
+services:
+  # 1. Run Tests on Linux (Native Clang)
+  test-native:
+    build: .
+    volumes: [".:/workspace"]
+    command: >
+      bash -c "cmake -B build/native -DCORTEX_BUILD_TESTS=ON && 
+               cmake --build build/native && 
+               ctest --test-dir build/native"
+
+  # 2. Run Tests on WASM (Node.js Emulation)
+  test-wasm:
+    build: .
+    volumes:
+      - .:/workspace
+    command: >
+      bash -c "
+      source /opt/emsdk/emsdk_env.sh &&
+      rm -rf build/wasm &&
+      emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_TESTS=ON &&
+      cmake --build build/wasm &&
+      ctest --test-dir build/wasm --output-on-failure
+      "
+
+  # 3. Build Native Example
+  build-example-native:
+    build: .
+    volumes: [".:/workspace"]
+    command: >
+      bash -c "cmake -B build/native -DCORTEX_BUILD_EXAMPLES=ON && 
+               cmake --build build/native &&
+               ./build/native/examples/native_example"
+
+  # 4. Build and Run WASM Example
+  build-example-wasm:
+    build: .
+    volumes: [".:/workspace"]
+    command: >
+      bash -c "
+      source /opt/emsdk/emsdk_env.sh &&
+      emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON &&
+      cmake --build build/wasm &&
+      cd build/wasm/examples &&
+      node wasm_example.js
+      "
+
+  # 5. Serve WASM Example in Browser
+  serve-example:
+      build: .
+      volumes:
+        - .:/workspace
+      ports:
+        - "8080:8080"
+      command: >
+        bash -c "
+        source /opt/emsdk/emsdk_env.sh &&
+        emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON &&
+        cmake --build build/wasm &&
+        cd build/wasm &&
+        echo 'Example built successfully!' &&
+        echo 'Serving at http://localhost:8080/examples/index.html' &&
+        python3 -m http.server 8080
+        "

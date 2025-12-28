@@ -1,0 +1,19 @@
+#!/bin/bash
+# Format all C++ source files in the project
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Use provided directory or default to project root
+DIRECTORY="${1:-.}"
+
+echo "Formatting C++ files in: $DIRECTORY"
+
+# Run clang-format recursively on specified file types
+find "$DIRECTORY" -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.cc" -o -name "*.h" \) \
+    -not -path "*/build/*" \
+    -not -path "*/_deps/*" \
+    -not -path "*/.*" \
+    -exec clang-format -i {} \;
+
+echo "✓ Formatting completed"
