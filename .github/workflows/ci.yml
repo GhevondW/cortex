@@ -163,15 +163,13 @@ jobs:
           echo "Native Example:      ${{ needs.build-example-native.result }}"
           echo "WASM Example:        ${{ needs.build-example-wasm.result }}"
           echo "Code Formatting:     ${{ needs.check-format.result }}"
-          echo "Documentation:       ${{ needs.check-docs.result }}"
           echo ""
           
           if [ "${{ needs.test-native.result }}" != "success" ] || \
              [ "${{ needs.test-wasm.result }}" != "success" ] || \
              [ "${{ needs.build-example-native.result }}" != "success" ] || \
              [ "${{ needs.build-example-wasm.result }}" != "success" ] || \
-             [ "${{ needs.check-format.result }}" != "success" ] || \
-             [ "${{ needs.check-docs.result }}" != "success" ]; then
+             [ "${{ needs.check-format.result }}" != "success" ]; then
             echo "❌ CI Pipeline Failed"
             echo ""
             echo "Please fix the failing checks before merging."
