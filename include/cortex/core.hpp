@@ -11,4 +11,5 @@ namespace cortex {
 extern "C" {
 
 CORTEX_API int cortex_add(int a, int b);
+
 }
