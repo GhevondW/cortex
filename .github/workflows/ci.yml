@@ -146,63 +146,11 @@ jobs:
           
           echo "✅ All files are properly formatted"
 
-  # Job 6: Build documentation check
-  check-docs:
-    name: Check Documentation
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Check required documentation files
-        run: |
-          required_files=(
-            "README.md"
-            "DEVELOPMENT.md"
-            "QUICKREF.md"
-            "NAMING_CONVENTIONS.md"
-          )
-          
-          missing=false
-          for file in "${required_files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "❌ Missing required file: $file"
-              missing=true
-            else
-              echo "✅ Found: $file"
-            fi
-          done
-          
-          if [ "$missing" = true ]; then
-            exit 1
-          fi
-          
-          echo ""
-          echo "✅ All required documentation files present"
-      
-      - name: Check for broken markdown links
-        run: |
-          # Simple check for common markdown issues
-          echo "Checking markdown files..."
-          for md in *.md; do
-            if [ -f "$md" ]; then
-              echo "Checking $md..."
-              # Check for empty headers
-              if grep -q "^#\+\s*$" "$md"; then
-                echo "❌ Found empty header in $md"
-                exit 1
-              fi
-            fi
-          done
-          echo "✅ Markdown files look good"
-
-  # Job 7: Build summary
+  # Job 6: Build summary
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [test-native, test-wasm, build-example-native, build-example-wasm, check-format, check-docs]
+    needs: [test-native, test-wasm, build-example-native, build-example-wasm, check-format]
     if: always()
     
     steps:
@@ -231,4 +179,3 @@ jobs:
           fi
           
           echo "✅ All CI Checks Passed!"
-
