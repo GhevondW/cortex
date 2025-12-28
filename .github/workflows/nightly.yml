@@ -1,0 +1,130 @@
+name: Nightly Tests
+
+on:
+  schedule:
+    # Run every day at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  # Extended test suite
+  extended-tests:
+    name: Extended Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Run all tests (native)
+        run: |
+          docker compose build test-native
+          docker compose up --abort-on-container-exit test-native
+      
+      - name: Run all tests (WASM)
+        run: |
+          docker compose build test-wasm
+          docker compose up --abort-on-container-exit test-wasm
+      
+      - name: Build all examples
+        run: |
+          docker compose up --abort-on-container-exit build-example-native
+          docker compose up --abort-on-container-exit build-example-wasm
+      
+      - name: Archive build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-build-artifacts
+          path: |
+            build/
+            !build/**/_deps
+          retention-days: 7
+
+  # Memory leak check with Valgrind
+  memory-check:
+    name: Memory Leak Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run tests with Valgrind
+        run: |
+          docker compose run --rm test-native bash -c "
+            apt-get update && apt-get install -y valgrind &&
+            cmake -B build/native -DCORTEX_BUILD_TESTS=ON &&
+            cmake --build build/native &&
+            valgrind --leak-check=full --error-exitcode=1 \
+              build/native/tests/cortex_tests
+          "
+
+  # Code coverage
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build with coverage
+        run: |
+          docker compose run --rm test-native bash -c "
+            cmake -B build/coverage \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCORTEX_BUILD_TESTS=ON \
+              -DCMAKE_CXX_FLAGS='--coverage' &&
+            cmake --build build/coverage &&
+            ctest --test-dir build/coverage --output-on-failure
+          "
+      
+      - name: Generate coverage report
+        run: |
+          docker compose run --rm test-native bash -c "
+            apt-get update && apt-get install -y lcov &&
+            lcov --capture --directory build/coverage --output-file coverage.info &&
+            lcov --remove coverage.info '/usr/*' '*/tests/*' '*/examples/*' '*/build/*' --output-file coverage.info &&
+            lcov --list coverage.info
+          "
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.info
+          fail_ci_if_error: false
+
+  # Notify on failure
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [extended-tests, memory-check, coverage]
+    if: failure()
+    
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '🔴 Nightly Tests Failed';
+            const body = `Nightly tests failed on ${new Date().toISOString()}
+            
+            **Workflow Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            Please investigate the failures.`;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['nightly-failure', 'bug']
+            });
+

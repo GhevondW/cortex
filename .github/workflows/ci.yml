@@ -1,0 +1,234 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+# Cancel in-progress runs for the same workflow and branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job 1: Run native tests
+  test-native:
+    name: Native Tests (Clang 19)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        run: docker compose build test-native
+      
+      - name: Run native tests
+        run: docker compose up --abort-on-container-exit test-native
+      
+      - name: Check test results
+        if: always()
+        run: |
+          if [ -d "build/native" ]; then
+            echo "=== Native Build Output ==="
+            find build/native -name "*.log" -exec cat {} \;
+          fi
+
+  # Job 2: Run WASM tests
+  test-wasm:
+    name: WASM Tests (Emscripten)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build Docker image
+        run: docker compose build test-wasm
+      
+      - name: Run WASM tests
+        run: docker compose up --abort-on-container-exit test-wasm
+      
+      - name: Check test results
+        if: always()
+        run: |
+          if [ -d "build/wasm" ]; then
+            echo "=== WASM Build Output ==="
+            find build/wasm -name "*.log" -exec cat {} \;
+          fi
+
+  # Job 3: Build native example
+  build-example-native:
+    name: Build Native Example
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build and run native example
+        run: docker compose up --abort-on-container-exit build-example-native
+
+  # Job 4: Build WASM example
+  build-example-wasm:
+    name: Build WASM Example
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build and run WASM example
+        run: docker compose up --abort-on-container-exit build-example-wasm
+
+  # Job 5: Check code formatting
+  check-format:
+    name: Check Code Formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+      
+      - name: Check formatting
+        run: |
+          # Find all C++ files and check if they need formatting
+          files=$(find include src tests examples -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) 2>/dev/null || true)
+          
+          if [ -z "$files" ]; then
+            echo "No C++ files found to check"
+            exit 0
+          fi
+          
+          echo "Checking formatting for:"
+          echo "$files"
+          
+          # Check if any files would be reformatted
+          needs_format=false
+          for file in $files; do
+            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+              needs_format=true
+              echo "❌ File needs formatting: $file"
+            fi
+          done
+          
+          if [ "$needs_format" = true ]; then
+            echo ""
+            echo "❌ Some files need formatting. Please run:"
+            echo "   ./format"
+            echo "   git add -u"
+            echo "   git commit --amend --no-edit"
+            exit 1
+          fi
+          
+          echo "✅ All files are properly formatted"
+
+  # Job 6: Build documentation check
+  check-docs:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check required documentation files
+        run: |
+          required_files=(
+            "README.md"
+            "DEVELOPMENT.md"
+            "QUICKREF.md"
+            "NAMING_CONVENTIONS.md"
+          )
+          
+          missing=false
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              missing=true
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+          
+          if [ "$missing" = true ]; then
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All required documentation files present"
+      
+      - name: Check for broken markdown links
+        run: |
+          # Simple check for common markdown issues
+          echo "Checking markdown files..."
+          for md in *.md; do
+            if [ -f "$md" ]; then
+              echo "Checking $md..."
+              # Check for empty headers
+              if grep -q "^#\+\s*$" "$md"; then
+                echo "❌ Found empty header in $md"
+                exit 1
+              fi
+            fi
+          done
+          echo "✅ Markdown files look good"
+
+  # Job 7: Build summary
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [test-native, test-wasm, build-example-native, build-example-wasm, check-format, check-docs]
+    if: always()
+    
+    steps:
+      - name: Check all jobs status
+        run: |
+          echo "=== CI Pipeline Summary ==="
+          echo ""
+          echo "Native Tests:        ${{ needs.test-native.result }}"
+          echo "WASM Tests:          ${{ needs.test-wasm.result }}"
+          echo "Native Example:      ${{ needs.build-example-native.result }}"
+          echo "WASM Example:        ${{ needs.build-example-wasm.result }}"
+          echo "Code Formatting:     ${{ needs.check-format.result }}"
+          echo "Documentation:       ${{ needs.check-docs.result }}"
+          echo ""
+          
+          if [ "${{ needs.test-native.result }}" != "success" ] || \
+             [ "${{ needs.test-wasm.result }}" != "success" ] || \
+             [ "${{ needs.build-example-native.result }}" != "success" ] || \
+             [ "${{ needs.build-example-wasm.result }}" != "success" ] || \
+             [ "${{ needs.check-format.result }}" != "success" ] || \
+             [ "${{ needs.check-docs.result }}" != "success" ]; then
+            echo "❌ CI Pipeline Failed"
+            echo ""
+            echo "Please fix the failing checks before merging."
+            exit 1
+          fi
+          
+          echo "✅ All CI Checks Passed!"
+

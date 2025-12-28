@@ -1,0 +1,128 @@
+name: Release Build
+
+on:
+  release:
+    types: [created, published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  # Build native artifacts
+  build-native:
+    name: Build Native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: cortex-linux-x64
+          - os: macos-latest
+            artifact_name: cortex-macos-arm64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang-19
+      
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install cmake ninja llvm
+      
+      - name: Build library
+        run: |
+          cmake -B build/release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_BUILD_TESTS=ON \
+            -DCORTEX_BUILD_EXAMPLES=ON
+          cmake --build build/release
+      
+      - name: Run tests
+        run: ctest --test-dir build/release --output-on-failure
+      
+      - name: Package artifacts
+        run: |
+          mkdir -p dist/${{ matrix.artifact_name }}
+          cp -r include dist/${{ matrix.artifact_name }}/
+          cp build/release/src/libcortex.a dist/${{ matrix.artifact_name }}/
+          cp README.md dist/${{ matrix.artifact_name }}/
+          cp DEVELOPMENT.md dist/${{ matrix.artifact_name }}/
+          cd dist
+          tar -czf ${{ matrix.artifact_name }}.tar.gz ${{ matrix.artifact_name }}
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}.tar.gz
+
+  # Build WASM artifacts
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Build WASM in Docker
+        run: |
+          docker compose build test-wasm
+          docker compose run --rm test-wasm bash -c "
+            source /opt/emsdk/emsdk_env.sh &&
+            emcmake cmake -B build/wasm -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCORTEX_BUILD_TESTS=ON \
+              -DCORTEX_BUILD_EXAMPLES=ON &&
+            cmake --build build/wasm &&
+            ctest --test-dir build/wasm --output-on-failure
+          "
+      
+      - name: Package WASM artifacts
+        run: |
+          mkdir -p dist/cortex-wasm
+          cp -r include dist/cortex-wasm/
+          cp build/wasm/src/libcortex.a dist/cortex-wasm/
+          cp build/wasm/examples/wasm_example.js dist/cortex-wasm/ || true
+          cp build/wasm/examples/wasm_example.wasm dist/cortex-wasm/ || true
+          cp examples/wasm/index.html dist/cortex-wasm/ || true
+          cp README.md dist/cortex-wasm/
+          cd dist
+          tar -czf cortex-wasm.tar.gz cortex-wasm
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortex-wasm
+          path: dist/cortex-wasm.tar.gz
+
+  # Create release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-native, build-wasm]
+    if: github.event_name == 'release'
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
