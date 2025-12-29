@@ -3,7 +3,7 @@
 #include <cortex/config.hpp>
 
 #if defined(CORTEX_EMSCRIPTEN)
-#include <cortex/emscripten_coroutine.hpp>
+#include <cortex/coroutine_emscripten.hpp>
 #else
-#include <cortex/native_coroutine.hpp>
+#include <cortex/coroutine_native.hpp>
 #endif

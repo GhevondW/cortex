@@ -1,9 +1,18 @@
 add_library(cortex STATIC)
 
-# Sources
-target_sources(cortex PRIVATE
-    core.cpp
-)
+if (EMSCRIPTEN)
+    target_sources(cortex
+            PRIVATE
+            core.cpp
+            coroutine_emscripten.cpp
+    )
+else()
+    target_sources(cortex
+            PRIVATE
+            core.cpp
+            coroutine_native.cpp
+    )
+endif()
 
 # Includes
 target_include_directories(cortex PUBLIC
