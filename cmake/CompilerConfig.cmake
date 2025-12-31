@@ -38,6 +38,13 @@ function(cortex_apply_sanitizers TARGET_NAME)
                 -fsanitize=address 
                 -fsanitize=undefined
             )
+
+            # Boost.Context requires these macros to be defined when using sanitizers
+            # to properly notify the sanitizer about stack switches.
+            target_compile_definitions(${TARGET_NAME} PUBLIC 
+                BOOST_USE_ASAN
+                BOOST_USE_UBSAN
+            )
         endif()
     endif()
 endfunction()
