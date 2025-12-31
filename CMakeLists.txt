@@ -9,6 +9,7 @@ project(cortex
 # --- Options ---
 option(CORTEX_BUILD_TESTS "Build unit tests" ON)
 option(CORTEX_BUILD_EXAMPLES "Build examples" OFF)
+option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 
 # --- Module Path ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")

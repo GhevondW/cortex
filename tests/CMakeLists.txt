@@ -2,11 +2,13 @@
 add_executable(cortex_tests unit_test.cpp)
 target_link_libraries(cortex_tests PRIVATE cortex::cortex GTest::gtest_main)
 cortex_apply_warnings(cortex_tests)
+cortex_apply_sanitizers(cortex_tests)
 
 # New test executable
 add_executable(cortex_coroutine_test coroutine_test.cpp)
 target_link_libraries(cortex_coroutine_test PRIVATE cortex::cortex GTest::gtest_main)
 cortex_apply_warnings(cortex_coroutine_test)
+cortex_apply_sanitizers(cortex_coroutine_test)
 
 if(EMSCRIPTEN)
     # Configure both executables for WASM
