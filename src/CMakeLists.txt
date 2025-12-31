@@ -1,14 +1,15 @@
 add_library(cortex STATIC)
 
-set(CORTEX_COROUTINE_SRC coroutine_native.cpp)
-
 if (EMSCRIPTEN)
-    set(CORTEX_COROUTINE_SRC coroutine_emscripten.cpp)
+    set(CORTEX_COROUTINE_SRC detail/coroutine_emscripten_impl.cpp)
+else ()
+    set(CORTEX_COROUTINE_SRC detail/coroutine_native_impl.cpp)
 endif()
 
 target_sources(cortex
         PRIVATE
         core.cpp
+        coroutine.cpp
         ${CORTEX_COROUTINE_SRC}
 )
 
@@ -16,6 +17,10 @@ target_sources(cortex
 target_include_directories(cortex PUBLIC
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+)
+
+target_include_directories(cortex PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(cortex PUBLIC function2::function2)
