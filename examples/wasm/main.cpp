@@ -6,13 +6,15 @@
 #include <emscripten.h>
 
 // Bridge to call a JS function named 'handleStep'
+// clang-format off
 EM_JS(void, call_js_step, (int value), {
-    if (typeof handleStep == = 'function') {
+    if (typeof handleStep === 'function') {
         handleStep(value);
     } else {
         console.log("JS: step", value);
     }
 });
+// clang-format on
 #endif
 
 namespace {
