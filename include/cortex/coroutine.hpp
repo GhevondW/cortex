@@ -1,13 +1,78 @@
 #pragma once
 
-#include <cortex/config.hpp>
+#include <cstddef>
+#include <memory>
 
-#if defined(CORTEX_EMSCRIPTEN)
-#include <cortex/detail/coroutine_emscripten.hpp>
-#else
-#include <cortex/detail/coroutine_native.hpp>
-#endif
+#include <cortex/coroutine_body.hpp>
+
+/**
+ * @file coroutine.hpp
+ * @brief Main entry point for the cortex coroutine library.
+ */
 
 namespace cortex {
-using Coroutine = detail::Coroutine;
+
+namespace detail {
+class CoroutineImpl;
+}
+
+/**
+ * @class Coroutine
+ * @brief A stackful coroutine that provides a mechanism for cooperative multitasking.
+ *
+ * The Coroutine class manages a separate execution stack and allows suspending
+ * and resuming execution. It follows the PIMPL pattern to provide a unified
+ * API across different platforms (Native and Emscripten).
+ */
+class Coroutine final {
+public:
+    /**
+     * @brief Creates a new coroutine with the specified body and stack size.
+     *
+     * @param body The function or callable to execute within the coroutine.
+     * @param stack_size_bytes The size of the stack to allocate for the coroutine (default: 256KB).
+     * @return A Coroutine instance.
+     * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0.
+     */
+    static Coroutine Make(CoroutineBody body, std::size_t stack_size_bytes = 262144);
+
+    Coroutine(const Coroutine&) = delete;
+    Coroutine(Coroutine&&) noexcept;
+    Coroutine& operator=(const Coroutine&) = delete;
+    Coroutine& operator=(Coroutine&&) noexcept;
+    ~Coroutine();
+
+    /**
+     * @brief Gets the allocated stack size of the coroutine.
+     * @return The stack size in bytes.
+     */
+    [[nodiscard]] std::size_t GetStackSize() const noexcept;
+
+    /**
+     * @brief Checks if the coroutine has finished its execution.
+     * @return true if execution is complete, false otherwise.
+     */
+    [[nodiscard]] bool IsDone() const noexcept;
+
+    /**
+     * @brief Checks if the coroutine terminated with an unhandled exception.
+     * @return true if an exception occurred, false otherwise.
+     */
+    [[nodiscard]] bool HasException() const noexcept;
+
+    /**
+     * @brief Resumes the execution of the coroutine.
+     *
+     * If the coroutine was suspended, it continues from the suspension point.
+     * If an exception was caught inside the coroutine, it will be rethrown here.
+     *
+     * @throws ResumeOnDoneCoroutineError if attempting to resume a finished coroutine.
+     */
+    void Resume();
+
+private:
+    explicit Coroutine(std::unique_ptr<detail::CoroutineImpl> impl);
+    std::unique_ptr<detail::CoroutineImpl> impl_;
 };
+
+} // namespace cortex

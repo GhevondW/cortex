@@ -1,6 +1,8 @@
-#include <cortex/coroutine.hpp>
 #include <iostream>
 #include <memory>
+
+#include <cortex/config.hpp>
+#include <cortex/coroutine.hpp>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
