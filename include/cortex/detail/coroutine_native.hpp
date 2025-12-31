@@ -1,24 +1,24 @@
 #pragma once
 
 #include <cstddef>
-#include <exception>
-
-#include <boost/context/fiber.hpp>
+#include <memory>
 
 #include <cortex/coroutine_body.hpp>
 
 namespace cortex::detail {
 
+// Use after move is UB for this library
+
 class Coroutine final {
 public:
-    // Use after move is UB for this library
-    // TODO : allocator support right now this stack_size_bytes is not used
+    struct Impl;
+
     static Coroutine Make(cortex::CoroutineBody body, std::size_t stack_size_bytes = 262144);
 
     Coroutine(const Coroutine&) = delete;
-    Coroutine(Coroutine&&) noexcept = default;
+    Coroutine(Coroutine&&) noexcept;
     Coroutine& operator=(const Coroutine&) = delete;
-    Coroutine& operator=(Coroutine&&) noexcept = default;
+    Coroutine& operator=(Coroutine&&) noexcept;
     ~Coroutine();
 
     [[nodiscard]] std::size_t GetStackSize() const noexcept;
@@ -31,13 +31,9 @@ public:
     void Resume();
 
 private:
-    explicit Coroutine(cortex::CoroutineBody body, std::size_t stack_size_bytes);
+    explicit Coroutine(std::unique_ptr<Impl> impl);
 
-    bool is_done_;
-    bool is_unwinding_ = false;
-    std::size_t stack_size_bytes_;
-    std::exception_ptr exception_ptr_;
-    boost::context::fiber fiber_;
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace cortex::detail

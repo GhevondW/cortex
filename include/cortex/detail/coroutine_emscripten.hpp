@@ -1,18 +1,18 @@
 #pragma once
 
 #include <cstddef>
-#include <exception>
 #include <memory>
 
 #include <cortex/coroutine_body.hpp>
 
 namespace cortex::detail {
 
+// Use after move is UB for this library
+
 class Coroutine final {
 public:
     struct Impl;
 
-    // Use after move is UB for this library
     static Coroutine Make(CoroutineBody body, std::size_t stack_size_bytes = 262144);
 
     Coroutine(const Coroutine&) = delete;

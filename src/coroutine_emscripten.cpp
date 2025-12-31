@@ -93,6 +93,8 @@ private:
 
 void Coroutine::Impl::FiberEntry(void* arg) {
     auto* self = static_cast<Coroutine::Impl*>(arg);
+    assert(self);
+
     FiberSuspendContext suspend_context(self);
 
     try {
@@ -141,18 +143,22 @@ Coroutine::~Coroutine() {
 }
 
 std::size_t Coroutine::GetStackSize() const noexcept {
+    assert(impl_);
     return impl_->stack_size_bytes;
 }
 
 bool Coroutine::IsDone() const noexcept {
+    assert(impl_);
     return impl_->is_done;
 }
 
 bool Coroutine::HasException() const noexcept {
+    assert(impl_);
     return static_cast<bool>(impl_->exception_ptr);
 }
 
 void Coroutine::Resume() {
+    assert(impl_);
     if (IsDone()) {
         throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
     }
