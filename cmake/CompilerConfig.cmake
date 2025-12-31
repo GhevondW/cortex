@@ -19,3 +19,32 @@ function(cortex_apply_warnings TARGET_NAME)
         -Wsign-conversion
     )
 endfunction()
+
+# Sanitizers (ASan, UBSan)
+function(cortex_apply_sanitizers TARGET_NAME)
+    if(CORTEX_USE_SANITIZERS)
+        if(EMSCRIPTEN)
+            message(STATUS "[${TARGET_NAME}] Enabling WASM Sanitizers")
+            target_compile_options(${TARGET_NAME} PUBLIC -fsanitize=address -fsanitize=undefined)
+            target_link_options(${TARGET_NAME} PUBLIC -fsanitize=address -fsanitize=undefined)
+        else()
+            message(STATUS "[${TARGET_NAME}] Enabling Native Sanitizers")
+            target_compile_options(${TARGET_NAME} PUBLIC 
+                -fsanitize=address 
+                -fsanitize=undefined 
+                -fno-omit-frame-pointer
+            )
+            target_link_options(${TARGET_NAME} PUBLIC 
+                -fsanitize=address 
+                -fsanitize=undefined
+            )
+
+            # Boost.Context requires these macros to be defined when using sanitizers
+            # to properly notify the sanitizer about stack switches.
+            target_compile_definitions(${TARGET_NAME} PUBLIC 
+                BOOST_USE_ASAN
+                BOOST_USE_UBSAN
+            )
+        endif()
+    endif()
+endfunction()

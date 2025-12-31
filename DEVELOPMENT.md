@@ -254,6 +254,7 @@ python3 -m http.server 8080
 
 - `CORTEX_BUILD_TESTS` - Build unit tests (default: ON)
 - `CORTEX_BUILD_EXAMPLES` - Build example applications (default: OFF)
+- `CORTEX_USE_SANITIZERS` - Enable Address and Undefined Behavior sanitizers (default: OFF). Works for both Native and WASM builds.
 
 ## Platform Detection
 

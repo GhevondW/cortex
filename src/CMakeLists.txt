@@ -27,6 +27,7 @@ endif()
 
 # Apply Modular Configuration
 cortex_apply_warnings(cortex)
+cortex_apply_sanitizers(cortex)
 cortex_configure_platform(cortex)
 
 # Alias

@@ -3,8 +3,10 @@ services:
   test-native:
     build: .
     volumes: [".:/workspace"]
+    environment:
+      - CORTEX_USE_SANITIZERS=${CORTEX_USE_SANITIZERS:-OFF}
     command: >
-      bash -c "cmake -B build/native -DCORTEX_BUILD_TESTS=ON && 
+      bash -c "cmake -B build/native -DCORTEX_BUILD_TESTS=ON -DCORTEX_USE_SANITIZERS=$${CORTEX_USE_SANITIZERS} && 
                cmake --build build/native && 
                ctest --test-dir build/native"
 
@@ -13,11 +15,13 @@ services:
     build: .
     volumes:
       - .:/workspace
+    environment:
+      - CORTEX_USE_SANITIZERS=${CORTEX_USE_SANITIZERS:-OFF}
     command: >
       bash -c "
       source /opt/emsdk/emsdk_env.sh &&
       rm -rf build/wasm &&
-      emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_TESTS=ON &&
+      emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_TESTS=ON -DCORTEX_USE_SANITIZERS=$${CORTEX_USE_SANITIZERS} &&
       cmake --build build/wasm &&
       ctest --test-dir build/wasm --output-on-failure
       "

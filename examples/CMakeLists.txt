@@ -23,9 +23,11 @@ if(EMSCRIPTEN)
     )
     
     cortex_apply_warnings(wasm_example)
+    cortex_apply_sanitizers(wasm_example)
 else()
     # Native Example
     add_executable(native_example linux/main.cpp)
     target_link_libraries(native_example PRIVATE cortex::cortex)
     cortex_apply_warnings(native_example)
+    cortex_apply_sanitizers(native_example)
 endif()
