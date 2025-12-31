@@ -15,6 +15,13 @@ else()
     message(STATUS "WASM build detected: Skipping Boost (Using Emscripten built-ins)")
 endif()
 
+CPMAddPackage(
+    NAME function2
+    VERSION 4.2.5 # Use the appropriate version of function2 that you need
+    GITHUB_REPOSITORY Naios/function2
+    GIT_TAG 4.2.5 # This should match the version you want to use
+)
+
 # --- GoogleTest (Always needed for tests) ---
 if(CORTEX_BUILD_TESTS)
     CPMAddPackage(

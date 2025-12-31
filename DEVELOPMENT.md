@@ -91,6 +91,110 @@ docker compose up serve-example
 
 Then open http://localhost:8080/examples/index.html in your browser.
 
+## Development Workflows
+
+### Making Code Changes
+
+1. Edit source files in `src/`, `include/`, or `tests/`
+2. Run tests to verify changes:
+   ```bash
+   # For native
+   docker compose up test-native
+   
+   # For WASM
+   docker compose up test-wasm
+   ```
+
+### Adding New Features
+
+1. Add header declarations in `include/cortex/`
+2. Implement in `src/`
+3. Add tests in `tests/`
+4. Update examples if needed
+
+### Code Formatting
+
+A format script is provided:
+
+```bash
+./format
+```
+
+This will format all C++ files according to the project style.
+
+## Testing
+
+### Running All Tests
+
+```bash
+# Native tests
+docker compose up test-native
+
+# WASM tests
+docker compose up test-wasm
+```
+
+### Test Structure
+
+Tests use GoogleTest framework. Each test file should:
+
+```cpp
+#include "cortex/core.hpp"
+#include <gtest/gtest.h>
+
+TEST(TestSuiteName, TestName) {
+    // Your test code
+    EXPECT_EQ(expected, actual);
+}
+```
+
+### Adding New Tests
+
+1. Add test cases to `tests/unit_test.cpp` or create new test files
+2. Update `tests/CMakeLists.txt` if adding new test files
+3. Run tests to verify
+
+## Examples
+
+### Native Example
+
+Located in `examples/linux/main.cpp`. Demonstrates:
+- Using the C++ API
+- Using the C API
+- Native platform features
+
+Run with:
+```bash
+docker compose up build-example-native
+```
+
+### WASM Example
+
+Located in `examples/wasm/`. Demonstrates:
+- Compiling to WebAssembly
+- Exporting C functions to JavaScript
+- Running in Node.js and browser
+
+**CLI:**
+```bash
+docker compose up build-example-wasm
+```
+
+**Browser:**
+```bash
+docker compose up serve-example
+# Open http://localhost:8080/examples/index.html
+```
+
+The browser example shows how to call exported C functions from JavaScript:
+
+```javascript
+Module.onRuntimeInitialized = () => {
+    const result = Module._cortex_add(10, 20);
+    console.log(result); // 30
+};
+```
+
 ## Building Locally
 
 ### Native Build
@@ -150,6 +254,20 @@ python3 -m http.server 8080
 
 - `CORTEX_BUILD_TESTS` - Build unit tests (default: ON)
 - `CORTEX_BUILD_EXAMPLES` - Build example applications (default: OFF)
+
+## Platform Detection
+
+The library automatically detects the build platform:
+
+```cpp
+#ifdef __EMSCRIPTEN__
+    // WASM-specific code
+    // CORTEX_EMSCRIPTEN is defined as 1
+#else
+    // Native-specific code
+    // CORTEX_EMSCRIPTEN is defined as 0
+#endif
+```
 
 ## Exporting Functions to JavaScript
 
