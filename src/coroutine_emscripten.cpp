@@ -4,6 +4,7 @@
 #include <exception>
 #include <utility>
 
+#include "cortex/detail/forced_unwind.hpp"
 #include "cortex/errors/resume_on_completed_coroutine_error.hpp"
 
 namespace cortex::detail {
@@ -13,18 +14,24 @@ namespace {
 thread_local emscripten_fiber_t* current_caller_fiber = nullptr;
 
 struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
-    explicit FiberSuspendContext(emscripten_fiber_t* fiber)
-        : fiber_(fiber) {}
+    explicit FiberSuspendContext(emscripten_fiber_t* fiber, bool& is_unwinding)
+        : fiber_(fiber)
+        , is_unwinding_(is_unwinding) {}
 
     ~FiberSuspendContext() override = default;
 
     void Suspend() override {
         assert(current_caller_fiber != nullptr);
         emscripten_fiber_swap(fiber_, current_caller_fiber);
+
+        if (is_unwinding_) {
+            throw ForcedUnwind {};
+        }
     }
 
 private:
     emscripten_fiber_t* fiber_;
+    bool& is_unwinding_;
 };
 
 } // namespace
@@ -49,6 +56,17 @@ Coroutine::Coroutine(cortex::CoroutineBody body, std::size_t stack_size_bytes)
     , asyncify_stack_(stack_size_bytes) {
     emscripten_fiber_init(
         &fiber_, FiberEntry, this, c_stack_.data(), c_stack_.size(), asyncify_stack_.data(), asyncify_stack_.size());
+}
+
+Coroutine::~Coroutine() {
+    if (!is_done_) {
+        is_unwinding_ = true;
+        try {
+            Resume();
+        } catch (...) {
+            // Destructors should not throw
+        }
+    }
 }
 
 std::size_t Coroutine::GetStackSize() const noexcept {
@@ -87,10 +105,12 @@ void Coroutine::Resume() {
 
 void Coroutine::FiberEntry(void* arg) {
     auto* self = static_cast<Coroutine*>(arg);
-    FiberSuspendContext suspend_context(&self->fiber_);
+    FiberSuspendContext suspend_context(&self->fiber_, self->is_unwinding_);
 
     try {
         self->body_(suspend_context);
+    } catch (const ForcedUnwind&) {
+        // Unwinding in progress, just exit
     } catch (...) {
         self->exception_ptr_ = std::current_exception();
     }

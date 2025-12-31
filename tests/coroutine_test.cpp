@@ -72,3 +72,28 @@ TEST(CortexCoroutineTest, ResumeOnDone) {
     EXPECT_TRUE(cr.IsDone());
     EXPECT_THROW(cr.Resume(), cortex::ResumeOnDoneCoroutineError);
 }
+
+struct ResourceTracker {
+    bool& destroyed;
+    ResourceTracker(bool& d)
+        : destroyed(d) {}
+    ~ResourceTracker() {
+        destroyed = true;
+    }
+};
+
+TEST(CortexCoroutineTest, ForcedUnwindOnDestruction) {
+    bool resource_destroyed = false;
+    {
+        auto cr = cortex::Coroutine::Make([&resource_destroyed](cortex::CoroutineSuspendContext& ctx) {
+            ResourceTracker tracker(resource_destroyed);
+            ctx.Suspend();
+        });
+
+        cr.Resume();
+        EXPECT_FALSE(resource_destroyed);
+        EXPECT_FALSE(cr.IsDone());
+        // cr goes out of scope here
+    }
+    EXPECT_TRUE(resource_destroyed);
+}
