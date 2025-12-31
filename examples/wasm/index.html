@@ -1,13 +1,73 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <title>Cortex WASM Coroutine Demo</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; line-height: 1.6; }
+        .controls { margin-bottom: 1em; padding: 1em; background: #f4f4f4; border-radius: 8px; }
+        #log { border: 1px solid #ccc; padding: 1em; height: 300px; overflow-y: scroll; background: #fafafa; font-family: monospace; }
+        .step { color: #0066cc; }
+        .info { color: #666; }
+        button { padding: 0.5em 1em; cursor: pointer; }
+    </style>
+</head>
 <body>
-    <h1>Cortex WASM Demo</h1>
-    <p>Result of 10 + 20 from C++: <b id="out">Loading...</b></p>
+    <h1>Cortex WASM Coroutine Demo</h1>
+    
+    <div class="controls">
+        <button id="startBtn">Start Coroutine (5 steps)</button>
+        <button id="resumeBtn" disabled>Resume Next Step</button>
+        <span id="status" class="info">Waiting for Runtime...</span>
+    </div>
+
+    <div id="log"></div>
+
     <script src="wasm_example.js"></script>
     <script>
+        const log = document.getElementById('log');
+        const startBtn = document.getElementById('startBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const status = document.getElementById('status');
+
+        function appendLog(msg, className = '') {
+            const div = document.createElement('div');
+            div.className = className;
+            div.innerText = `> ${msg}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // This function is called from C++ via EM_JS
+        function handleStep(value) {
+            appendLog(`Received from Coroutine: Step ${value}`, 'step');
+        }
+
         Module.onRuntimeInitialized = () => {
-            const result = Module._cortex_add(10, 20);
-            document.getElementById('out').innerText = result;
+            status.innerText = "Runtime Ready";
+            appendLog("Emscripten Runtime Initialized", "info");
+
+            startBtn.onclick = async () => {
+                log.innerHTML = '';
+                appendLog("Starting coroutine with 5 iterations...");
+                // Use { async: true } for functions that use fibers/Asyncify
+                await Module.ccall('start_coroutine_example', null, ['number'], [5], { async: true });
+                startBtn.disabled = true;
+                resumeBtn.disabled = false;
+                status.innerText = "Coroutine Running";
+            };
+
+            resumeBtn.onclick = async () => {
+                appendLog("Resuming coroutine from JS...");
+                // Use { async: true } for functions that use fibers/Asyncify
+                await Module.ccall('resume_coroutine_example', null, [], [], { async: true });
+                
+                if (Module.ccall('is_coroutine_done', 'number', [], [])) {
+                    appendLog("Coroutine Finished!", "info");
+                    resumeBtn.disabled = true;
+                    startBtn.disabled = false;
+                    status.innerText = "Coroutine Finished";
+                }
+            };
         };
     </script>
 </body>

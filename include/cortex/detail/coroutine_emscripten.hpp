@@ -2,9 +2,7 @@
 
 #include <cstddef>
 #include <exception>
-#include <vector>
-
-#include <emscripten/fiber.h>
+#include <memory>
 
 #include <cortex/coroutine_body.hpp>
 
@@ -12,13 +10,15 @@ namespace cortex::detail {
 
 class Coroutine final {
 public:
+    struct Impl;
+
     // Use after move is UB for this library
     static Coroutine Make(CoroutineBody body, std::size_t stack_size_bytes = 262144);
 
     Coroutine(const Coroutine&) = delete;
-    Coroutine(Coroutine&&) noexcept = default;
+    Coroutine(Coroutine&&) noexcept;
     Coroutine& operator=(const Coroutine&) = delete;
-    Coroutine& operator=(Coroutine&&) noexcept = default;
+    Coroutine& operator=(Coroutine&&) noexcept;
     ~Coroutine();
 
     [[nodiscard]] std::size_t GetStackSize() const noexcept;
@@ -31,19 +31,9 @@ public:
     void Resume();
 
 private:
-    explicit Coroutine(CoroutineBody body, std::size_t stack_size_bytes);
+    explicit Coroutine(std::unique_ptr<Impl> impl);
 
-    bool is_done_ {false};
-    bool is_unwinding_ {false};
-    std::size_t stack_size_bytes_ {};
-    std::exception_ptr exception_ptr_ {};
-    CoroutineBody body_ {};
-
-    emscripten_fiber_t fiber_ {};
-    std::vector<char> c_stack_ {};
-    std::vector<char> asyncify_stack_ {};
-
-    static void FiberEntry(void* arg);
+    std::unique_ptr<Impl> impl_;
 };
 
 } // namespace cortex::detail

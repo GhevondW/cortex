@@ -1,6 +1,9 @@
 #include "cortex/detail/coroutine_emscripten.hpp"
 
 #include <cassert>
+#include <cstdlib>
+#include <cstring>
+#include <emscripten/fiber.h>
 #include <exception>
 #include <utility>
 
@@ -11,30 +14,102 @@ namespace cortex::detail {
 
 namespace {
 
-thread_local emscripten_fiber_t* current_caller_fiber = nullptr;
+// Track the currently executing fiber
+thread_local emscripten_fiber_t* running_fiber = nullptr;
+
+// Persistent state for the "main" fiber (the one calling Resume from JS)
+struct MainFiberContext {
+    emscripten_fiber_t fiber;
+    void* asyncify_stack;
+    static constexpr size_t stack_size = 262144;
+
+    MainFiberContext() {
+        asyncify_stack = std::aligned_alloc(16, stack_size);
+        std::memset(asyncify_stack, 0, stack_size);
+    }
+    ~MainFiberContext() {
+        std::free(asyncify_stack);
+    }
+};
+
+MainFiberContext& get_main_context() {
+    thread_local MainFiberContext instance;
+    return instance;
+}
+
+} // namespace
+
+struct Coroutine::Impl {
+    emscripten_fiber_t fiber;
+    CoroutineBody body;
+    bool is_done {false};
+    bool is_unwinding {false};
+    std::size_t stack_size_bytes;
+    std::exception_ptr exception_ptr;
+    void* c_stack {nullptr};
+    void* asyncify_stack {nullptr};
+
+    Impl(CoroutineBody b, std::size_t stack_size)
+        : body(std::move(b))
+        , stack_size_bytes(stack_size) {
+        c_stack = std::aligned_alloc(16, stack_size);
+        asyncify_stack = std::aligned_alloc(16, stack_size);
+        std::memset(c_stack, 0, stack_size);
+        std::memset(asyncify_stack, 0, stack_size);
+
+        emscripten_fiber_init(&fiber, FiberEntry, this, c_stack, stack_size, asyncify_stack, stack_size);
+    }
+
+    ~Impl() {
+        if (c_stack) std::free(c_stack);
+        if (asyncify_stack) std::free(asyncify_stack);
+    }
+
+    static void FiberEntry(void* arg);
+};
 
 struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
-    explicit FiberSuspendContext(emscripten_fiber_t* fiber, bool& is_unwinding)
-        : fiber_(fiber)
-        , is_unwinding_(is_unwinding) {}
+    explicit FiberSuspendContext(Coroutine::Impl* impl)
+        : impl_(impl) {}
 
     ~FiberSuspendContext() override = default;
 
     void Suspend() override {
-        assert(current_caller_fiber != nullptr);
-        emscripten_fiber_swap(fiber_, current_caller_fiber);
+        emscripten_fiber_t* main_f = &get_main_context().fiber;
 
-        if (is_unwinding_) {
+        emscripten_fiber_t* old_fiber = running_fiber;
+        running_fiber = main_f;
+
+        emscripten_fiber_swap(old_fiber, main_f);
+
+        if (impl_->is_unwinding) {
             throw ForcedUnwind {};
         }
     }
 
 private:
-    emscripten_fiber_t* fiber_;
-    bool& is_unwinding_;
+    Coroutine::Impl* impl_;
 };
 
-} // namespace
+void Coroutine::Impl::FiberEntry(void* arg) {
+    auto* self = static_cast<Coroutine::Impl*>(arg);
+    FiberSuspendContext suspend_context(self);
+
+    try {
+        self->body(suspend_context);
+    } catch (const ForcedUnwind&) {
+        // Unwinding in progress
+    } catch (...) {
+        self->exception_ptr = std::current_exception();
+    }
+
+    self->is_done = true;
+
+    // Exit fiber back to the main context
+    emscripten_fiber_t* main_f = &get_main_context().fiber;
+    running_fiber = main_f;
+    emscripten_fiber_swap(&self->fiber, main_f);
+}
 
 Coroutine Coroutine::Make(cortex::CoroutineBody body, std::size_t stack_size_bytes) {
     if (!static_cast<bool>(body)) {
@@ -45,40 +120,36 @@ Coroutine Coroutine::Make(cortex::CoroutineBody body, std::size_t stack_size_byt
         throw std::invalid_argument("stack_size_bytes is 0.");
     }
 
-    return Coroutine(std::move(body), stack_size_bytes);
+    auto impl = std::make_unique<Impl>(std::move(body), stack_size_bytes);
+    return Coroutine(std::move(impl));
 }
 
-Coroutine::Coroutine(cortex::CoroutineBody body, std::size_t stack_size_bytes)
-    : is_done_(false)
-    , stack_size_bytes_(stack_size_bytes)
-    , body_(std::move(body))
-    , c_stack_(stack_size_bytes)
-    , asyncify_stack_(stack_size_bytes) {
-    emscripten_fiber_init(
-        &fiber_, FiberEntry, this, c_stack_.data(), c_stack_.size(), asyncify_stack_.data(), asyncify_stack_.size());
-}
+Coroutine::Coroutine(std::unique_ptr<Impl> impl)
+    : impl_(std::move(impl)) {}
+
+Coroutine::Coroutine(Coroutine&&) noexcept = default;
+Coroutine& Coroutine::operator=(Coroutine&&) noexcept = default;
 
 Coroutine::~Coroutine() {
-    if (!is_done_) {
-        is_unwinding_ = true;
+    if (impl_ && !impl_->is_done) {
+        impl_->is_unwinding = true;
         try {
             Resume();
         } catch (...) {
-            // Destructors should not throw
         }
     }
 }
 
 std::size_t Coroutine::GetStackSize() const noexcept {
-    return stack_size_bytes_;
+    return impl_->stack_size_bytes;
 }
 
 bool Coroutine::IsDone() const noexcept {
-    return is_done_;
+    return impl_->is_done;
 }
 
 bool Coroutine::HasException() const noexcept {
-    return static_cast<bool>(exception_ptr_);
+    return static_cast<bool>(impl_->exception_ptr);
 }
 
 void Coroutine::Resume() {
@@ -86,39 +157,21 @@ void Coroutine::Resume() {
         throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
     }
 
-    emscripten_fiber_t caller_fiber;
-    std::vector<char> caller_asyncify_stack(stack_size_bytes_);
+    // Capture current JS call stack into main fiber context
     emscripten_fiber_init_from_current_context(
-        &caller_fiber, caller_asyncify_stack.data(), caller_asyncify_stack.size());
+        &get_main_context().fiber, get_main_context().asyncify_stack, MainFiberContext::stack_size);
 
-    emscripten_fiber_t* prev_caller = current_caller_fiber;
-    current_caller_fiber = &caller_fiber;
+    emscripten_fiber_t* old_fiber = &get_main_context().fiber;
+    running_fiber = &impl_->fiber;
 
-    emscripten_fiber_swap(&caller_fiber, &fiber_);
+    emscripten_fiber_swap(old_fiber, &impl_->fiber);
 
-    current_caller_fiber = prev_caller;
+    // Upon return back to Resume(), the running fiber is main
+    running_fiber = old_fiber;
 
-    if (exception_ptr_) {
-        std::rethrow_exception(exception_ptr_);
+    if (impl_->exception_ptr) {
+        std::rethrow_exception(impl_->exception_ptr);
     }
-}
-
-void Coroutine::FiberEntry(void* arg) {
-    auto* self = static_cast<Coroutine*>(arg);
-    FiberSuspendContext suspend_context(&self->fiber_, self->is_unwinding_);
-
-    try {
-        self->body_(suspend_context);
-    } catch (const ForcedUnwind&) {
-        // Unwinding in progress, just exit
-    } catch (...) {
-        self->exception_ptr_ = std::current_exception();
-    }
-
-    self->is_done_ = true;
-
-    assert(current_caller_fiber != nullptr);
-    emscripten_fiber_swap(&self->fiber_, current_caller_fiber);
 }
 
 } // namespace cortex::detail
