@@ -1,36 +1,26 @@
-# --- CPM Setup ---
-set(CPM_DOWNLOAD_VERSION 0.38.7)
-if(CPM_SOURCE_CACHE)
-  set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-elseif(DEFINED ENV{CPM_SOURCE_CACHE})
-  set(CPM_DOWNLOAD_LOCATION "$ENV{CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-else()
-  set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
-endif()
-
-if(NOT (EXISTS ${CPM_DOWNLOAD_LOCATION}))
-  message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
-  file(DOWNLOAD
-       https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake
-       ${CPM_DOWNLOAD_LOCATION}
-  )
-endif()
-include(${CPM_DOWNLOAD_LOCATION})
-
-# --- External Libraries ---
+include(cmake/CPM.cmake)
 
 # --- Boost (Native Only) ---
 if(NOT EMSCRIPTEN)
     message(STATUS "Native build detected: Fetching Boost.Context via CPM")
     CPMAddPackage(
         NAME Boost
-        VERSION 1.83.0
-        URL https://github.com/boostorg/boost/releases/download/boost-1.83.0/boost-1.83.0.tar.gz
-        OPTIONS "BOOST_ENABLE_CMAKE ON" "BOOST_INCLUDE_LIBRARIES context"
+        VERSION 1.86.0 # Versions less than 1.85.0 may need patches for installation targets.
+        URL https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
+        URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
+        OPTIONS "BOOST_ENABLE_CMAKE ON" "BOOST_SKIP_INSTALL_RULES ON" # Set `OFF` for installation
+        "BUILD_SHARED_LIBS OFF" "BOOST_INCLUDE_LIBRARIES context\\\;asio" # Note the escapes!
     )
 else()
     message(STATUS "WASM build detected: Skipping Boost (Using Emscripten built-ins)")
 endif()
+
+CPMAddPackage(
+    NAME function2
+    VERSION 4.2.5 # Use the appropriate version of function2 that you need
+    GITHUB_REPOSITORY Naios/function2
+    GIT_TAG 4.2.5 # This should match the version you want to use
+)
 
 # --- GoogleTest (Always needed for tests) ---
 if(CORTEX_BUILD_TESTS)

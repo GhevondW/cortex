@@ -27,6 +27,7 @@ print_usage() {
     echo "  clean             Clean all build artifacts"
     echo "  format            Format all C++ code"
     echo "  shell             Open shell in development container"
+    echo "  wasm-shell        Open shell with Emscripten environment active"
     echo "  help              Show this help message"
 }
 
@@ -78,6 +79,10 @@ case "${1:-help}" in
     shell)
         echo -e "${GREEN}Opening development shell...${NC}"
         docker compose run --rm test-native bash
+        ;;
+    wasm-shell)
+        echo -e "${GREEN}Opening WASM development shell...${NC}"
+        docker compose run --rm test-native bash -c "source /opt/emsdk/emsdk_env.sh && bash"
         ;;
     help)
         print_usage

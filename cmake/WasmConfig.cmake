@@ -5,6 +5,10 @@ function(cortex_configure_platform TARGET_NAME)
         # Asyncify is often needed for coroutine-like behavior in JS
         target_link_options(${TARGET_NAME} PUBLIC "-sASYNCIFY")
         
+        # Enable exception catching for WASM
+        target_link_options(${TARGET_NAME} PUBLIC "-fexceptions")
+        target_compile_options(${TARGET_NAME} PUBLIC "-fexceptions")
+        
         # WASM platform macro
         target_compile_definitions(${TARGET_NAME} PUBLIC CORTEX_PLATFORM_WASM)
     else()
