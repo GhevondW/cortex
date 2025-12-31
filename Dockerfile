@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     python3 \
+    python3-pip \
     ninja-build \
     lsb-release \
     software-properties-common \
@@ -21,8 +22,11 @@ RUN apt-get update && apt-get install -y \
     && wget https://apt.llvm.org/llvm.sh \
     && chmod +x llvm.sh \
     && ./llvm.sh 19 \
+    && apt-get install -y clang-format-19 \
     && ln -s /usr/bin/clang-19 /usr/bin/clang \
     && ln -s /usr/bin/clang++-19 /usr/bin/clang++ \
+    && ln -s /usr/bin/clang-format-19 /usr/bin/clang-format \
+    && pip3 install --break-system-packages cmakelang \
     && apt-get clean
 
 # 2. Install Emscripten (EMSDK) for WASM support
