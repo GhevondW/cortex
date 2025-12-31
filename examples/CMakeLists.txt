@@ -6,12 +6,13 @@ if(EMSCRIPTEN)
     # Set output to .js for Node.js and browser compatibility
     set_target_properties(wasm_example PROPERTIES SUFFIX ".js")
     
-    # Required linker flags for the example
     target_link_options(wasm_example PRIVATE 
-        "-sEXPORTED_FUNCTIONS=['_main','_cortex_add']"
+        "-sEXPORTED_FUNCTIONS=['_main','_start_coroutine_example','_resume_coroutine_example','_is_coroutine_done']"
         "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
         "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXIT_RUNTIME=1"
+        "-sEXIT_RUNTIME=0"
+        "-sASYNCIFY_STACK_SIZE=1048576"
+        "-sASSERTIONS=1"
     )
     
     # Copy HTML file to build directory
