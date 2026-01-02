@@ -26,14 +26,17 @@ services:
       ctest --test-dir build/wasm --output-on-failure
       "
 
-  # 3. Build Native Example
+  # 3. Build Native Examples
   build-example-native:
     build: .
     volumes: [".:/workspace"]
     command: >
       bash -c "cmake -B build/native -DCORTEX_BUILD_EXAMPLES=ON && 
                cmake --build build/native &&
-               ./build/native/examples/native_example"
+               echo -e '\n--- Running basic native example ---' &&
+               ./build/native/examples/native_example &&
+               echo -e '\n--- Running binary tree example ---' &&
+               ./build/native/examples/binary_tree_example"
 
   # 4. Build and Run WASM Example
   build-example-wasm:

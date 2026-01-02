@@ -26,9 +26,14 @@ if(EMSCRIPTEN)
     cortex_apply_warnings(wasm_example)
     cortex_apply_sanitizers(wasm_example)
 else()
-    # Native Example
+    # Native Examples
     add_executable(native_example linux/main.cpp)
     target_link_libraries(native_example PRIVATE cortex::cortex)
     cortex_apply_warnings(native_example)
     cortex_apply_sanitizers(native_example)
+
+    add_executable(binary_tree_example linux/binary_tree.cpp)
+    target_link_libraries(binary_tree_example PRIVATE cortex::cortex)
+    cortex_apply_warnings(binary_tree_example)
+    cortex_apply_sanitizers(binary_tree_example)
 endif()
