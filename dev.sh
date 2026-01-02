@@ -21,7 +21,7 @@ print_usage() {
     echo "  test-native       Run native tests"
     echo "  test-wasm         Run WASM tests"
     echo "  test-all          Run all tests"
-    echo "  example-native    Build and run native example"
+    echo "  example-native    Build and run native examples"
     echo "  example-wasm      Build and run WASM example"
     echo "  serve             Serve WASM example in browser"
     echo "  clean             Clean all build artifacts"
