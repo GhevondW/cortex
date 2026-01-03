@@ -31,7 +31,7 @@ struct MainFiberContext {
     }
 };
 
-MainFiberContext& get_main_context() {
+MainFiberContext& GetMainContext() {
     thread_local MainFiberContext instance;
     return instance;
 }
@@ -43,7 +43,7 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
     ~FiberSuspendContext() override = default;
 
     void Suspend() override {
-        emscripten_fiber_t* main_f = &get_main_context().fiber;
+        emscripten_fiber_t* main_f = &GetMainContext().fiber;
 
         emscripten_fiber_t* old_fiber = running_fiber;
         running_fiber = main_f;
@@ -102,7 +102,7 @@ void CoroutineImpl::FiberEntry(void* arg) {
     self->is_done_ = true;
 
     // Exit fiber back to the main context
-    emscripten_fiber_t* main_f = &get_main_context().fiber;
+    emscripten_fiber_t* main_f = &GetMainContext().fiber;
     running_fiber = main_f;
     emscripten_fiber_swap(&self->fiber_, main_f);
 }
@@ -130,9 +130,9 @@ void CoroutineImpl::Resume() {
 
     // Capture current JS call stack into main fiber context
     emscripten_fiber_init_from_current_context(
-        &get_main_context().fiber, get_main_context().asyncify_stack, MainFiberContext::stack_size);
+        &GetMainContext().fiber, GetMainContext().asyncify_stack, MainFiberContext::stack_size);
 
-    emscripten_fiber_t* old_fiber = &get_main_context().fiber;
+    emscripten_fiber_t* old_fiber = &GetMainContext().fiber;
     running_fiber = &fiber_;
 
     emscripten_fiber_swap(old_fiber, &fiber_);

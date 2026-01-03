@@ -22,6 +22,24 @@ void Coroutine::ImplDeleter::operator()(detail::CoroutineImpl* impl) const {
     }
 }
 
+Coroutine::Builder::Builder()
+    : stack_size_bytes_(262144)
+    , memory_resource_(GetDefaultMemoryResource()) {}
+
+Coroutine Coroutine::Builder::Build(CoroutineBody body) && {
+    return Coroutine::Make(std::move(body), stack_size_bytes_, std::move(memory_resource_));
+}
+
+Coroutine::Builder Coroutine::Builder::SetStackSizeInBytes(std::size_t stack_size_bytes) && noexcept {
+    stack_size_bytes_ = stack_size_bytes;
+    return std::move(*this);
+}
+
+Coroutine::Builder Coroutine::Builder::SetMemoryResource(MemoryResourceSharedPtr resource) && noexcept {
+    memory_resource_ = std::move(resource);
+    return std::move(*this);
+}
+
 Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes, MemoryResourceSharedPtr resource) {
     if (!static_cast<bool>(body)) {
         throw std::invalid_argument("coroutine body is null.");

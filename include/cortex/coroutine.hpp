@@ -41,6 +41,19 @@ public:
                           std::size_t stack_size_bytes = 262144,
                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
 
+    struct Builder {
+    public:
+        Builder();
+
+        Coroutine Build(CoroutineBody body) &&;
+        Builder SetStackSizeInBytes(std::size_t stack_size_bytes) && noexcept;
+        Builder SetMemoryResource(MemoryResourceSharedPtr resource) && noexcept;
+
+    private:
+        std::size_t stack_size_bytes_ {0};
+        MemoryResourceSharedPtr memory_resource_ {nullptr};
+    };
+
     Coroutine(const Coroutine&) = delete;
     Coroutine(Coroutine&&) noexcept;
     Coroutine& operator=(const Coroutine&) = delete;
