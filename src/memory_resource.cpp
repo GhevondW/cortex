@@ -1,5 +1,6 @@
 #include <cortex/memory_resource.hpp>
 #include <cstdlib>
+#include <memory_resource>
 #include <new>
 
 namespace cortex {
@@ -8,27 +9,20 @@ namespace {
 
 class DefaultMemoryResource final : public MemoryResource {
 public:
+    DefaultMemoryResource()
+        : memory_resource_(std::pmr::get_default_resource()) {}
+    ~DefaultMemoryResource() override = default;
+
     void* DoAllocate(std::size_t bytes, std::size_t alignment) override {
-#if defined(_MSC_VER) || defined(__MINGW32__)
-        void* ptr = _aligned_malloc(bytes, alignment);
-        if (!ptr) throw std::bad_alloc();
-        return ptr;
-#else
-        void* ptr = nullptr;
-        if (posix_memalign(&ptr, alignment < sizeof(void*) ? sizeof(void*) : alignment, bytes) != 0) {
-            throw std::bad_alloc();
-        }
-        return ptr;
-#endif
+        return memory_resource_->allocate(bytes, alignment);
     }
 
-    void DoDeallocate(void* p, std::size_t /*bytes*/, std::size_t /*alignment*/) override {
-#if defined(_MSC_VER) || defined(__MINGW32__)
-        _aligned_free(p);
-#else
-        std::free(p);
-#endif
+    void DoDeallocate(void* p, std::size_t bytes, std::size_t alignment) override {
+        memory_resource_->deallocate(p, bytes, alignment);
     }
+
+private:
+    std::pmr::memory_resource* memory_resource_;
 };
 
 } // namespace
