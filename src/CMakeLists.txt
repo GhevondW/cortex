@@ -8,6 +8,7 @@ endif()
 
 target_sources(cortex
         PRIVATE
+        base_coroutine.cpp
         core.cpp
         coroutine.cpp
         memory_resource.cpp

@@ -73,12 +73,6 @@ public:
     [[nodiscard]] bool IsDone() const noexcept;
 
     /**
-     * @brief Checks if the coroutine terminated with an unhandled exception.
-     * @return true if an exception occurred, false otherwise.
-     */
-    [[nodiscard]] bool HasException() const noexcept;
-
-    /**
      * @brief Resumes the execution of the coroutine.
      *
      * If the coroutine was suspended, it continues from the suspension point.
