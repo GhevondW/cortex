@@ -81,11 +81,6 @@ bool Coroutine::IsDone() const noexcept {
     return impl_->IsDone();
 }
 
-bool Coroutine::HasException() const noexcept {
-    assert(impl_);
-    return impl_->HasException();
-}
-
 void Coroutine::Resume() {
     assert(impl_);
     impl_->Resume();

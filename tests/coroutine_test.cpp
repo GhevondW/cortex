@@ -96,7 +96,6 @@ TEST(CortexCoroutineTest, ExceptionHandling) {
     EXPECT_FALSE(cr.IsDone());
     EXPECT_THROW(cr.Resume(), std::runtime_error);
     EXPECT_TRUE(cr.IsDone());
-    EXPECT_TRUE(cr.HasException());
 }
 
 TEST(CortexCoroutineTest, ResumeOnDone) {

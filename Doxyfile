@@ -1,0 +1,17 @@
+# Doxyfile for cortex project
+
+# Project information
+PROJECT_NAME           = "cortex"
+PROJECT_NUMBER         = 0.0.1
+
+# Output directory
+OUTPUT_DIRECTORY       = ./doc
+
+# This makes the background white or light-colored
+HTML_COLORSTYLE = light
+
+# Input sources
+INPUT                  = ./include
+
+# Recurse into subdirectories
+RECURSIVE              = YES
