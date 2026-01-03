@@ -61,11 +61,12 @@ private:
 
 } // namespace
 
-CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size)
+CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource)
     : body_(std::move(body))
-    , stack_size_bytes_(stack_size) {
-    c_stack_ = std::aligned_alloc(16, stack_size);
-    asyncify_stack_ = std::aligned_alloc(16, stack_size);
+    , stack_size_bytes_(stack_size)
+    , resource_(std::move(resource)) {
+    c_stack_ = resource_->Allocate(stack_size, 16);
+    asyncify_stack_ = resource_->Allocate(stack_size, 16);
     std::memset(c_stack_, 0, stack_size);
     std::memset(asyncify_stack_, 0, stack_size);
 
@@ -80,8 +81,8 @@ CoroutineImpl::~CoroutineImpl() {
         } catch (...) {
         }
     }
-    if (c_stack_) std::free(c_stack_);
-    if (asyncify_stack_) std::free(asyncify_stack_);
+    if (c_stack_) resource_->Deallocate(c_stack_, stack_size_bytes_, 16);
+    if (asyncify_stack_) resource_->Deallocate(asyncify_stack_, stack_size_bytes_, 16);
 }
 
 void CoroutineImpl::FiberEntry(void* arg) {

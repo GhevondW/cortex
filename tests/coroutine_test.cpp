@@ -1,5 +1,6 @@
 #include "cortex/coroutine.hpp"
 #include "cortex/errors/resume_on_completed_coroutine_error.hpp"
+#include "cortex/memory_resource.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -96,4 +97,41 @@ TEST(CortexCoroutineTest, ForcedUnwindOnDestruction) {
         // cr goes out of scope here
     }
     EXPECT_TRUE(resource_destroyed);
+}
+
+class CoroutineTrackingResource : public cortex::MemoryResource {
+public:
+    size_t allocations = 0;
+    size_t deallocations = 0;
+
+protected:
+    void* DoAllocate(size_t bytes, size_t alignment) override {
+        allocations++;
+        return cortex::GetDefaultMemoryResource()->Allocate(bytes, alignment);
+    }
+
+    void DoDeallocate(void* p, size_t bytes, size_t alignment) override {
+        deallocations++;
+        cortex::GetDefaultMemoryResource()->Deallocate(p, bytes, alignment);
+    }
+};
+
+TEST(CortexCoroutineTest, MemoryResourceSupport) {
+    auto tracker = std::make_shared<CoroutineTrackingResource>();
+    {
+        auto cr = cortex::Coroutine::Make(
+            [](cortex::CoroutineSuspendContext& ctx) {
+                ctx.Suspend();
+            },
+            4096,
+            tracker);
+
+        EXPECT_GT(tracker->allocations, 0);
+        cr.Resume();
+        EXPECT_FALSE(cr.IsDone());
+        cr.Resume();
+        EXPECT_TRUE(cr.IsDone());
+    }
+    EXPECT_GT(tracker->deallocations, 0);
+    EXPECT_EQ(tracker->allocations, tracker->deallocations);
 }

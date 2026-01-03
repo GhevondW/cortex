@@ -2,6 +2,7 @@
 #include <cortex/coroutine.hpp>
 
 #include <cassert>
+#include <new>
 #include <stdexcept>
 #include <utility>
 
@@ -13,7 +14,15 @@
 
 namespace cortex {
 
-Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes) {
+void Coroutine::ImplDeleter::operator()(detail::CoroutineImpl* impl) const {
+    if (impl) {
+        impl->~CoroutineImpl();
+        assert(resource);
+        resource->Deallocate(impl, sizeof(detail::CoroutineImpl), alignof(detail::CoroutineImpl));
+    }
+}
+
+Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes, MemoryResourceSharedPtr resource) {
     if (!static_cast<bool>(body)) {
         throw std::invalid_argument("coroutine body is null.");
     }
@@ -22,14 +31,21 @@ Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes) {
         throw std::invalid_argument("stack_size_bytes is 0.");
     }
 
-#if defined(CORTEX_EMSCRIPTEN)
-    return Coroutine(std::make_unique<detail::CoroutineImpl>(std::move(body), stack_size_bytes));
-#else
-    return Coroutine(std::make_unique<detail::CoroutineImpl>(std::move(body), stack_size_bytes));
-#endif
+    if (!resource) {
+        throw std::invalid_argument("memory_resource is null.");
+    }
+
+    void* ptr = resource->Allocate(sizeof(detail::CoroutineImpl), alignof(detail::CoroutineImpl));
+    try {
+        auto* impl = new (ptr) detail::CoroutineImpl(std::move(body), stack_size_bytes, resource);
+        return Coroutine(std::unique_ptr<detail::CoroutineImpl, ImplDeleter>(impl, ImplDeleter {std::move(resource)}));
+    } catch (...) {
+        resource->Deallocate(ptr, sizeof(detail::CoroutineImpl), alignof(detail::CoroutineImpl));
+        throw;
+    }
 }
 
-Coroutine::Coroutine(std::unique_ptr<detail::CoroutineImpl> impl)
+Coroutine::Coroutine(std::unique_ptr<detail::CoroutineImpl, ImplDeleter> impl)
     : impl_(std::move(impl)) {}
 
 Coroutine::Coroutine(Coroutine&&) noexcept = default;

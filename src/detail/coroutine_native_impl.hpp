@@ -6,12 +6,13 @@
 #include <boost/context/fiber.hpp>
 
 #include <cortex/coroutine_body.hpp>
+#include <cortex/memory_resource.hpp>
 
 namespace cortex::detail {
 
 class CoroutineImpl final {
 public:
-    CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size);
+    CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource);
     ~CoroutineImpl();
 
     [[nodiscard]] std::size_t GetStackSize() const noexcept;
