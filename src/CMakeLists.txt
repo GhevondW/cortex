@@ -10,6 +10,7 @@ target_sources(cortex
         PRIVATE
         core.cpp
         coroutine.cpp
+        memory_resource.cpp
         ${CORTEX_COROUTINE_SRC}
 )
 

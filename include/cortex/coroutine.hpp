@@ -4,6 +4,7 @@
 #include <memory>
 
 #include <cortex/coroutine_body.hpp>
+#include <cortex/memory_resource.hpp>
 
 /**
  * @file coroutine.hpp
@@ -31,10 +32,27 @@ public:
      *
      * @param body The function or callable to execute within the coroutine.
      * @param stack_size_bytes The size of the stack to allocate for the coroutine (default: 256KB).
+     * @param resource The memory resource to use for stack and implementation allocation (default:
+     * GetDefaultMemoryResource()).
      * @return A Coroutine instance.
-     * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0.
+     * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0 or resource is null.
      */
-    static Coroutine Make(CoroutineBody body, std::size_t stack_size_bytes = 262144);
+    static Coroutine Make(CoroutineBody body,
+                          std::size_t stack_size_bytes = 262144,
+                          MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
+
+    struct Builder {
+    public:
+        Builder();
+
+        Coroutine Build(CoroutineBody body) &&;
+        Builder SetStackSizeInBytes(std::size_t stack_size_bytes) && noexcept;
+        Builder SetMemoryResource(MemoryResourceSharedPtr resource) && noexcept;
+
+    private:
+        std::size_t stack_size_bytes_ {0};
+        MemoryResourceSharedPtr memory_resource_ {nullptr};
+    };
 
     Coroutine(const Coroutine&) = delete;
     Coroutine(Coroutine&&) noexcept;
@@ -71,8 +89,13 @@ public:
     void Resume();
 
 private:
-    explicit Coroutine(std::unique_ptr<detail::CoroutineImpl> impl);
-    std::unique_ptr<detail::CoroutineImpl> impl_;
+    struct ImplDeleter {
+        MemoryResourceSharedPtr resource;
+        void operator()(detail::CoroutineImpl* impl) const;
+    };
+
+    explicit Coroutine(std::unique_ptr<detail::CoroutineImpl, ImplDeleter> impl);
+    std::unique_ptr<detail::CoroutineImpl, ImplDeleter> impl_;
 };
 
 } // namespace cortex

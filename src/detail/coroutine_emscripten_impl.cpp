@@ -31,7 +31,7 @@ struct MainFiberContext {
     }
 };
 
-MainFiberContext& get_main_context() {
+MainFiberContext& GetMainContext() {
     thread_local MainFiberContext instance;
     return instance;
 }
@@ -43,7 +43,7 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
     ~FiberSuspendContext() override = default;
 
     void Suspend() override {
-        emscripten_fiber_t* main_f = &get_main_context().fiber;
+        emscripten_fiber_t* main_f = &GetMainContext().fiber;
 
         emscripten_fiber_t* old_fiber = running_fiber;
         running_fiber = main_f;
@@ -61,11 +61,12 @@ private:
 
 } // namespace
 
-CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size)
+CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource)
     : body_(std::move(body))
-    , stack_size_bytes_(stack_size) {
-    c_stack_ = std::aligned_alloc(16, stack_size);
-    asyncify_stack_ = std::aligned_alloc(16, stack_size);
+    , stack_size_bytes_(stack_size)
+    , resource_(std::move(resource)) {
+    c_stack_ = resource_->Allocate(stack_size, 16);
+    asyncify_stack_ = resource_->Allocate(stack_size, 16);
     std::memset(c_stack_, 0, stack_size);
     std::memset(asyncify_stack_, 0, stack_size);
 
@@ -80,8 +81,8 @@ CoroutineImpl::~CoroutineImpl() {
         } catch (...) {
         }
     }
-    if (c_stack_) std::free(c_stack_);
-    if (asyncify_stack_) std::free(asyncify_stack_);
+    if (c_stack_) resource_->Deallocate(c_stack_, stack_size_bytes_, 16);
+    if (asyncify_stack_) resource_->Deallocate(asyncify_stack_, stack_size_bytes_, 16);
 }
 
 void CoroutineImpl::FiberEntry(void* arg) {
@@ -101,7 +102,7 @@ void CoroutineImpl::FiberEntry(void* arg) {
     self->is_done_ = true;
 
     // Exit fiber back to the main context
-    emscripten_fiber_t* main_f = &get_main_context().fiber;
+    emscripten_fiber_t* main_f = &GetMainContext().fiber;
     running_fiber = main_f;
     emscripten_fiber_swap(&self->fiber_, main_f);
 }
@@ -129,9 +130,9 @@ void CoroutineImpl::Resume() {
 
     // Capture current JS call stack into main fiber context
     emscripten_fiber_init_from_current_context(
-        &get_main_context().fiber, get_main_context().asyncify_stack, MainFiberContext::stack_size);
+        &GetMainContext().fiber, GetMainContext().asyncify_stack, MainFiberContext::stack_size);
 
-    emscripten_fiber_t* old_fiber = &get_main_context().fiber;
+    emscripten_fiber_t* old_fiber = &GetMainContext().fiber;
     running_fiber = &fiber_;
 
     emscripten_fiber_swap(old_fiber, &fiber_);

@@ -30,27 +30,46 @@ private:
     CoroutineImpl* _impl;
 };
 
+struct MemoryResourceStackAllocator {
+    MemoryResourceSharedPtr resource;
+    std::size_t size;
+
+    boost::context::stack_context allocate() {
+        void* vp = resource->Allocate(size);
+        boost::context::stack_context sctx;
+        sctx.size = size;
+        sctx.sp = static_cast<char*>(vp) + sctx.size;
+        return sctx;
+    }
+
+    void deallocate(boost::context::stack_context& sctx) {
+        resource->Deallocate(static_cast<char*>(sctx.sp) - sctx.size, sctx.size);
+    }
+};
+
 } // namespace
 
-CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size)
+CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource)
     : stack_size_bytes_(stack_size)
-    , fiber_([this, body = std::move(body)](boost::context::fiber&& sink) mutable {
-        assert(static_cast<bool>(body));
-        FiberSuspendContext suspend_context(sink, this);
+    , fiber_(std::allocator_arg,
+             MemoryResourceStackAllocator {resource, stack_size},
+             [this, body = std::move(body)](boost::context::fiber&& sink) mutable {
+                 assert(static_cast<bool>(body));
+                 FiberSuspendContext suspend_context(sink, this);
 
-        try {
-            body(suspend_context);
-        } catch (const ForcedUnwind&) {
-            // Unwinding in progress
-        } catch (...) {
-            assert(!static_cast<bool>(exception_ptr_));
-            exception_ptr_ = std::current_exception();
-        }
+                 try {
+                     body(suspend_context);
+                 } catch (const ForcedUnwind&) {
+                     // Unwinding in progress
+                 } catch (...) {
+                     assert(!static_cast<bool>(exception_ptr_));
+                     exception_ptr_ = std::current_exception();
+                 }
 
-        is_done_ = true;
+                 is_done_ = true;
 
-        return std::move(sink);
-    }) {
+                 return std::move(sink);
+             }) {
     assert(stack_size_bytes_ > 0);
 }
 
