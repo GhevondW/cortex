@@ -41,12 +41,45 @@ public:
                           std::size_t stack_size_bytes = 262144,
                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
 
+    /**
+     * @struct Builder
+     * @brief A builder class for creating Coroutine instances with custom configuration.
+     *
+     * The Builder allows setting the stack size and memory resource before
+     * constructing the coroutine.
+     */
     struct Builder {
     public:
+        /**
+         * @brief Default constructor for Builder.
+         *
+         * Initializes with default stack size (256KB) and default memory resource.
+         */
         Builder();
 
+        /**
+         * @brief Builds and returns a new Coroutine instance.
+         *
+         * @param body The function or callable to execute within the coroutine.
+         * @return A new Coroutine instance.
+         * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0 or resource is null.
+         */
         Coroutine Build(CoroutineBody body) &&;
+
+        /**
+         * @brief Sets the stack size for the coroutine to be built.
+         *
+         * @param stack_size_bytes The size of the stack in bytes.
+         * @return The builder instance for chaining.
+         */
         Builder SetStackSizeInBytes(std::size_t stack_size_bytes) && noexcept;
+
+        /**
+         * @brief Sets the memory resource for the coroutine to be built.
+         *
+         * @param resource The memory resource to use.
+         * @return The builder instance for chaining.
+         */
         Builder SetMemoryResource(MemoryResourceSharedPtr resource) && noexcept;
 
     private:
