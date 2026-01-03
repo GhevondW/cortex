@@ -1,6 +1,7 @@
 # Build directories
 build/
 cmake-build-*/
+doc/
 
 # IDE and editor files
 # VSCode settings are committed for consistency
