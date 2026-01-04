@@ -3,15 +3,21 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <emscripten.h>
+#include <stdexcept>
 #include <utility>
 
 #include "cortex/coroutine_suspend_context.hpp"
 #include "cortex/errors/resume_on_completed_coroutine_error.hpp"
+#include "cortex/memory_resource.hpp"
 #include "forced_unwind.hpp"
 
 namespace cortex::detail {
 
 namespace {
+
+static constexpr std::size_t kAsyncifyStackSize = 16384;
+static constexpr std::size_t kStackAlignment = 16;
 
 // Track the currently executing fiber
 thread_local emscripten_fiber_t* running_fiber = nullptr;
@@ -19,15 +25,18 @@ thread_local emscripten_fiber_t* running_fiber = nullptr;
 // Persistent state for the "main" fiber (the one calling Resume from JS)
 struct MainFiberContext {
     emscripten_fiber_t fiber;
-    void* asyncify_stack;
-    static constexpr size_t stack_size = 262144;
+    void* asyncify_stack {nullptr};
+    cortex::MemoryResourceSharedPtr resource;
 
-    MainFiberContext() {
-        asyncify_stack = std::aligned_alloc(16, stack_size);
-        std::memset(asyncify_stack, 0, stack_size);
+    MainFiberContext()
+        : resource(cortex::GetDefaultMemoryResource()) {
+        asyncify_stack = resource->Allocate(kAsyncifyStackSize, kStackAlignment);
+        std::memset(asyncify_stack, 0, kAsyncifyStackSize);
     }
     ~MainFiberContext() {
-        std::free(asyncify_stack);
+        if (asyncify_stack) {
+            resource->Deallocate(asyncify_stack, kAsyncifyStackSize, kStackAlignment);
+        }
     }
 };
 
@@ -43,12 +52,12 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
     ~FiberSuspendContext() override = default;
 
     void Suspend() override {
-        emscripten_fiber_t* main_f = &GetMainContext().fiber;
+        emscripten_fiber_t* back_f = impl_->GetBackFiber();
+        emscripten_fiber_t* current_f = running_fiber;
 
-        emscripten_fiber_t* old_fiber = running_fiber;
-        running_fiber = main_f;
+        running_fiber = back_f;
 
-        emscripten_fiber_swap(old_fiber, main_f);
+        emscripten_fiber_swap(current_f, back_f);
 
         if (impl_->IsUnwinding()) {
             throw ForcedUnwind {};
@@ -65,12 +74,21 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size,
     : body_(std::move(body))
     , stack_size_bytes_(stack_size)
     , resource_(std::move(resource)) {
-    c_stack_ = resource_->Allocate(stack_size, 16);
-    asyncify_stack_ = resource_->Allocate(stack_size, 16);
-    std::memset(c_stack_, 0, stack_size);
-    std::memset(asyncify_stack_, 0, stack_size);
+    if (emscripten_has_asyncify() != 1) {
+        throw std::runtime_error("Cortex requires ASYNCIFY to be enabled for Emscripten.");
+    }
 
-    emscripten_fiber_init(&fiber_, FiberEntry, this, c_stack_, stack_size, asyncify_stack_, stack_size);
+    try {
+        c_stack_ = resource_->Allocate(stack_size, kStackAlignment);
+        asyncify_stack_ = resource_->Allocate(kAsyncifyStackSize, kStackAlignment);
+    } catch (...) {
+        if (c_stack_) resource_->Deallocate(c_stack_, stack_size, kStackAlignment);
+        throw;
+    }
+    std::memset(c_stack_, 0, stack_size);
+    std::memset(asyncify_stack_, 0, kAsyncifyStackSize);
+
+    emscripten_fiber_init(&fiber_, FiberEntry, this, c_stack_, stack_size, asyncify_stack_, kAsyncifyStackSize);
 }
 
 CoroutineImpl::~CoroutineImpl() {
@@ -81,8 +99,9 @@ CoroutineImpl::~CoroutineImpl() {
         } catch (...) {
         }
     }
-    if (c_stack_) resource_->Deallocate(c_stack_, stack_size_bytes_, 16);
-    if (asyncify_stack_) resource_->Deallocate(asyncify_stack_, stack_size_bytes_, 16);
+
+    if (c_stack_) resource_->Deallocate(c_stack_, stack_size_bytes_, kStackAlignment);
+    if (asyncify_stack_) resource_->Deallocate(asyncify_stack_, kAsyncifyStackSize, kStackAlignment);
 }
 
 void CoroutineImpl::FiberEntry(void* arg) {
@@ -101,10 +120,10 @@ void CoroutineImpl::FiberEntry(void* arg) {
 
     self->is_done_ = true;
 
-    // Exit fiber back to the main context
-    emscripten_fiber_t* main_f = &GetMainContext().fiber;
-    running_fiber = main_f;
-    emscripten_fiber_swap(&self->fiber_, main_f);
+    // Exit fiber back to the context that resumed us
+    emscripten_fiber_t* back_f = self->back_fiber_;
+    running_fiber = back_f;
+    emscripten_fiber_swap(&self->fiber_, back_f);
 }
 
 std::size_t CoroutineImpl::GetStackSize() const noexcept {
@@ -123,22 +142,33 @@ bool CoroutineImpl::IsUnwinding() const noexcept {
     return is_unwinding_;
 }
 
+emscripten_fiber_t* CoroutineImpl::GetBackFiber() const noexcept {
+    return back_fiber_;
+}
+
+void CoroutineImpl::SetBackFiber(emscripten_fiber_t* fiber) noexcept {
+    back_fiber_ = fiber;
+}
+
 void CoroutineImpl::Resume() {
     if (IsDone()) {
         throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
     }
 
-    // Capture current JS call stack into main fiber context
-    emscripten_fiber_init_from_current_context(
-        &GetMainContext().fiber, GetMainContext().asyncify_stack, MainFiberContext::stack_size);
+    emscripten_fiber_t* back_f = running_fiber;
+    if (!back_f) {
+        // Capture current JS call stack into main fiber context if not already in a fiber
+        back_f = &GetMainContext().fiber;
+        emscripten_fiber_init_from_current_context(back_f, GetMainContext().asyncify_stack, kAsyncifyStackSize);
+    }
 
-    emscripten_fiber_t* old_fiber = &GetMainContext().fiber;
+    back_fiber_ = back_f;
     running_fiber = &fiber_;
 
-    emscripten_fiber_swap(old_fiber, &fiber_);
+    emscripten_fiber_swap(back_f, &fiber_);
 
-    // Upon return back to Resume(), the running fiber is main
-    running_fiber = old_fiber;
+    // Upon return back to Resume(), the running fiber is what it was before
+    running_fiber = back_f;
 
     if (exception_ptr_) {
         std::rethrow_exception(exception_ptr_);
