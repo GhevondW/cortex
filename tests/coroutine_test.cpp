@@ -186,3 +186,50 @@ TEST(CortexCoroutineTest, BuilderWithMemoryResource) {
     EXPECT_GT(tracker->deallocations, 0);
     EXPECT_EQ(tracker->allocations, tracker->deallocations);
 }
+
+TEST(CortexCoroutineTest, NestedCoroutines) {
+    bool outer_started = false;
+    bool inner_executed = false;
+    bool outer_finished = false;
+
+    auto outer = cortex::Coroutine::Make([&](cortex::CoroutineSuspendContext&) {
+        outer_started = true;
+        auto inner = cortex::Coroutine::Make([&](cortex::CoroutineSuspendContext&) {
+            inner_executed = true;
+        });
+        inner.Resume();
+        outer_finished = true;
+    });
+
+    outer.Resume();
+    EXPECT_TRUE(outer_started);
+    EXPECT_TRUE(inner_executed);
+    EXPECT_TRUE(outer_finished);
+    EXPECT_TRUE(outer.IsDone());
+}
+
+TEST(CortexCoroutineTest, NestedCoroutinesWithSuspension) {
+    std::vector<int> sequence;
+
+    auto outer = cortex::Coroutine::Make([&](cortex::CoroutineSuspendContext& outer_ctx) {
+        sequence.push_back(1);
+        auto inner = cortex::Coroutine::Make([&](cortex::CoroutineSuspendContext& inner_ctx) {
+            sequence.push_back(2);
+            inner_ctx.Suspend();
+            sequence.push_back(4);
+        });
+        inner.Resume();
+        sequence.push_back(3);
+        outer_ctx.Suspend();
+        inner.Resume();
+        sequence.push_back(6);
+    });
+
+    outer.Resume();
+    sequence.push_back(5);
+    outer.Resume();
+
+    std::vector<int> expected = {1, 2, 3, 5, 4, 6};
+    EXPECT_EQ(sequence, expected);
+    EXPECT_TRUE(outer.IsDone());
+}

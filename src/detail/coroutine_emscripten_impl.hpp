@@ -19,12 +19,15 @@ public:
     [[nodiscard]] bool IsDone() const noexcept;
     [[nodiscard]] bool HasException() const noexcept;
     [[nodiscard]] bool IsUnwinding() const noexcept;
+    [[nodiscard]] emscripten_fiber_t* GetBackFiber() const noexcept;
+    void SetBackFiber(emscripten_fiber_t* fiber) noexcept;
     void Resume();
 
 private:
     static void FiberEntry(void* arg);
 
     emscripten_fiber_t fiber_;
+    emscripten_fiber_t* back_fiber_ {nullptr};
     cortex::CoroutineBody body_;
     bool is_done_ {false};
     bool is_unwinding_ {false};
