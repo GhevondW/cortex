@@ -57,10 +57,13 @@ case "${1:-help}" in
         ;;
     serve)
         echo -e "${GREEN}Starting web server...${NC}"
+        echo -e "${YELLOW}Building in Release mode (optimized)${NC}"
         echo -e "${YELLOW}Available examples:${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/examples_index.html${NC} ${YELLOW}(All Examples)${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/particle_demo.html${NC} ${YELLOW}(Particle Demo - Recommended!)${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/index.html${NC} ${YELLOW}(Basic Example)${NC}"
+        echo ""
+        echo -e "${YELLOW}Tip: To build in Debug mode, run: BUILD_TYPE=Debug ./dev.sh serve${NC}"
         docker compose up serve-example
         ;;
     clean)

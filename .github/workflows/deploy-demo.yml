@@ -27,12 +27,17 @@ jobs:
         with:
           version: 'latest'
       
-      - name: Configure CMake for WASM
+      - name: Configure CMake for WASM (Release Mode with Optimizations)
         run: |
-          emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON
+          emcmake cmake -B build/wasm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_BUILD_EXAMPLES=ON
+        env:
+          CXXFLAGS: "-O3"
+          LDFLAGS: "-O3"
       
-      - name: Build WASM Examples
-        run: cmake --build build/wasm
+      - name: Build WASM Examples (Optimized)
+        run: cmake --build build/wasm --config Release
       
       - name: Prepare deployment directory
         run: |
