@@ -1,0 +1,73 @@
+name: Deploy WASM Demo to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 'latest'
+      
+      - name: Configure CMake for WASM
+        run: |
+          emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON
+      
+      - name: Build WASM Examples
+        run: cmake --build build/wasm
+      
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p deploy/examples
+          cp build/wasm/examples/*.html deploy/examples/
+          cp build/wasm/examples/*.js deploy/examples/
+          cp build/wasm/examples/*.wasm deploy/examples/
+          
+          # Create a root index.html that redirects to examples
+          cat > deploy/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta http-equiv="refresh" content="0;url=examples/examples_index.html">
+              <title>Cortex - Redirecting...</title>
+          </head>
+          <body>
+              <p>Redirecting to <a href="examples/examples_index.html">Cortex Examples</a>...</p>
+          </body>
+          </html>
+          EOF
+          
+          # Copy README for reference
+          cp README.md deploy/
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'deploy'
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
