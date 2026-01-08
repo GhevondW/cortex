@@ -58,13 +58,15 @@ services:
         - .:/workspace
       ports:
         - "8080:8080"
+      environment:
+        - BUILD_TYPE=${BUILD_TYPE:-Release}
       command: >
         bash -c "
         source /opt/emsdk/emsdk_env.sh &&
-        emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON &&
-        cmake --build build/wasm &&
+        emcmake cmake -B build/wasm -G Ninja -DCMAKE_BUILD_TYPE=$${BUILD_TYPE} -DCORTEX_BUILD_EXAMPLES=ON &&
+        cmake --build build/wasm --config $${BUILD_TYPE} &&
         cd build/wasm &&
-        echo 'Examples built successfully!' &&
+        echo \"Examples built successfully in $${BUILD_TYPE} mode!\" &&
         echo '' &&
         echo 'Available at:' &&
         echo '  → http://localhost:8080/examples/examples_index.html (All Examples)' &&

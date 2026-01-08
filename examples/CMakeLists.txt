@@ -1,4 +1,13 @@
 if(EMSCRIPTEN)
+    # Optimization flags based on build type
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(WASM_OPTIMIZATION_FLAGS "-O3")
+        set(WASM_ASSERTIONS_FLAG "-sASSERTIONS=0")
+    else()
+        set(WASM_OPTIMIZATION_FLAGS "-O0")
+        set(WASM_ASSERTIONS_FLAG "-sASSERTIONS=1")
+    endif()
+
     # WASM Example
     add_executable(wasm_example wasm/main.cpp)
     target_link_libraries(wasm_example PRIVATE cortex::cortex)
@@ -12,7 +21,8 @@ if(EMSCRIPTEN)
         "-sALLOW_MEMORY_GROWTH=1"
         "-sEXIT_RUNTIME=0"
         "-sASYNCIFY_STACK_SIZE=1048576"
-        "-sASSERTIONS=1"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
     )
     
     # Copy HTML file to build directory
@@ -38,7 +48,8 @@ if(EMSCRIPTEN)
         "-sALLOW_MEMORY_GROWTH=1"
         "-sEXIT_RUNTIME=0"
         "-sASYNCIFY_STACK_SIZE=1048576"
-        "-sASSERTIONS=1"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
     )
     
     # Copy HTML file to build directory
