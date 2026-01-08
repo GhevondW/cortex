@@ -1,26 +1,213 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Cortex WASM Coroutine Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex - Basic Coroutine Example</title>
     <style>
-        body { font-family: sans-serif; margin: 2em; line-height: 1.6; }
-        .controls { margin-bottom: 1em; padding: 1em; background: #f4f4f4; border-radius: 8px; }
-        #log { border: 1px solid #ccc; padding: 1em; height: 300px; overflow-y: scroll; background: #fafafa; font-family: monospace; }
-        .step { color: #0066cc; }
-        .info { color: #666; }
-        button { padding: 0.5em 1em; cursor: pointer; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .demo-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            margin-bottom: 2rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 150px;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(102, 126, 234, 0.75);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(102, 126, 234, 0.9);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        #log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 1.5rem;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        #log > div {
+            margin-bottom: 0.5rem;
+        }
+
+        .step {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .info {
+            color: #60a5fa;
+            font-style: italic;
+        }
+
+        .explanation {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1.5rem;
+            border-radius: 15px;
+            line-height: 1.8;
+            margin-top: 2rem;
+        }
+
+        .explanation h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .explanation code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateX(5px);
+        }
+
+        /* Custom scrollbar */
+        #log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #log::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        #log::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        #log::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
-    <h1>Cortex WASM Coroutine Demo</h1>
-    
-    <div class="controls">
-        <button id="startBtn">Start Coroutine (5 steps)</button>
-        <button id="resumeBtn" disabled>Resume Next Step</button>
-        <span id="status" class="info">Waiting for Runtime...</span>
-    </div>
+    <div class="container">
+        <h1>🚀 Cortex Coroutine Demo</h1>
+        <p class="subtitle">Basic Suspend & Resume Example</p>
 
-    <div id="log"></div>
+        <div class="demo-card">
+            <div class="status-box" id="status">Waiting for Runtime...</div>
+
+            <div class="controls">
+                <button id="startBtn">Start Coroutine (5 steps)</button>
+                <button id="resumeBtn" disabled>Resume Next Step</button>
+            </div>
+
+            <div id="log"></div>
+        </div>
+
+        <div class="demo-card explanation">
+            <h2>💡 What's Happening?</h2>
+            <p>
+                This example demonstrates the basic suspend and resume mechanism of Cortex coroutines.
+            </p>
+            <p style="margin-top: 1rem;">
+                Click <strong>"Start Coroutine"</strong> to begin, then click <strong>"Resume Next Step"</strong> 
+                repeatedly to see the coroutine suspend and resume at each step. The coroutine maintains 
+                its state between suspensions!
+            </p>
+            <p style="margin-top: 1rem;">
+                Each call to <code>ctx.Suspend()</code> yields control back to JavaScript, allowing 
+                you to manually control when the coroutine continues execution.
+            </p>
+        </div>
+
+        <a href="examples_index.html" class="nav-link">← Back to Examples</a>
+        <a href="particle_demo.html" class="nav-link" style="margin-left: 1rem;">Try the Particle Demo →</a>
+    </div>
 
     <script src="wasm_example.js"></script>
     <script>
@@ -43,32 +230,47 @@
         }
 
         Module.onRuntimeInitialized = () => {
-            status.innerText = "Runtime Ready";
+            status.innerText = "✅ Runtime Ready - Click Start!";
+            status.style.color = '#4ade80';
             appendLog("Emscripten Runtime Initialized", "info");
+            appendLog("Click 'Start Coroutine' to begin...", "info");
 
             startBtn.onclick = async () => {
                 log.innerHTML = '';
-                appendLog("Starting coroutine with 5 iterations...");
+                appendLog("Starting coroutine with 5 iterations...", "info");
+                appendLog("The coroutine will suspend after each step", "info");
+                appendLog("---");
+                
                 // Use { async: true } for functions that use fibers/Asyncify
                 await Module.ccall('start_coroutine_example', null, ['number'], [5], { async: true });
+                
                 startBtn.disabled = true;
                 resumeBtn.disabled = false;
-                status.innerText = "Coroutine Running";
+                status.innerText = "⏸️  Coroutine Suspended - Click Resume";
+                status.style.color = '#fbbf24';
             };
 
             resumeBtn.onclick = async () => {
-                appendLog("Resuming coroutine from JS...");
+                appendLog("Resuming coroutine from JavaScript...", "info");
+                
                 // Use { async: true } for functions that use fibers/Asyncify
                 await Module.ccall('resume_coroutine_example', null, [], [], { async: true });
                 
                 if (Module.ccall('is_coroutine_done', 'number', [], [])) {
-                    appendLog("Coroutine Finished!", "info");
+                    appendLog("---");
+                    appendLog("✅ Coroutine Finished!", "step");
+                    appendLog("All steps completed successfully!", "info");
                     resumeBtn.disabled = true;
                     startBtn.disabled = false;
-                    status.innerText = "Coroutine Finished";
+                    status.innerText = "✅ Completed - Click Start to Run Again";
+                    status.style.color = '#4ade80';
+                } else {
+                    status.innerText = "⏸️  Coroutine Suspended - Click Resume";
+                    status.style.color = '#fbbf24';
                 }
             };
         };
     </script>
+    </div>
 </body>
 </html>

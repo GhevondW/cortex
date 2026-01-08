@@ -57,7 +57,10 @@ case "${1:-help}" in
         ;;
     serve)
         echo -e "${GREEN}Starting web server...${NC}"
-        echo -e "${YELLOW}Open http://localhost:8080/examples/index.html in your browser${NC}"
+        echo -e "${YELLOW}Available examples:${NC}"
+        echo -e "  ${GREEN}→ http://localhost:8080/examples/examples_index.html${NC} ${YELLOW}(All Examples)${NC}"
+        echo -e "  ${GREEN}→ http://localhost:8080/examples/particle_demo.html${NC} ${YELLOW}(Particle Demo - Recommended!)${NC}"
+        echo -e "  ${GREEN}→ http://localhost:8080/examples/index.html${NC} ${YELLOW}(Basic Example)${NC}"
         docker compose up serve-example
         ;;
     clean)

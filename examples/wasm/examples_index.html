@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex WASM Examples</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 3rem;
+        }
+
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .example-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-decoration: none;
+            color: white;
+            display: block;
+        }
+
+        .example-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 48px 0 rgba(31, 38, 135, 0.5);
+        }
+
+        .example-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .example-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        .example-description {
+            color: rgba(255, 255, 255, 0.9);
+            line-height: 1.6;
+            text-align: center;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+            font-weight: bold;
+        }
+
+        .recommended {
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+        }
+
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        footer a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Cortex Examples</h1>
+        <p class="subtitle">Explore the power of stackful coroutines in WebAssembly</p>
+
+        <div class="examples-grid">
+            <a href="index.html" class="example-card">
+                <div class="example-icon">📝</div>
+                <div class="example-title">Basic Coroutine Example</div>
+                <div class="example-description">
+                    A simple demonstration of creating and resuming coroutines. 
+                    Shows the fundamental suspend/resume mechanism.
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge">Beginner Friendly</span>
+                </div>
+            </a>
+
+            <a href="particle_demo.html" class="example-card">
+                <div class="example-icon">✨</div>
+                <div class="example-title">Particle Simulation Demo</div>
+                <div class="example-description">
+                    Interactive demonstration comparing coroutines vs. blocking code. 
+                    See how coroutines keep the UI responsive during heavy computation!
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge recommended">🔥 Recommended</span>
+                </div>
+            </a>
+        </div>
+
+        <footer>
+            <p>
+                Built with <a href="https://github.com/yourusername/cortex" target="_blank">Cortex</a> - 
+                A C++ Stackful Coroutine Library
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
+

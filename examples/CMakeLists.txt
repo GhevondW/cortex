@@ -25,6 +25,35 @@ if(EMSCRIPTEN)
     
     cortex_apply_warnings(wasm_example)
     cortex_apply_sanitizers(wasm_example)
+
+    # Particle Simulation Demo - demonstrates coroutine power
+    add_executable(particle_simulation wasm/particle_simulation.cpp)
+    target_link_libraries(particle_simulation PRIVATE cortex::cortex)
+    
+    set_target_properties(particle_simulation PROPERTIES SUFFIX ".js")
+    
+    target_link_options(particle_simulation PRIVATE 
+        "-sEXPORTED_FUNCTIONS=['_main','_start_computation','_resume_computation','_is_computation_done','_get_current_iteration','_get_total_iterations']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sASYNCIFY_STACK_SIZE=1048576"
+        "-sASSERTIONS=1"
+    )
+    
+    # Copy HTML file to build directory
+    add_custom_command(TARGET particle_simulation POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/particle_demo.html
+                ${CMAKE_CURRENT_BINARY_DIR}/particle_demo.html
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/examples_index.html
+                ${CMAKE_CURRENT_BINARY_DIR}/examples_index.html
+        COMMENT "Copying HTML files to build directory"
+    )
+    
+    cortex_apply_warnings(particle_simulation)
+    cortex_apply_sanitizers(particle_simulation)
 else()
     # Native Examples
     add_executable(native_example linux/main.cpp)
