@@ -2,6 +2,16 @@
 
 A C++ stackful coroutine library with WebAssembly support.
 
+## Live Demo
+
+Try the interactive WASM examples in your browser (no installation required):
+
+[![Live Demo](https://img.shields.io/badge/demo-live-brightgreen?style=for-the-badge)](https://GhevondW.github.io/cortex/)
+
+- **[All Examples](https://GhevondW.github.io/cortex/)** - Browse all demos
+- **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** - See coroutines in action! (Recommended)
+- **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** - Simple suspend/resume demo
+
 ## Quick Start
 
 ### Prerequisites
@@ -33,12 +43,16 @@ docker compose up --build test-wasm
 
 ### Run Examples
 
-**Native:**
+**Online (No Installation Required):**
+
+Try the **[live demo](https://GhevondW.github.io/cortex/)** in your browser!
+
+**Native (Local):**
 ```bash
 docker compose up --build build-example-native
 ```
 
-**WASM (Browser):**
+**WASM (Local Browser):**
 ```bash
 docker compose up serve-example
 # Open http://localhost:8080/examples/examples_index.html (all examples)
