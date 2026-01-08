@@ -64,7 +64,12 @@ services:
         emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON &&
         cmake --build build/wasm &&
         cd build/wasm &&
-        echo 'Example built successfully!' &&
-        echo 'Serving at http://localhost:8080/examples/index.html' &&
+        echo 'Examples built successfully!' &&
+        echo '' &&
+        echo 'Available at:' &&
+        echo '  → http://localhost:8080/examples/examples_index.html (All Examples)' &&
+        echo '  → http://localhost:8080/examples/particle_demo.html (Particle Demo - Recommended!)' &&
+        echo '  → http://localhost:8080/examples/index.html (Basic Example)' &&
+        echo '' &&
         python3 -m http.server 8080
         "

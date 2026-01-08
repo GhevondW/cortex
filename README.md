@@ -41,7 +41,9 @@ docker compose up --build build-example-native
 **WASM (Browser):**
 ```bash
 docker compose up serve-example
-# Open http://localhost:8080/examples/index.html
+# Open http://localhost:8080/examples/examples_index.html (all examples)
+# Or http://localhost:8080/examples/particle_demo.html (recommended interactive demo)
+# Or http://localhost:8080/examples/index.html (basic example)
 ```
 
 ## Development

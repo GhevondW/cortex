@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex - Coroutine Power Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .demo-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            margin-bottom: 2rem;
+        }
+
+        .canvas-container {
+            position: relative;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        #particleCanvas {
+            display: block;
+            width: 100%;
+            height: 400px;
+        }
+
+        .animation-status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            min-width: 200px;
+        }
+
+        .fps-counter {
+            font-weight: bold;
+            font-size: 1.5rem;
+            color: #4ade80;
+            margin-bottom: 0.5rem;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .control-group {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1.5rem;
+            border-radius: 15px;
+        }
+
+        .control-group h3 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(102, 126, 234, 0.75);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(102, 126, 234, 0.9);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(245, 87, 108, 0.75);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(245, 87, 108, 0.9);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .progress-bar-bg {
+            background: rgba(0, 0, 0, 0.3);
+            height: 30px;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .status-text {
+            margin-top: 0.5rem;
+            text-align: center;
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        .explanation {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1.5rem;
+            border-radius: 15px;
+            line-height: 1.8;
+        }
+
+        .explanation h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .explanation p {
+            margin-bottom: 1rem;
+        }
+
+        .explanation ul {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .explanation li {
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .warning-box {
+            background: rgba(245, 87, 108, 0.2);
+            border-left: 4px solid #f5576c;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+
+        .success-box {
+            background: rgba(74, 222, 128, 0.2);
+            border-left: 4px solid #4ade80;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+
+        .iteration-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .iteration-input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        ::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Cortex Coroutine Demo</h1>
+        <p class="subtitle">See the power of stackful coroutines in action!</p>
+
+        <div class="demo-card">
+            <div class="canvas-container">
+                <canvas id="particleCanvas"></canvas>
+                <div class="animation-status">
+                    <div class="fps-counter" id="fps">60 FPS</div>
+                    <div id="animStatus">Animation Running</div>
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem;">
+                        Particles: <span id="particleCount">100</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-label">
+                    <span>Computation Progress</span>
+                    <span id="percentLabel">0%</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progressBar">0%</div>
+                </div>
+                <div class="status-text" id="statusText">Ready to start</div>
+            </div>
+
+            <div class="controls">
+                <div class="control-group">
+                    <h3>⚡ With Coroutines</h3>
+                    <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">Iterations:</label>
+                    <input type="number" class="iteration-input" id="iterationsWithCoro" value="50" min="10" max="200">
+                    <button class="btn-primary" id="startWithCoro">
+                        Start Heavy Computation
+                    </button>
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
+                        ✅ Animation stays smooth!
+                    </p>
+                </div>
+
+                <div class="control-group">
+                    <h3>❌ Without Coroutines</h3>
+                    <label style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">Iterations:</label>
+                    <input type="number" class="iteration-input" id="iterationsWithoutCoro" value="50" min="10" max="200">
+                    <button class="btn-danger" id="startWithoutCoro">
+                        Start Heavy Computation
+                    </button>
+                    <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8;">
+                        ⚠️ UI will freeze!
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-card explanation">
+            <h2>💡 What's Happening?</h2>
+            
+            <div class="success-box">
+                <strong>✅ With Coroutines (Left Button)</strong>
+                <p style="margin-top: 0.5rem;">
+                    The heavy computation <span class="highlight">suspends periodically</span>, 
+                    allowing the browser to:
+                </p>
+                <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                    <li>Update the particle animation smoothly</li>
+                    <li>Respond to user interactions</li>
+                    <li>Update the progress bar in real-time</li>
+                    <li>Keep the UI responsive throughout</li>
+                </ul>
+            </div>
+
+            <div class="warning-box">
+                <strong>❌ Without Coroutines (Right Button)</strong>
+                <p style="margin-top: 0.5rem;">
+                    The computation runs in one continuous block, causing:
+                </p>
+                <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                    <li>Particle animation freezes completely</li>
+                    <li>Progress bar doesn't update until the end</li>
+                    <li>Browser becomes unresponsive</li>
+                    <li>Poor user experience</li>
+                </ul>
+            </div>
+
+            <p style="margin-top: 1rem;">
+                <strong>⚖️ 100% Fair Comparison:</strong> Both buttons run the <strong>EXACT SAME 
+                heavy computation</strong>—millions of trigonometric and exponential calculations 
+                simulating image processing operations. The ONLY difference is one line of code: 
+                <span class="highlight">ctx.Suspend()</span>. There are no artificial delays or 
+                tricks! The freeze happens naturally because JavaScript/WebAssembly runs on a 
+                single-threaded event loop.
+            </p>
+
+            <p style="margin-top: 1rem;">
+                <strong>The Computation:</strong> Each iteration processes a virtual 1000×1000 
+                pixel image with 500 operations per iteration—simulating filters, edge detection, 
+                and color transformations. You can verify the code yourself in 
+                <code>particle_simulation.cpp</code>: both versions call the exact same 
+                <code>heavy_computation_step()</code> function.
+            </p>
+
+            <p style="margin-top: 1rem;">
+                <strong>The Magic:</strong> The <span class="highlight">ctx.Suspend()</span> call 
+                yields control back to the browser, allowing it to render frames and handle events. 
+                This is the power of stackful coroutines—you get cooperative multitasking without 
+                callbacks or promise chains!
+            </p>
+        </div>
+    </div>
+
+    <script src="particle_simulation.js"></script>
+    <script>
+        // Particle Animation System
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Particle class
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 4;
+                this.vy = (Math.random() - 0.5) * 4;
+                this.radius = Math.random() * 3 + 2;
+                this.color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+
+                this.x = Math.max(0, Math.min(canvas.width, this.x));
+                this.y = Math.max(0, Math.min(canvas.height, this.y));
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        // Create particles
+        const particles = [];
+        for (let i = 0; i < 100; i++) {
+            particles.push(new Particle());
+        }
+        document.getElementById('particleCount').textContent = particles.length;
+
+        // FPS tracking
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
+
+        // Animation loop
+        function animate() {
+            // Clear canvas
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Update and draw particles
+            for (const particle of particles) {
+                particle.update();
+                particle.draw();
+            }
+
+            // Draw connections
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 100) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Calculate FPS
+            frameCount++;
+            const currentTime = performance.now();
+            if (currentTime - lastFrameTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastFrameTime = currentTime;
+                document.getElementById('fps').textContent = `${fps} FPS`;
+                
+                // Change color based on FPS
+                const fpsEl = document.getElementById('fps');
+                if (fps < 20) fpsEl.style.color = '#f5576c';
+                else if (fps < 40) fpsEl.style.color = '#fbbf24';
+                else fpsEl.style.color = '#4ade80';
+            }
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // UI Elements
+        const startWithCoroBtn = document.getElementById('startWithCoro');
+        const startWithoutCoroBtn = document.getElementById('startWithoutCoro');
+        const progressBar = document.getElementById('progressBar');
+        const percentLabel = document.getElementById('percentLabel');
+        const statusText = document.getElementById('statusText');
+        const iterationsWithCoroInput = document.getElementById('iterationsWithCoro');
+        const iterationsWithoutCoroInput = document.getElementById('iterationsWithoutCoro');
+
+        let isRunning = false;
+        let resumeInterval = null;
+
+        // JavaScript callbacks for C++
+        function updateProgress(percent) {
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+            percentLabel.textContent = percent + '%';
+        }
+
+        function updateStatus(msg) {
+            statusText.textContent = msg;
+        }
+
+        function onComputationComplete(elapsedMs) {
+            isRunning = false;
+            startWithCoroBtn.disabled = false;
+            startWithoutCoroBtn.disabled = false;
+            
+            if (resumeInterval) {
+                clearInterval(resumeInterval);
+                resumeInterval = null;
+            }
+
+            statusText.textContent = `Completed in ${elapsedMs.toFixed(0)}ms`;
+        }
+
+        // Module initialization
+        Module.onRuntimeInitialized = () => {
+            console.log("Cortex runtime initialized!");
+            statusText.textContent = "✅ Runtime ready - Click a button to start!";
+
+            startWithCoroBtn.onclick = async () => {
+                if (isRunning) return;
+                
+                const iterations = parseInt(iterationsWithCoroInput.value) || 50;
+                isRunning = true;
+                startWithCoroBtn.disabled = true;
+                startWithoutCoroBtn.disabled = true;
+                updateProgress(0);
+
+                console.log("Starting computation WITH coroutines");
+                await Module.ccall('start_computation', null, ['number', 'number'], 
+                    [1, iterations], { async: true });
+
+                // Resume the coroutine periodically
+                resumeInterval = setInterval(async () => {
+                    if (Module.ccall('is_computation_done', 'number', [], []) === 0) {
+                        await Module.ccall('resume_computation', null, [], [], { async: true });
+                    } else {
+                        clearInterval(resumeInterval);
+                        resumeInterval = null;
+                    }
+                }, 16); // ~60 FPS
+            };
+
+            startWithoutCoroBtn.onclick = async () => {
+                if (isRunning) return;
+                
+                const iterations = parseInt(iterationsWithoutCoroInput.value) || 50;
+                isRunning = true;
+                startWithCoroBtn.disabled = true;
+                startWithoutCoroBtn.disabled = true;
+                updateProgress(0);
+
+                console.log("Starting computation WITHOUT coroutines - UI will freeze!");
+                
+                // This will block everything!
+                await Module.ccall('start_computation', null, ['number', 'number'], 
+                    [0, iterations], { async: true });
+                
+                isRunning = false;
+                startWithCoroBtn.disabled = false;
+                startWithoutCoroBtn.disabled = false;
+            };
+        };
+    </script>
+</body>
+</html>
+
