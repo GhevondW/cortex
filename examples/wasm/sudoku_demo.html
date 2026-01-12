@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex - Sudoku Solver with Coroutines</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .demo-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .sudoku-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .sudoku-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            gap: 2px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 540px;
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
+        .sudoku-cell {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .sudoku-cell.original {
+            background: rgba(200, 200, 255, 0.9);
+            color: #000;
+            font-weight: 900;
+        }
+
+        .sudoku-cell.trying {
+            background: rgba(255, 235, 59, 0.9);
+            color: #000;
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        .sudoku-cell.backtrack {
+            background: rgba(244, 67, 54, 0.7);
+            color: #fff;
+            animation: shake 0.3s ease-in-out;
+        }
+
+        .sudoku-cell.solved {
+            background: rgba(76, 175, 80, 0.9);
+            color: #fff;
+        }
+
+        /* Add thicker borders for 3x3 subgrids */
+        .sudoku-cell:nth-child(3n) {
+            border-right: 3px solid rgba(0, 0, 0, 0.5);
+        }
+
+        .sudoku-cell:nth-child(n + 19):nth-child(-n + 27),
+        .sudoku-cell:nth-child(n + 46):nth-child(-n + 54) {
+            border-bottom: 3px solid rgba(0, 0, 0, 0.5);
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .controls-panel {
+            min-width: 350px;
+        }
+
+        .control-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-section h3 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 1rem;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(74, 222, 128, 0.5);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(74, 222, 128, 0.7);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(96, 165, 250, 0.5);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(96, 165, 250, 0.7);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            color: white;
+            box-shadow: 0 4px 15px 0 rgba(248, 113, 113, 0.5);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px 0 rgba(248, 113, 113, 0.7);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4ade80;
+        }
+
+        .speed-control {
+            margin-bottom: 1rem;
+        }
+
+        .speed-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .speed-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .speed-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4ade80;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(74, 222, 128, 0.5);
+        }
+
+        .speed-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4ade80;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 10px rgba(74, 222, 128, 0.5);
+        }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 10px;
+            text-align: center;
+            font-style: italic;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .puzzle-selector {
+            margin-bottom: 1rem;
+        }
+
+        .puzzle-selector select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .puzzle-selector select option {
+            background: #764ba2;
+            color: white;
+        }
+
+        .explanation {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 1.5rem;
+            border-radius: 15px;
+            line-height: 1.8;
+        }
+
+        .explanation h2 {
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .explanation p {
+            margin-bottom: 1rem;
+        }
+
+        .explanation ul {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .explanation li {
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.2rem 0.5rem;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .legend-box {
+            width: 30px;
+            height: 30px;
+            border-radius: 5px;
+            border: 2px solid rgba(0, 0, 0, 0.3);
+        }
+
+        .legend-original { background: rgba(200, 200, 255, 0.9); }
+        .legend-trying { background: rgba(255, 235, 59, 0.9); }
+        .legend-backtrack { background: rgba(244, 67, 54, 0.7); }
+        .legend-solved { background: rgba(76, 175, 80, 0.9); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧩 Sudoku Solver with Stackful Coroutines</h1>
+        <p class="subtitle">Watch recursive backtracking come to life!</p>
+
+        <div class="main-content">
+            <div class="demo-card sudoku-container">
+                <div class="sudoku-grid" id="sudokuGrid">
+                    <!-- Grid cells will be generated by JavaScript -->
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-box legend-original"></div>
+                        <span>Given</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-box legend-trying"></div>
+                        <span>Trying</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-box legend-backtrack"></div>
+                        <span>Backtrack</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-box legend-solved"></div>
+                        <span>Solved</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="demo-card controls-panel">
+                <div class="control-section">
+                    <h3>📊 Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Attempts</div>
+                            <div class="stat-value" id="attempts">0</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Backtracks</div>
+                            <div class="stat-value" id="backtracks">0</div>
+                        </div>
+                    </div>
+                    <div class="status-box" id="statusText">
+                        Initializing...
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🎮 Controls</h3>
+                    <button class="btn-primary" id="startBtn" disabled>
+                        ▶️ Start Solving
+                    </button>
+                    <button class="btn-secondary" id="pauseBtn" disabled>
+                        ⏸️ Pause
+                    </button>
+                    <button class="btn-danger" id="resetBtn">
+                        🔄 Reset
+                    </button>
+                </div>
+
+                <div class="control-section">
+                    <h3>⚡ Speed</h3>
+                    <div class="speed-control">
+                        <div class="speed-label">
+                            <span>Slow</span>
+                            <span id="speedValue">Medium (500ms)</span>
+                            <span>Fast</span>
+                        </div>
+                        <input type="range" class="speed-slider" id="speedSlider" 
+                               min="1" max="100" value="50">
+                        <p style="margin-top: 0.5rem; font-size: 0.85rem; opacity: 0.8; text-align: center;">
+                            💡 Tip: Set to slow to watch each step carefully!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>🧩 Select Puzzle</h3>
+                    <div class="puzzle-selector">
+                        <select id="puzzleSelect">
+                            <option value="easy">Easy Puzzle</option>
+                            <option value="medium" selected>Medium Puzzle</option>
+                            <option value="hard">Hard Puzzle</option>
+                            <option value="expert">Expert Puzzle</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="demo-card explanation">
+            <h2>💡 The Power of Stackful Coroutines</h2>
+            
+            <p>
+                Watch <strong>recursive backtracking</strong> solve Sudoku step-by-step in real-time. 
+                The algorithm tries numbers, recurses deeper, and backtracks when hitting dead ends.
+            </p>
+
+            <h3 style="margin-top: 1rem; margin-bottom: 0.5rem;">🔥 Why This Is Nearly Impossible Without Coroutines:</h3>
+            <ul>
+                <li><strong>Deep Recursion:</strong> Up to 81 levels deep—manually tracking this state requires complex data structures</li>
+                <li><strong>Backtracking Through Call Stack:</strong> The algorithm unwinds through multiple recursive calls naturally</li>
+                <li><strong>No Pause Points:</strong> You can't just "stop" in the middle of recursion and resume later</li>
+            </ul>
+
+            <h3 style="margin-top: 1rem; margin-bottom: 0.5rem;">✨ The Cortex Solution:</h3>
+            <p>
+                Just add <span class="highlight">ctx.Suspend()</span> anywhere in your recursive function! 
+                The algorithm pauses, yields control to the browser for visualization, then resumes exactly 
+                where it left off—preserving the entire call stack naturally.
+            </p>
+
+            <p style="margin-top: 1rem;">
+                <strong>Result:</strong> Clean, readable recursive code (just like in textbooks) with real-time 
+                visualization. No state machines, no callback hell, no refactoring required!
+            </p>
+        </div>
+    </div>
+
+    <script src="sudoku_solver.js"></script>
+    <script>
+        // Predefined puzzles (0 = empty cell)
+        const puzzles = {
+            easy: '530070000600195000098000060800060003400803001700020006060000280000419005000080079',
+            medium: '003020600900305001001806400008102900700000008006708200002609500800203009005010300',
+            hard: '000000907000420180000705026100904000050000040000507009920108000034059000507000000',
+            expert: '800000000003600000070090200050007000000045700000100030001000068008500010090000400'
+        };
+
+        // UI Elements
+        const sudokuGrid = document.getElementById('sudokuGrid');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const statusText = document.getElementById('statusText');
+        const attemptsEl = document.getElementById('attempts');
+        const backtracksEl = document.getElementById('backtracks');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedValue = document.getElementById('speedValue');
+        const puzzleSelect = document.getElementById('puzzleSelect');
+
+        // State
+        let isRunning = false;
+        let isPaused = false;
+        let currentSpeed = 500; // ms between steps
+
+        // Create 9x9 grid
+        const cells = [];
+        for (let i = 0; i < 81; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'sudoku-cell';
+            cell.textContent = '';
+            sudokuGrid.appendChild(cell);
+            cells.push(cell);
+        }
+
+        // Map slider value (1-100) to delay in ms
+        // Uses exponential curve for better control at slow speeds
+        function getDelayFromSlider(value) {
+            // Slider 1 (slowest) -> 2000ms (2 seconds)
+            // Slider 50 (medium) -> 500ms
+            // Slider 100 (fastest) -> 50ms
+            const minDelay = 50;
+            const maxDelay = 2000;
+            
+            // Exponential mapping: delay = maxDelay * (minDelay/maxDelay)^((value-1)/99)
+            const t = (value - 1) / 99; // normalize to 0-1
+            const delay = maxDelay * Math.pow(minDelay / maxDelay, t);
+            return Math.round(delay);
+        }
+
+        // Update speed display
+        function updateSpeedDisplay(value) {
+            const delay = getDelayFromSlider(value);
+            if (delay >= 1000) {
+                speedValue.textContent = `Slow (${(delay/1000).toFixed(1)}s)`;
+            } else {
+                speedValue.textContent = `${delay}ms`;
+            }
+            
+            if (value <= 33) {
+                speedValue.style.color = '#fbbf24'; // yellow for slow
+            } else if (value <= 66) {
+                speedValue.style.color = '#4ade80'; // green for medium
+            } else {
+                speedValue.style.color = '#60a5fa'; // blue for fast
+            }
+        }
+
+        speedSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            currentSpeed = getDelayFromSlider(value);
+            updateSpeedDisplay(value);
+        });
+
+        // Initialize speed display
+        updateSpeedDisplay(parseInt(speedSlider.value));
+        currentSpeed = getDelayFromSlider(parseInt(speedSlider.value));
+
+        // Load puzzle into grid
+        function loadPuzzle(puzzleString) {
+            for (let i = 0; i < 81; i++) {
+                const value = parseInt(puzzleString[i]);
+                const cell = cells[i];
+                
+                if (value > 0) {
+                    cell.textContent = value;
+                    cell.className = 'sudoku-cell original';
+                } else {
+                    cell.textContent = '';
+                    cell.className = 'sudoku-cell';
+                }
+            }
+        }
+
+        // JavaScript callbacks for C++
+        window.updateCell = function(row, col, value, isBacktrack) {
+            const index = row * 9 + col;
+            const cell = cells[index];
+            
+            if (value === 0) {
+                cell.textContent = '';
+                cell.className = 'sudoku-cell' + (isBacktrack ? ' backtrack' : '');
+            } else {
+                cell.textContent = value;
+                cell.className = 'sudoku-cell trying';
+            }
+        };
+
+        window.updateStats = function(attempts, backtracks) {
+            attemptsEl.textContent = attempts.toLocaleString();
+            backtracksEl.textContent = backtracks.toLocaleString();
+        };
+
+        window.updateStatus = function(msg) {
+            statusText.textContent = msg;
+        };
+
+        window.onSolvingComplete = function(elapsedMs, success) {
+            isRunning = false;
+            isPaused = false;
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+            pauseBtn.textContent = '⏸️ Pause';
+
+            if (success) {
+                statusText.textContent = `✅ Solved in ${elapsedMs.toFixed(0)}ms!`;
+                // Mark all non-original cells as solved
+                for (let i = 0; i < cells.length; i++) {
+                    if (!cells[i].classList.contains('original')) {
+                        cells[i].classList.remove('trying', 'backtrack');
+                        cells[i].classList.add('solved');
+                    }
+                }
+            } else {
+                statusText.textContent = '❌ No solution found';
+            }
+        };
+
+        // Module initialization
+        Module.onRuntimeInitialized = () => {
+            console.log("Cortex Sudoku runtime initialized!");
+            statusText.textContent = "✅ Ready! Select a puzzle and click Start";
+            startBtn.disabled = false;
+
+            // Load default puzzle
+            const defaultPuzzle = puzzles[puzzleSelect.value];
+            loadPuzzle(defaultPuzzle);
+            Module.ccall('set_sudoku_board', null, ['string'], [defaultPuzzle]);
+
+            // Puzzle selection
+            puzzleSelect.addEventListener('change', () => {
+                if (isRunning) return;
+                
+                const puzzle = puzzles[puzzleSelect.value];
+                loadPuzzle(puzzle);
+                Module.ccall('set_sudoku_board', null, ['string'], [puzzle]);
+                Module.ccall('reset_solver', null, [], []);
+                attemptsEl.textContent = '0';
+                backtracksEl.textContent = '0';
+                statusText.textContent = "✅ Puzzle loaded! Click Start";
+            });
+
+            // Start button
+            startBtn.onclick = async () => {
+                if (isRunning) return;
+                
+                isRunning = true;
+                isPaused = false;
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                pauseBtn.textContent = '⏸️ Pause';
+                attemptsEl.textContent = '0';
+                backtracksEl.textContent = '0';
+
+                console.log("Starting Sudoku solver");
+                await Module.ccall('start_solving', null, [], [], { async: true });
+
+                // Resume the coroutine with dynamic speed adjustment
+                const resumeLoop = async () => {
+                    if (!isRunning) return;
+                    
+                    if (!isPaused && Module.ccall('is_solving_done', 'number', [], []) === 0) {
+                        await Module.ccall('resume_solving', null, [], [], { async: true });
+                        // Use current speed value (allows real-time adjustment)
+                        setTimeout(resumeLoop, currentSpeed);
+                    } else if (Module.ccall('is_solving_done', 'number', [], []) === 1) {
+                        // Solving complete
+                        return;
+                    } else {
+                        // Paused, check again soon
+                        setTimeout(resumeLoop, 50);
+                    }
+                };
+                
+                // Start the loop
+                resumeLoop();
+            };
+
+            // Pause button
+            pauseBtn.onclick = () => {
+                isPaused = !isPaused;
+                pauseBtn.textContent = isPaused ? '▶️ Resume' : '⏸️ Pause';
+                statusText.textContent = isPaused ? '⏸️ Paused' : '🔄 Solving...';
+            };
+
+            // Reset button
+            resetBtn.onclick = () => {
+                // Stop the solving loop
+                isRunning = false;
+                isPaused = false;
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                pauseBtn.textContent = '⏸️ Pause';
+
+                Module.ccall('reset_solver', null, [], []);
+                
+                const puzzle = puzzles[puzzleSelect.value];
+                loadPuzzle(puzzle);
+                Module.ccall('set_sudoku_board', null, ['string'], [puzzle]);
+                
+                attemptsEl.textContent = '0';
+                backtracksEl.textContent = '0';
+                statusText.textContent = '✅ Reset! Click Start to solve';
+            };
+        };
+    </script>
+</body>
+</html>
