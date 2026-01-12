@@ -65,13 +65,37 @@ if(EMSCRIPTEN)
     
     cortex_apply_warnings(particle_simulation)
     cortex_apply_sanitizers(particle_simulation)
-else()
-    # Native Examples
-    add_executable(native_example linux/main.cpp)
-    target_link_libraries(native_example PRIVATE cortex::cortex)
-    cortex_apply_warnings(native_example)
-    cortex_apply_sanitizers(native_example)
 
+    # Sudoku Solver Demo - demonstrates recursive backtracking with coroutines
+    add_executable(sudoku_solver wasm/sudoku_solver.cpp)
+    target_link_libraries(sudoku_solver PRIVATE cortex::cortex)
+    
+    set_target_properties(sudoku_solver PROPERTIES SUFFIX ".js")
+    
+    target_link_options(sudoku_solver PRIVATE 
+        "-sEXPORTED_FUNCTIONS=['_main','_set_sudoku_board','_start_solving','_resume_solving','_is_solving_done','_get_cell_value','_is_cell_original','_reset_solver']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sASYNCIFY_STACK_SIZE=1048576"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
+    )
+    
+    # Copy HTML files to build directory
+    add_custom_command(TARGET sudoku_solver POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/sudoku_demo.html
+                ${CMAKE_CURRENT_BINARY_DIR}/sudoku_demo.html
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/examples_index.html
+                ${CMAKE_CURRENT_BINARY_DIR}/examples_index.html
+        COMMENT "Copying HTML files to build directory"
+    )
+    
+    cortex_apply_warnings(sudoku_solver)
+    cortex_apply_sanitizers(sudoku_solver)
+else()
     add_executable(binary_tree_example linux/binary_tree.cpp)
     target_link_libraries(binary_tree_example PRIVATE cortex::cortex)
     cortex_apply_warnings(binary_tree_example)

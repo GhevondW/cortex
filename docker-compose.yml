@@ -33,8 +33,6 @@ services:
     command: >
       bash -c "cmake -B build/native -DCORTEX_BUILD_EXAMPLES=ON && 
                cmake --build build/native &&
-               echo -e '\n--- Running basic native example ---' &&
-               ./build/native/examples/native_example &&
                echo -e '\n--- Running binary tree example ---' &&
                ./build/native/examples/binary_tree_example"
 
@@ -70,6 +68,7 @@ services:
         echo '' &&
         echo 'Available at:' &&
         echo '  → http://localhost:8080/examples/examples_index.html (All Examples)' &&
+        echo '  → http://localhost:8080/examples/sudoku_demo.html (Sudoku Solver - Must See!)' &&
         echo '  → http://localhost:8080/examples/particle_demo.html (Particle Demo - Recommended!)' &&
         echo '  → http://localhost:8080/examples/index.html (Basic Example)' &&
         echo '' &&
