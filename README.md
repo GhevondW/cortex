@@ -7,11 +7,13 @@ A C++ stackful coroutine library with WebAssembly support.
 Try the interactive WASM examples in your browser (no installation required):
 
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen?style=for-the-badge)](https://GhevondW.github.io/cortex/)
+[![Docs](https://img.shields.io/badge/docs-doxygen-blue?style=for-the-badge)](https://GhevondW.github.io/cortex/docs/)
 
 - **[All Examples](https://GhevondW.github.io/cortex/)** - Browse all demos
 - **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** - Recursive backtracking visualization (Must See!)
 - **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** - See coroutines in action! (Recommended)
 - **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** - Simple suspend/resume demo
+- **[API Docs](https://GhevondW.github.io/cortex/docs/)** - Doxygen-generated documentation
 
 ## Quick Start
 
