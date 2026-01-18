@@ -10,6 +10,23 @@ OUTPUT_DIRECTORY       = ./doc
 # This makes the background white or light-colored
 HTML_COLORSTYLE = light
 
+# Documentation quality / structure
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+WARN_IF_UNDOCUMENTED   = YES
+JAVADOC_AUTOBRIEF      = YES
+
+# HTML output tweaks
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = YES
+
+# Disable LaTeX output
+GENERATE_LATEX         = NO
+
+# Enable diagrams when graphviz is available
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+
 # Input sources
 INPUT                  = ./include
 

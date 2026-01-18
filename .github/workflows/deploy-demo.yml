@@ -26,6 +26,11 @@ jobs:
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 'latest'
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
       
       - name: Configure CMake for WASM (Release Mode with Optimizations)
         run: |
@@ -38,13 +43,18 @@ jobs:
       
       - name: Build WASM Examples (Optimized)
         run: cmake --build build/wasm --config Release
+
+      - name: Generate Doxygen Docs
+        run: doxygen Doxyfile
       
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/examples
+          mkdir -p deploy/docs
           cp build/wasm/examples/*.html deploy/examples/
           cp build/wasm/examples/*.js deploy/examples/
           cp build/wasm/examples/*.wasm deploy/examples/
+          cp -r doc/html/* deploy/docs/
           
           # Create a root index.html that redirects to examples
           cat > deploy/index.html << 'EOF'
