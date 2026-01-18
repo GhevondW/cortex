@@ -45,7 +45,8 @@ public:
         void operator()(U&& value) {
             assert(state_);
             assert(ctx_);
-            state_->current = std::forward<U>(value);
+            assert(!state_->current.has_value());
+            state_->current.emplace(std::forward<U>(value));
             ctx_->Suspend();
         }
 

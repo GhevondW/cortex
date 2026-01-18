@@ -23,7 +23,7 @@ void Coroutine::ImplDeleter::operator()(detail::CoroutineImpl* impl) const {
 }
 
 Coroutine::Builder::Builder()
-    : stack_size_bytes_(262144)
+    : stack_size_bytes_(Coroutine::kDefaultStackSizeBytes)
     , memory_resource_(GetDefaultMemoryResource()) {}
 
 Coroutine Coroutine::Builder::Build(CoroutineBody body) && {

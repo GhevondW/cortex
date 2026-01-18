@@ -27,6 +27,7 @@ class CoroutineImpl;
  */
 class Coroutine final {
 public:
+    static constexpr std::size_t kDefaultStackSizeBytes = 262144;
     /**
      * @brief Creates a new coroutine with the specified body and stack size.
      *
@@ -38,7 +39,7 @@ public:
      * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0 or resource is null.
      */
     static Coroutine Make(CoroutineBody body,
-                          std::size_t stack_size_bytes = 262144,
+                          std::size_t stack_size_bytes = kDefaultStackSizeBytes,
                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
 
     /**
