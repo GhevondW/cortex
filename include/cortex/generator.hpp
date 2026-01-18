@@ -26,6 +26,8 @@ namespace cortex {
 template <typename T>
 class Generator final {
 public:
+    struct State;
+
     /**
      * @class YieldContext
      * @brief Context provided to the generator body to yield values.
@@ -46,7 +48,6 @@ public:
         }
 
     private:
-        struct State;
         friend class Generator;
 
         YieldContext(State* state, CoroutineSuspendContext* ctx) noexcept

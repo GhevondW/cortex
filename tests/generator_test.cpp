@@ -44,3 +44,16 @@ TEST(GeneratorTest, ExceptionPropagation) {
     EXPECT_THROW(gen.Next(), std::runtime_error);
     EXPECT_TRUE(gen.IsDone());
 }
+
+TEST(GeneratorTest, CreateWithBuilder) {
+    auto gen = cortex::Generator<int>::Builder()
+                   .SetStackSizeInBytes(65536)
+                   .Build([](auto& yield) {
+                       yield(5);
+                   });
+
+    EXPECT_TRUE(gen.Next());
+    EXPECT_EQ(gen.DetachValue(), 5);
+    EXPECT_FALSE(gen.Next());
+    EXPECT_TRUE(gen.IsDone());
+}
