@@ -1,0 +1,53 @@
+/**
+@mainpage Cortex Coroutine Library
+
+@section intro Introduction
+Cortex is a C++ stackful coroutine library with WebAssembly (Emscripten) support.
+It provides cooperative multitasking with explicit suspend/resume semantics and
+works across native and WASM builds through a unified API.
+
+@section highlights Highlights
+- Stackful coroutines with a simple @c Resume / @c Suspend model
+- Unified API for native (Boost.Context) and WASM (Emscripten fibers)
+- Custom memory resource support for stack allocation
+- Designed for deterministic, cooperative control flow
+
+@section quickstart Quick Start
+@code
+#include <cortex/coroutine.hpp>
+
+auto co = cortex::Coroutine::Make([](cortex::CoroutineSuspendContext& ctx) {
+    // Do work...
+    ctx.Suspend(); // Yield back to caller
+    // Resume here...
+});
+
+co.Resume();
+co.Resume();
+@endcode
+
+@section generator Generator Example
+@code
+#include <cortex/generator.hpp>
+
+auto gen = cortex::Generator<int>::Make([](auto& yield) {
+    yield(1);
+    yield(2);
+    yield(3);
+});
+
+while (gen.Next()) {
+    int value = gen.DetachValue();
+    // use value
+}
+@endcode
+
+@section structure API Overview
+- @ref cortex::Coroutine "Coroutine": low-level stackful coroutine
+- @ref cortex::BaseCoroutine "BaseCoroutine": OO wrapper for coroutines
+- @ref cortex::Generator "Generator": yield values across resumes
+
+@section resources Resources
+- Live demos: https://GhevondW.github.io/cortex/
+- API docs: https://GhevondW.github.io/cortex/docs/
+*/

@@ -28,7 +28,12 @@ HAVE_DOT               = YES
 DOT_IMAGE_FORMAT       = svg
 
 # Input sources
-INPUT                  = ./include
+INPUT                  = ./include \
+                         ./README.md \
+                         ./docsrc/mainpage.dox
+
+# Use a curated main page
+USE_MDFILE_AS_MAINPAGE = ./docsrc/mainpage.dox
 
 # Recurse into subdirectories
 RECURSIVE              = YES
