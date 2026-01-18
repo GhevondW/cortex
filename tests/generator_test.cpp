@@ -46,11 +46,9 @@ TEST(GeneratorTest, ExceptionPropagation) {
 }
 
 TEST(GeneratorTest, CreateWithBuilder) {
-    auto gen = cortex::Generator<int>::Builder()
-                   .SetStackSizeInBytes(65536)
-                   .Build([](auto& yield) {
-                       yield(5);
-                   });
+    auto gen = cortex::Generator<int>::Builder().SetStackSizeInBytes(65536).Build([](auto& yield) {
+        yield(5);
+    });
 
     EXPECT_TRUE(gen.Next());
     EXPECT_EQ(gen.DetachValue(), 5);
