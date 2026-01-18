@@ -26,8 +26,10 @@ namespace cortex {
 template <typename T>
 class Generator final {
 public:
+private:
     struct State;
 
+public:
     /**
      * @class YieldContext
      * @brief Context provided to the generator body to yield values.
