@@ -6,6 +6,7 @@
 
 #include <function2/function2.hpp>
 
+#include <cassert>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -37,7 +38,9 @@ public:
         YieldContext& operator=(YieldContext&&) = delete;
 
         template <typename U>
-        void Yield(U&& value) {
+        void operator()(U&& value) {
+            assert(state_);
+            assert(ctx_);
             state_->current = std::forward<U>(value);
             ctx_->Suspend();
         }
@@ -133,6 +136,7 @@ public:
      * @return true if a value was yielded, false if the generator is done.
      */
     bool Next() {
+        assert(state_);
         if (coroutine_.IsDone()) {
             return false;
         }
@@ -149,6 +153,7 @@ public:
      * @throws std::logic_error if no value is available.
      */
     T DetachValue() {
+        assert(state_);
         if (!state_->current.has_value()) {
             throw std::logic_error("generator has no value.");
         }

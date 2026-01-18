@@ -7,9 +7,9 @@
 
 TEST(GeneratorTest, BasicSequence) {
     auto gen = cortex::Generator<int>::Make([](auto& yield) {
-        yield.Yield(1);
-        yield.Yield(2);
-        yield.Yield(3);
+        yield(1);
+        yield(2);
+        yield(3);
     });
 
     std::vector<int> values;
@@ -24,7 +24,7 @@ TEST(GeneratorTest, BasicSequence) {
 
 TEST(GeneratorTest, DetachValueThrowsWhenEmpty) {
     auto gen = cortex::Generator<int>::Make([](auto& yield) {
-        yield.Yield(42);
+        yield(42);
     });
 
     EXPECT_THROW(gen.DetachValue(), std::logic_error);
@@ -35,7 +35,7 @@ TEST(GeneratorTest, DetachValueThrowsWhenEmpty) {
 
 TEST(GeneratorTest, ExceptionPropagation) {
     auto gen = cortex::Generator<int>::Make([](auto& yield) {
-        yield.Yield(7);
+        yield(7);
         throw std::runtime_error("boom");
     });
 
