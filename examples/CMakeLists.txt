@@ -95,6 +95,36 @@ if(EMSCRIPTEN)
     
     cortex_apply_warnings(sudoku_solver)
     cortex_apply_sanitizers(sudoku_solver)
+
+    # Fiber Workflow Demo - demonstrates tiny_fiber cooperative multitasking
+    add_executable(fiber_workflow wasm/fiber_workflow.cpp)
+    target_link_libraries(fiber_workflow PRIVATE cortex::cortex)
+    
+    set_target_properties(fiber_workflow PROPERTIES SUFFIX ".js")
+    
+    target_link_options(fiber_workflow PRIVATE 
+        "-sEXPORTED_FUNCTIONS=['_main','_start_workflow','_step_workflow','_is_workflow_done']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sASYNCIFY_STACK_SIZE=1048576"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
+    )
+    
+    # Copy HTML files to build directory
+    add_custom_command(TARGET fiber_workflow POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/fiber_demo.html
+                ${CMAKE_CURRENT_BINARY_DIR}/fiber_demo.html
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/examples_index.html
+                ${CMAKE_CURRENT_BINARY_DIR}/examples_index.html
+        COMMENT "Copying HTML files to build directory"
+    )
+    
+    cortex_apply_warnings(fiber_workflow)
+    cortex_apply_sanitizers(fiber_workflow)
 else()
     add_executable(binary_tree_example linux/binary_tree.cpp)
     target_link_libraries(binary_tree_example PRIVATE cortex::cortex)

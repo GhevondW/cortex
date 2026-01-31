@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex - Fiber Workflow Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            min-height: 100vh;
+            padding: 1.5rem;
+            color: #e2e8f0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 0.25rem;
+            color: #4ade80;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+            opacity: 0.7;
+        }
+
+        /* Main visualization area */
+        .workflow-viz {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #64748b;
+            margin-bottom: 1rem;
+        }
+
+        /* Fibers row */
+        .fibers-row {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 2rem;
+        }
+
+        .fiber-box {
+            width: 160px;
+            background: #334155;
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .fiber-box.producer {
+            border-color: #334155;
+        }
+
+        .fiber-box.worker {
+            border-color: #334155;
+        }
+
+        /* Fiber states */
+        .fiber-box.idle {
+            border-color: #475569;
+            background: #334155;
+        }
+
+        .fiber-box.working {
+            border-color: #22c55e;
+            background: #166534;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+            animation: pulse 0.5s ease infinite alternate;
+        }
+
+        .fiber-box.waiting {
+            border-color: #f59e0b;
+            background: #78350f;
+        }
+
+        .fiber-box.done {
+            border-color: #64748b;
+            background: #1e293b;
+            opacity: 0.5;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.02); }
+        }
+
+        .fiber-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .fiber-name {
+            font-weight: bold;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .fiber-status {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.6rem;
+            background: rgba(0,0,0,0.3);
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .fiber-task {
+            margin-top: 0.5rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #4ade80;
+            min-height: 1.5rem;
+        }
+
+        /* Task Queue visualization */
+        .queue-section {
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .queue-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .queue-count {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #3b82f6;
+        }
+
+        .task-queue {
+            display: flex;
+            gap: 0.5rem;
+            min-height: 60px;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 0.5rem;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+
+        .task-item {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+            animation: task-appear 0.3s ease;
+            position: relative;
+        }
+
+        .task-item::after {
+            content: attr(data-complexity);
+            position: absolute;
+            bottom: -4px;
+            right: -4px;
+            background: #f59e0b;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .task-item.removing {
+            animation: task-remove 0.3s ease forwards;
+        }
+
+        @keyframes task-appear {
+            0% { transform: scale(0) rotate(-180deg); opacity: 0; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        @keyframes task-remove {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(0) translateY(-20px); opacity: 0; }
+        }
+
+        .queue-empty {
+            color: #64748b;
+            font-style: italic;
+            padding: 1rem;
+        }
+
+        /* Completed tasks */
+        .completed-section {
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .completed-grid {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            min-height: 40px;
+        }
+
+        .completed-item {
+            background: #166534;
+            border-radius: 6px;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: complete-pop 0.3s ease;
+        }
+
+        @keyframes complete-pop {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .completed-item .task-num {
+            font-weight: bold;
+        }
+
+        .completed-item .worker-badge {
+            background: rgba(0,0,0,0.3);
+            padding: 0.1rem 0.4rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+
+        /* Progress bar */
+        .progress-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: #1e293b;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        /* Controls */
+        .controls-row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+            color: #94a3b8;
+        }
+
+        .control-group input {
+            width: 100%;
+            padding: 0.6rem;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            background: #1e293b;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .control-group input:focus {
+            outline: none;
+            border-color: #4ade80;
+        }
+
+        button {
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-start {
+            background: #22c55e;
+            color: #0f172a;
+            flex: 2;
+            min-width: 200px;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            background: #4ade80;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Log */
+        .log-section {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .log-container {
+            height: 200px;
+            overflow-y: auto;
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+        }
+
+        .log-entry {
+            padding: 0.15rem 0;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .log-entry.producer { color: #fbbf24; }
+        .log-entry.worker { color: #3b82f6; }
+        .log-entry.system { color: #4ade80; }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.idle { background: #475569; }
+        .legend-dot.working { background: #22c55e; }
+        .legend-dot.waiting { background: #f59e0b; }
+        .legend-dot.done { background: #64748b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧵 Cooperative Fiber Workflow</h1>
+        <p class="subtitle">Watch multiple fibers coordinate tasks in real-time — no threads needed!</p>
+
+        <div class="controls-row">
+            <div class="control-group">
+                <label>Tasks</label>
+                <input type="number" id="numTasks" value="8" min="3" max="20">
+            </div>
+            <div class="control-group">
+                <label>Workers</label>
+                <input type="number" id="numWorkers" value="3" min="1" max="5">
+            </div>
+            <button class="btn-start" id="startBtn" disabled>Loading WASM...</button>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-header">
+                <span>Progress</span>
+                <span id="progressText">0 / 0 tasks</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="workflow-viz">
+            <div class="legend">
+                <div class="legend-item"><div class="legend-dot idle"></div> Idle</div>
+                <div class="legend-item"><div class="legend-dot working"></div> Working</div>
+                <div class="legend-item"><div class="legend-dot waiting"></div> Waiting</div>
+                <div class="legend-item"><div class="legend-dot done"></div> Done</div>
+            </div>
+
+            <div class="section-title">Active Fibers</div>
+            <div class="fibers-row" id="fibersRow"></div>
+
+            <div class="queue-section">
+                <div class="queue-label">
+                    <span class="section-title" style="margin: 0;">📋 Task Queue</span>
+                    <span class="queue-count" id="queueCount">0</span>
+                </div>
+                <div class="task-queue" id="taskQueue">
+                    <span class="queue-empty">Queue is empty</span>
+                </div>
+            </div>
+
+            <div class="completed-section">
+                <div class="section-title">✅ Completed Tasks</div>
+                <div class="completed-grid" id="completedGrid"></div>
+            </div>
+        </div>
+
+        <div class="log-section">
+            <div class="section-title">📜 Activity Log</div>
+            <div class="log-container" id="logContainer"></div>
+        </div>
+    </div>
+
+    <script src="fiber_workflow.js"></script>
+    <script>
+        // State
+        const FIBER_IDLE = 0;
+        const FIBER_WORKING = 1;
+        const FIBER_WAITING = 2;
+        const FIBER_DONE = 3;
+
+        // DOM elements
+        const fibersRow = document.getElementById('fibersRow');
+        const taskQueue = document.getElementById('taskQueue');
+        const queueCount = document.getElementById('queueCount');
+        const completedGrid = document.getElementById('completedGrid');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const logContainer = document.getElementById('logContainer');
+        const startBtn = document.getElementById('startBtn');
+
+        let totalTasks = 0;
+        let isRunning = false;
+
+        // Create fiber cards
+        function createFiberCards(numWorkers) {
+            fibersRow.innerHTML = '';
+            
+            // Producer
+            const producer = document.createElement('div');
+            producer.className = 'fiber-box producer idle';
+            producer.id = 'fiber-0';
+            producer.innerHTML = `
+                <div class="fiber-icon">🏭</div>
+                <div class="fiber-name">Producer</div>
+                <div class="fiber-status" id="status-0">Idle</div>
+                <div class="fiber-task" id="task-0"></div>
+            `;
+            fibersRow.appendChild(producer);
+
+            // Workers
+            for (let i = 1; i <= numWorkers; i++) {
+                const worker = document.createElement('div');
+                worker.className = 'fiber-box worker idle';
+                worker.id = `fiber-${i}`;
+                worker.innerHTML = `
+                    <div class="fiber-icon">👷</div>
+                    <div class="fiber-name">Worker ${i}</div>
+                    <div class="fiber-status" id="status-${i}">Idle</div>
+                    <div class="fiber-task" id="task-${i}"></div>
+                `;
+                fibersRow.appendChild(worker);
+            }
+        }
+
+        // Update fiber visual state
+        function updateFiber(fiberId, state, taskId) {
+            const fiber = document.getElementById(`fiber-${fiberId}`);
+            const status = document.getElementById(`status-${fiberId}`);
+            const task = document.getElementById(`task-${fiberId}`);
+            
+            if (!fiber) return;
+
+            // Remove all state classes
+            fiber.classList.remove('idle', 'working', 'waiting', 'done');
+            
+            switch (state) {
+                case FIBER_IDLE:
+                    fiber.classList.add('idle');
+                    status.textContent = 'Idle';
+                    task.textContent = '';
+                    break;
+                case FIBER_WORKING:
+                    fiber.classList.add('working');
+                    status.textContent = 'Working';
+                    task.textContent = taskId > 0 ? `Task #${taskId}` : 'Creating...';
+                    break;
+                case FIBER_WAITING:
+                    fiber.classList.add('waiting');
+                    status.textContent = 'Waiting';
+                    task.textContent = '';
+                    break;
+                case FIBER_DONE:
+                    fiber.classList.add('done');
+                    status.textContent = 'Done';
+                    task.textContent = '✓';
+                    break;
+            }
+        }
+
+        // Add task to queue visualization
+        function addTaskToQueue(taskId, complexity) {
+            // Remove empty message if present
+            const empty = taskQueue.querySelector('.queue-empty');
+            if (empty) empty.remove();
+
+            const item = document.createElement('div');
+            item.className = 'task-item';
+            item.id = `queue-task-${taskId}`;
+            item.textContent = `#${taskId}`;
+            item.setAttribute('data-complexity', complexity);
+            taskQueue.appendChild(item);
+            
+            updateQueueCount();
+        }
+
+        // Remove task from queue
+        function removeTaskFromQueue(taskId) {
+            const item = document.getElementById(`queue-task-${taskId}`);
+            if (item) {
+                item.classList.add('removing');
+                setTimeout(() => {
+                    item.remove();
+                    updateQueueCount();
+                    
+                    // Add empty message if queue is empty
+                    if (taskQueue.children.length === 0) {
+                        taskQueue.innerHTML = '<span class="queue-empty">Queue is empty</span>';
+                    }
+                }, 300);
+            }
+        }
+
+        function updateQueueCount() {
+            const count = taskQueue.querySelectorAll('.task-item:not(.removing)').length;
+            queueCount.textContent = count;
+        }
+
+        // Mark task as completed
+        function taskCompleted(taskId, workerId) {
+            const item = document.createElement('div');
+            item.className = 'completed-item';
+            item.innerHTML = `
+                <span class="task-num">#${taskId}</span>
+                <span class="worker-badge">W${workerId}</span>
+            `;
+            completedGrid.appendChild(item);
+        }
+
+        // Update progress
+        function setProgress(completed, total) {
+            totalTasks = total;
+            const percent = total > 0 ? (completed / total) * 100 : 0;
+            progressFill.style.width = percent + '%';
+            progressText.textContent = `${completed} / ${total} tasks`;
+        }
+
+        // Log message
+        function logMessage(msg) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            if (msg.includes('Producer')) {
+                entry.classList.add('producer');
+            } else if (msg.includes('Worker')) {
+                entry.classList.add('worker');
+            } else {
+                entry.classList.add('system');
+            }
+            
+            entry.textContent = msg;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Workflow complete
+        function workflowComplete() {
+            isRunning = false;
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 Run Again';
+        }
+
+        // Reset UI
+        function resetUI(numWorkers) {
+            createFiberCards(numWorkers);
+            taskQueue.innerHTML = '<span class="queue-empty">Queue is empty</span>';
+            queueCount.textContent = '0';
+            completedGrid.innerHTML = '';
+            logContainer.innerHTML = '';
+            setProgress(0, 0);
+        }
+
+        // Initialize
+        createFiberCards(3);
+
+        let stepInterval = null;
+
+        Module.onRuntimeInitialized = () => {
+            console.log("Cortex Fiber Runtime Ready!");
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 Start Workflow';
+
+            startBtn.onclick = async () => {
+                if (isRunning) return;
+
+                const numTasks = parseInt(document.getElementById('numTasks').value) || 8;
+                const numWorkers = parseInt(document.getElementById('numWorkers').value) || 3;
+
+                isRunning = true;
+                startBtn.disabled = true;
+                startBtn.textContent = 'Running...';
+
+                resetUI(numWorkers);
+                setProgress(0, numTasks);
+
+                // Start workflow
+                await Module.ccall('start_workflow', null, 
+                    ['number', 'number'], [numTasks, numWorkers], 
+                    { async: true });
+
+                // Step through the workflow with visible delays
+                stepInterval = setInterval(async () => {
+                    if (Module.ccall('is_workflow_done', 'number', [], []) === 1) {
+                        clearInterval(stepInterval);
+                        stepInterval = null;
+                        return;
+                    }
+                    await Module.ccall('step_workflow', null, [], [], { async: true });
+                }, 250);  // 250ms between each step - slower, more visible!
+            };
+
+            // Preview fiber count
+            document.getElementById('numWorkers').addEventListener('change', () => {
+                if (!isRunning) {
+                    const n = parseInt(document.getElementById('numWorkers').value) || 3;
+                    createFiberCards(n);
+                }
+            });
+        };
+    </script>
+</body>
+</html>

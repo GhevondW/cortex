@@ -480,3 +480,90 @@ TEST(TinyFiberComplexTest, SchedulerConfig) {
 
     EXPECT_TRUE(executed);
 }
+
+// ============================================================================
+// Step-based Scheduler Tests (for WASM integration)
+// ============================================================================
+
+TEST(TinyFiberStepTest, BasicStep) {
+    std::vector<int> sequence;
+
+    auto scheduler = tf::Scheduler::Create([&sequence] {
+        sequence.push_back(1);
+        tf::Yield();
+        sequence.push_back(2);
+        tf::Yield();
+        sequence.push_back(3);
+    });
+
+    EXPECT_FALSE(scheduler.IsDone());
+
+    // Step through
+    while (scheduler.Step()) {
+        // Each step runs until yield
+    }
+
+    EXPECT_TRUE(scheduler.IsDone());
+    std::vector<int> expected = {1, 2, 3};
+    EXPECT_EQ(sequence, expected);
+}
+
+TEST(TinyFiberStepTest, MultipleFibers) {
+    int counter = 0;
+
+    auto scheduler = tf::Scheduler::Create([&counter] {
+        auto f1 = tf::Spawn([&counter] {
+            counter++;
+            tf::Yield();
+            counter++;
+        });
+
+        auto f2 = tf::Spawn([&counter] {
+            counter++;
+            tf::Yield();
+            counter++;
+        });
+
+        f1.Wait();
+        f2.Wait();
+    });
+
+    int steps = 0;
+    while (!scheduler.IsDone()) {
+        scheduler.Step();
+        steps++;
+    }
+
+    EXPECT_EQ(counter, 4);
+    EXPECT_GT(steps, 1); // Should take multiple steps
+}
+
+TEST(TinyFiberStepTest, StepWithMutex) {
+    int value = 0;
+
+    auto scheduler = tf::Scheduler::Create([&value] {
+        tf::Mutex mutex;
+
+        auto f1 = tf::Spawn([&value, &mutex] {
+            auto guard = tf::Lock(mutex);
+            value = 1;
+            tf::Yield();
+            value = 2;
+        });
+
+        auto f2 = tf::Spawn([&value, &mutex] {
+            auto guard = tf::Lock(mutex);
+            value = 3;
+        });
+
+        f1.Wait();
+        f2.Wait();
+    });
+
+    while (!scheduler.IsDone()) {
+        scheduler.Step();
+    }
+
+    // f2 should run after f1 completes due to mutex
+    EXPECT_EQ(value, 3);
+}

@@ -20,6 +20,79 @@ Scheduler& Scheduler::Current() {
 Scheduler::Scheduler(Config config)
     : config_(std::move(config)) {}
 
+Scheduler::Scheduler(Scheduler&& other) noexcept
+    : config_(std::move(other.config_))
+    , running_(other.running_)
+    , next_fiber_id_(other.next_fiber_id_)
+    , current_fiber_(other.current_fiber_)
+    , ready_queue_(std::move(other.ready_queue_))
+    , fibers_(std::move(other.fibers_)) {
+    other.running_ = false;
+    other.current_fiber_ = nullptr;
+}
+
+Scheduler& Scheduler::operator=(Scheduler&& other) noexcept {
+    if (this != &other) {
+        config_ = std::move(other.config_);
+        running_ = other.running_;
+        next_fiber_id_ = other.next_fiber_id_;
+        current_fiber_ = other.current_fiber_;
+        ready_queue_ = std::move(other.ready_queue_);
+        fibers_ = std::move(other.fibers_);
+        other.running_ = false;
+        other.current_fiber_ = nullptr;
+    }
+    return *this;
+}
+
+bool Scheduler::Step() {
+    if (ready_queue_.empty()) {
+        if (running_) {
+            running_ = false;
+            g_current_scheduler = nullptr;
+        }
+        return false;
+    }
+
+    // Always set as current scheduler (handles moved schedulers)
+    running_ = true;
+    g_current_scheduler = this;
+
+    current_fiber_ = ready_queue_.front();
+    ready_queue_.pop_front();
+
+    assert(current_fiber_);
+    current_fiber_->SetState(detail::FiberState::Running);
+
+    try {
+        current_fiber_->Resume();
+    } catch (...) {
+        current_fiber_->SetException(std::current_exception());
+    }
+
+    if (current_fiber_->IsDone()) {
+        current_fiber_->SetSuspendContext(nullptr);
+        current_fiber_->SetState(detail::FiberState::Finished);
+
+        auto waiters = current_fiber_->TakeWaiters();
+        for (auto* waiter : waiters) {
+            if (waiter && waiter->GetState() == detail::FiberState::Suspended) {
+                Schedule(waiter);
+            }
+        }
+    }
+
+    current_fiber_ = nullptr;
+
+    // Return true if there's more work
+    bool has_more = !ready_queue_.empty();
+    if (!has_more) {
+        running_ = false;
+        g_current_scheduler = nullptr;
+    }
+    return has_more;
+}
+
 void Scheduler::RunLoop() {
     assert(!running_);
     assert(g_current_scheduler == nullptr);

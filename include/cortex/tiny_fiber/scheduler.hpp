@@ -21,6 +21,10 @@ namespace cortex::tiny_fiber {
  *
  * The scheduler maintains a ready queue of fibers and runs them
  * one at a time until all fibers complete.
+ *
+ * Two modes of operation:
+ * 1. `Run()` - blocks until all fibers complete (simple usage)
+ * 2. `Create()` + `Step()` - manual stepping for WASM/async integration
  */
 class Scheduler {
 public:
@@ -53,6 +57,24 @@ public:
     static void Run(F&& entry, Config config);
 
     /**
+     * @brief Create a scheduler for manual stepping (WASM/async integration).
+     *
+     * Use Step() to advance the scheduler one fiber at a time.
+     * This allows yielding back to JS event loop between fiber switches.
+     *
+     * @param entry The function to run in the initial fiber.
+     * @return A Scheduler instance to step through.
+     */
+    template <typename F>
+    static Scheduler Create(F&& entry);
+
+    /**
+     * @brief Create a scheduler for manual stepping with custom config.
+     */
+    template <typename F>
+    static Scheduler Create(F&& entry, Config config);
+
+    /**
      * @brief Get the current scheduler.
      *
      * Must be called from within a fiber.
@@ -64,6 +86,26 @@ public:
 
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
+    Scheduler(Scheduler&& other) noexcept;
+    Scheduler& operator=(Scheduler&& other) noexcept;
+    ~Scheduler() = default;
+
+    /**
+     * @brief Run one step of the scheduler.
+     *
+     * Picks one ready fiber and runs it until it yields or completes.
+     * Use this for WASM integration with JS event loop.
+     *
+     * @return true if there's more work to do, false if all fibers are done.
+     */
+    bool Step();
+
+    /**
+     * @brief Check if all fibers have completed.
+     */
+    [[nodiscard]] bool IsDone() const noexcept {
+        return ready_queue_.empty() && !current_fiber_;
+    }
 
     /**
      * @brief Get the default stack size for new fibers.
@@ -143,6 +185,19 @@ void Scheduler::Run(F&& entry, Config config) {
     Scheduler scheduler(std::move(config));
     scheduler.SpawnFiberInternal(std::forward<F>(entry), scheduler.config_.default_stack_size);
     scheduler.RunLoop();
+}
+
+template <typename F>
+Scheduler Scheduler::Create(F&& entry) {
+    return Create(std::forward<F>(entry), Config {});
+}
+
+template <typename F>
+Scheduler Scheduler::Create(F&& entry, Config config) {
+    Scheduler scheduler(std::move(config));
+    scheduler.SpawnFiberInternal(std::forward<F>(entry), scheduler.config_.default_stack_size);
+    // Don't set running_ here - Step() will handle it
+    return scheduler;
 }
 
 } // namespace cortex::tiny_fiber
