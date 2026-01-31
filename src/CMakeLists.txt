@@ -6,12 +6,22 @@ else ()
     set(CORTEX_COROUTINE_SRC detail/coroutine_native_impl.cpp)
 endif()
 
+# tiny_fiber sources
+set(CORTEX_TINY_FIBER_SRC
+    tiny_fiber/fiber.cpp
+    tiny_fiber/scheduler.cpp
+    tiny_fiber/yield.cpp
+    tiny_fiber/mutex.cpp
+    tiny_fiber/condition_variable.cpp
+)
+
 target_sources(cortex
         PRIVATE
         base_coroutine.cpp
         coroutine.cpp
         memory_resource.cpp
         ${CORTEX_COROUTINE_SRC}
+        ${CORTEX_TINY_FIBER_SRC}
 )
 
 # Includes

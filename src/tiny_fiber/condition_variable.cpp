@@ -1,0 +1,63 @@
+#include <cortex/tiny_fiber/condition_variable.hpp>
+#include <cortex/tiny_fiber/scheduler.hpp>
+
+#include <cassert>
+#include <stdexcept>
+
+namespace cortex::tiny_fiber {
+
+ConditionVariable::~ConditionVariable() {
+    // Should not be destroyed with waiters
+    assert(waiters_.empty());
+}
+
+void ConditionVariable::Wait(Mutex::Guard& guard) {
+    if (!guard.mutex_) {
+        throw std::logic_error("ConditionVariable::Wait() called with invalid guard");
+    }
+
+    auto& scheduler = Scheduler::Current();
+    auto* current = scheduler.GetCurrentFiber();
+
+    if (!current) {
+        throw std::logic_error("ConditionVariable::Wait() must be called from within a fiber");
+    }
+
+    // Add to wait queue
+    waiters_.push_back(current);
+
+    // Unlock mutex while waiting
+    guard.mutex_->Unlock();
+
+    // Suspend until notified
+    scheduler.SuspendCurrent();
+
+    // Re-lock mutex after waking up
+    guard.mutex_->Lock();
+}
+
+void ConditionVariable::NotifyOne() {
+    if (waiters_.empty()) {
+        return;
+    }
+
+    auto& scheduler = Scheduler::Current();
+    auto* waiter = waiters_.front();
+    waiters_.pop_front();
+    scheduler.Schedule(waiter);
+}
+
+void ConditionVariable::NotifyAll() {
+    if (waiters_.empty()) {
+        return;
+    }
+
+    auto& scheduler = Scheduler::Current();
+    while (!waiters_.empty()) {
+        auto* waiter = waiters_.front();
+        waiters_.pop_front();
+        scheduler.Schedule(waiter);
+    }
+}
+
+} // namespace cortex::tiny_fiber
