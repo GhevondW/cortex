@@ -32,7 +32,7 @@ private:
     bool is_done_ {false};
     bool is_unwinding_ {false};
     std::size_t stack_size_bytes_;
-    std::exception_ptr exception_ptr_;
+    std::exception_ptr exception_ptr_ {nullptr};
     MemoryResourceSharedPtr resource_;
     void* c_stack_ {nullptr};
     void* asyncify_stack_ {nullptr};

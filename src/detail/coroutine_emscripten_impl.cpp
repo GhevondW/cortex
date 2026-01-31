@@ -171,7 +171,9 @@ void CoroutineImpl::Resume() {
     running_fiber = back_f;
 
     if (exception_ptr_) {
-        std::rethrow_exception(exception_ptr_);
+        auto ex = exception_ptr_;
+        exception_ptr_ = nullptr;
+        std::rethrow_exception(ex);
     }
 }
 
