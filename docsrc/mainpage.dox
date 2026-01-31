@@ -9,6 +9,7 @@ works across native and WASM builds through a unified API.
 @section highlights Highlights
 - Stackful coroutines with a simple @c Resume / @c Suspend model
 - Unified API for native (Boost.Context) and WASM (Emscripten fibers)
+- @b tiny_fiber module for cooperative multitasking (Scheduler, Future, Mutex, ConditionVariable)
 - Custom memory resource support for stack allocation
 - Designed for deterministic, cooperative control flow
 
@@ -24,6 +25,35 @@ auto co = cortex::Coroutine::Make([](cortex::CoroutineSuspendContext& ctx) {
 
 co.Resume();
 co.Resume();
+@endcode
+
+@section tinyfiber tiny_fiber Module
+Higher-level cooperative multitasking built on Coroutine:
+@code
+#include <cortex/tiny_fiber/tiny_fiber.hpp>
+namespace tf = cortex::tiny_fiber;
+
+tf::Scheduler::Run([] {
+    auto future = tf::Spawn([] {
+        tf::Yield();  // Cooperative yield
+        return 42;
+    });
+    
+    tf::Yield();
+    int result = future.Get();  // Wait and get result
+});
+@endcode
+
+For WASM integration with JS event loop:
+@code
+auto scheduler = tf::Scheduler::Create([]{
+    // Spawn fibers, use Mutex, ConditionVariable, etc.
+});
+
+// Called from JS via setInterval
+while (!scheduler.IsDone()) {
+    scheduler.Step();  // Run one fiber until yield
+}
 @endcode
 
 @section generator Generator Example
@@ -46,6 +76,10 @@ while (gen.Next()) {
 - @ref cortex::Coroutine "Coroutine": low-level stackful coroutine
 - @ref cortex::BaseCoroutine "BaseCoroutine": OO wrapper for coroutines
 - @ref cortex::Generator "Generator": yield values across resumes
+- @b cortex::tiny_fiber::Scheduler: fiber scheduler with step-based API
+- @b cortex::tiny_fiber::Future: async result handling
+- @b cortex::tiny_fiber::Mutex: cooperative mutex (no threads!)
+- @b cortex::tiny_fiber::ConditionVariable: cooperative condition variable
 
 @section resources Resources
 - Live demos: https://GhevondW.github.io/cortex/
