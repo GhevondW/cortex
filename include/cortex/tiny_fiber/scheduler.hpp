@@ -88,7 +88,7 @@ public:
     Scheduler& operator=(const Scheduler&) = delete;
     Scheduler(Scheduler&& other) noexcept;
     Scheduler& operator=(Scheduler&& other) noexcept;
-    ~Scheduler() = default;
+    ~Scheduler();
 
     /**
      * @brief Run one step of the scheduler.
@@ -127,6 +127,23 @@ public:
     [[nodiscard]] bool IsRunning() const noexcept {
         return running_;
     }
+
+    /**
+     * @brief Check if the scheduler is stopping (being destroyed).
+     *
+     * Fibers can check this to exit gracefully during shutdown.
+     */
+    [[nodiscard]] bool IsStopping() const noexcept {
+        return stopping_;
+    }
+
+    /**
+     * @brief Signal all fibers to stop and wake suspended ones.
+     *
+     * Called automatically during destruction, but can be called
+     * manually to initiate graceful shutdown.
+     */
+    void Stop();
 
     // Internal API - used by Spawn template function
     // Not intended for direct use
@@ -168,6 +185,7 @@ private:
 private:
     Config config_;
     bool running_ {false};
+    bool stopping_ {false};
     detail::Fiber::Id next_fiber_id_ {1};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;

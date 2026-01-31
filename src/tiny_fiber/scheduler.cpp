@@ -20,14 +20,66 @@ Scheduler& Scheduler::Current() {
 Scheduler::Scheduler(Config config)
     : config_(std::move(config)) {}
 
+Scheduler::~Scheduler() {
+    // Signal stop and let fibers exit gracefully
+    if (!stopping_) {
+        Stop();
+    }
+
+    // Set ourselves as current scheduler during final cleanup
+    g_current_scheduler = this;
+
+    // Run remaining fibers to let them handle the stopping signal
+    // They should catch SchedulerStoppingError and exit
+    while (!ready_queue_.empty()) {
+        current_fiber_ = ready_queue_.front();
+        ready_queue_.pop_front();
+
+        if (current_fiber_ && !current_fiber_->IsDone()) {
+            try {
+                current_fiber_->Resume();
+            } catch (...) {
+                // Ignore exceptions during shutdown
+            }
+        }
+        current_fiber_ = nullptr;
+    }
+
+    // Clear remaining state
+    running_ = false;
+
+    // Explicitly clear fibers (triggers forced unwinding for any that didn't exit)
+    fibers_.clear();
+
+    // Now clear the global scheduler pointer
+    g_current_scheduler = nullptr;
+}
+
+void Scheduler::Stop() {
+    if (stopping_) {
+        return; // Already stopping
+    }
+
+    stopping_ = true;
+
+    // Wake up all suspended fibers so they can exit gracefully
+    for (auto& [id, fiber] : fibers_) {
+        if (fiber && fiber->GetState() == detail::FiberState::Suspended) {
+            Schedule(fiber.get());
+        }
+    }
+}
+
 Scheduler::Scheduler(Scheduler&& other) noexcept
     : config_(std::move(other.config_))
     , running_(other.running_)
+    , stopping_(other.stopping_)
     , next_fiber_id_(other.next_fiber_id_)
     , current_fiber_(other.current_fiber_)
     , ready_queue_(std::move(other.ready_queue_))
     , fibers_(std::move(other.fibers_)) {
     other.running_ = false;
+    other.stopping_ = false;
     other.current_fiber_ = nullptr;
 }
 
@@ -35,11 +87,13 @@ Scheduler& Scheduler::operator=(Scheduler&& other) noexcept {
     if (this != &other) {
         config_ = std::move(other.config_);
         running_ = other.running_;
+        stopping_ = other.stopping_;
         next_fiber_id_ = other.next_fiber_id_;
         current_fiber_ = other.current_fiber_;
         ready_queue_ = std::move(other.ready_queue_);
         fibers_ = std::move(other.fibers_);
         other.running_ = false;
+        other.stopping_ = false;
         other.current_fiber_ = nullptr;
     }
     return *this;
