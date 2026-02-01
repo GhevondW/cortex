@@ -739,3 +739,34 @@ TEST(TinyFiberCleanupTest, IsStoppingCheck) {
 
     EXPECT_TRUE(checked_stopping);
 }
+
+TEST(TinyFiberCleanupTest, FibersReleasedAfterCompletion) {
+    // Test that completed fibers are cleaned up and memory is released
+    static int destructor_count = 0;
+    destructor_count = 0;
+
+    struct TrackDestruction {
+        ~TrackDestruction() {
+            destructor_count++;
+        }
+    };
+
+    tf::Scheduler::Run([&] {
+        // Spawn several fibers that hold resources
+        for (int i = 0; i < 5; i++) {
+            auto tracker = std::make_shared<TrackDestruction>();
+            auto future = tf::Spawn([tracker] {
+                // Fiber does some work
+                tf::Yield();
+            });
+            future.Wait();
+        }
+
+        // After waiting, the fibers should have been cleaned up
+        // Note: cleanup happens at the start of next iteration, so we yield once more
+        tf::Yield();
+    });
+
+    // All trackers should be destroyed (fibers cleaned up)
+    EXPECT_EQ(destructor_count, 5);
+}

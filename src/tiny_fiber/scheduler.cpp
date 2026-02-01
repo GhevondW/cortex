@@ -76,13 +76,24 @@ Scheduler::Scheduler(Scheduler&& other) noexcept
     , stopping_(other.stopping_)
     , current_fiber_(other.current_fiber_)
     , ready_queue_(std::move(other.ready_queue_))
-    , fibers_(std::move(other.fibers_)) {
+    , fibers_(std::move(other.fibers_))
+    , pending_cleanup_(std::move(other.pending_cleanup_)) {
     other.running_ = false;
     other.stopping_ = false;
     other.current_fiber_ = nullptr;
 }
 
+void Scheduler::ProcessPendingCleanup() {
+    for (auto id : pending_cleanup_) {
+        fibers_.erase(id);
+    }
+    pending_cleanup_.clear();
+}
+
 bool Scheduler::Step() {
+    // Clean up finished fibers from previous iteration
+    ProcessPendingCleanup();
+
     if (ready_queue_.empty()) {
         if (running_) {
             running_ = false;
@@ -117,6 +128,9 @@ bool Scheduler::Step() {
                 Schedule(waiter);
             }
         }
+
+        // Schedule fiber for cleanup (will be deleted at start of next iteration)
+        pending_cleanup_.push_back(current_fiber_->GetId());
     }
 
     current_fiber_ = nullptr;
@@ -138,6 +152,9 @@ void Scheduler::RunLoop() {
     g_current_scheduler = this;
 
     while (!ready_queue_.empty()) {
+        // Clean up finished fibers from previous iteration
+        ProcessPendingCleanup();
+
         current_fiber_ = ready_queue_.front();
         ready_queue_.pop_front();
 
@@ -162,10 +179,16 @@ void Scheduler::RunLoop() {
                     Schedule(waiter);
                 }
             }
+
+            // Schedule fiber for cleanup (will be deleted at start of next iteration)
+            pending_cleanup_.push_back(current_fiber_->GetId());
         }
 
         current_fiber_ = nullptr;
     }
+
+    // Final cleanup
+    ProcessPendingCleanup();
 
     running_ = false;
     g_current_scheduler = nullptr;

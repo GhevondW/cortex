@@ -181,6 +181,9 @@ private:
     // Check if there are other ready fibers
     bool HasOtherReadyFibers() const;
 
+    // Process pending fiber cleanup
+    void ProcessPendingCleanup();
+
 private:
     Config config_;
     bool running_ {false};
@@ -188,6 +191,7 @@ private:
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;
+    std::vector<detail::Fiber::Id> pending_cleanup_;
 };
 
 // Template implementations

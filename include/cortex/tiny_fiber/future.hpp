@@ -25,12 +25,14 @@ template <typename T>
 struct FutureState {
     Fiber::Id fiber_id {0};
     std::optional<T> result;
+    std::exception_ptr exception;
     bool retrieved {false};
 };
 
 template <>
 struct FutureState<void> {
     Fiber::Id fiber_id {0};
+    std::exception_ptr exception;
     bool retrieved {false};
 };
 
@@ -105,10 +107,9 @@ public:
         WaitImpl();
         state_->retrieved = true;
 
-        // Check for exception
-        auto* fiber = scheduler_->GetFiber(state_->fiber_id);
-        if (fiber && fiber->HasException()) {
-            std::rethrow_exception(fiber->GetException());
+        // Check for exception (stored in state for safety after fiber cleanup)
+        if (state_->exception) {
+            std::rethrow_exception(state_->exception);
         }
 
         if (!state_->result.has_value()) {
@@ -152,6 +153,7 @@ private:
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
+            // Fiber already done or cleaned up, exception already in state
             return;
         }
 
@@ -161,12 +163,7 @@ private:
             fiber->AddWaiter(current);
             scheduler_->SuspendCurrent();
         }
-
-        // Check for exception after waiting
-        fiber = scheduler_->GetFiber(state_->fiber_id);
-        if (fiber && fiber->HasException() && state_->retrieved) {
-            std::rethrow_exception(fiber->GetException());
-        }
+        // Exception is stored in state by Spawn wrapper, no need to copy here
     }
 
     std::shared_ptr<detail::FutureState<T>> state_;
@@ -222,10 +219,9 @@ public:
         WaitImpl();
         state_->retrieved = true;
 
-        // Check for exception
-        auto* fiber = scheduler_->GetFiber(state_->fiber_id);
-        if (fiber && fiber->HasException()) {
-            std::rethrow_exception(fiber->GetException());
+        // Check for exception (stored in state for safety after fiber cleanup)
+        if (state_->exception) {
+            std::rethrow_exception(state_->exception);
         }
     }
 
@@ -263,6 +259,7 @@ private:
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
+            // Fiber already done or cleaned up, exception already in state
             return;
         }
 
@@ -271,6 +268,7 @@ private:
             fiber->AddWaiter(current);
             scheduler_->SuspendCurrent();
         }
+        // Exception is stored in state by Spawn wrapper, no need to copy here
     }
 
     std::shared_ptr<detail::FutureState<void>> state_;
@@ -293,15 +291,27 @@ auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> 
 
     if constexpr (std::is_void_v<ResultType>) {
         auto fiber_id = scheduler.SpawnFiberInternal(
-            [f = std::forward<F>(func)]() mutable {
-                f();
+            [state, f = std::forward<F>(func)]() mutable {
+                try {
+                    f();
+                } catch (...) {
+                    // Store exception in state immediately (fiber may be cleaned up later)
+                    state->exception = std::current_exception();
+                    throw; // Re-throw so scheduler knows fiber failed
+                }
             },
             stack_size);
         state->fiber_id = fiber_id;
     } else {
         auto fiber_id = scheduler.SpawnFiberInternal(
             [state, f = std::forward<F>(func)]() mutable {
-                state->result = f();
+                try {
+                    state->result = f();
+                } catch (...) {
+                    // Store exception in state immediately (fiber may be cleaned up later)
+                    state->exception = std::current_exception();
+                    throw;
+                }
             },
             stack_size);
         state->fiber_id = fiber_id;
