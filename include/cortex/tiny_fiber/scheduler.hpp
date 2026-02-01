@@ -4,7 +4,6 @@
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 
 #include <deque>
-#include <functional>
 #include <memory>
 #include <unordered_map>
 
@@ -87,8 +86,8 @@ public:
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
     Scheduler(Scheduler&& other) noexcept;
-    Scheduler& operator=(Scheduler&& other) noexcept;
-    ~Scheduler() = default;
+    Scheduler& operator=(Scheduler&& other) noexcept = delete;
+    ~Scheduler();
 
     /**
      * @brief Run one step of the scheduler.
@@ -128,9 +127,26 @@ public:
         return running_;
     }
 
+    /**
+     * @brief Check if the scheduler is stopping (being destroyed).
+     *
+     * Fibers can check this to exit gracefully during shutdown.
+     */
+    [[nodiscard]] bool IsStopping() const noexcept {
+        return stopping_;
+    }
+
+    /**
+     * @brief Signal all fibers to stop and wake suspended ones.
+     *
+     * Called automatically during destruction, but can be called
+     * manually to initiate graceful shutdown.
+     */
+    void Stop();
+
     // Internal API - used by Spawn template function
     // Not intended for direct use
-    detail::Fiber::Id SpawnFiberInternal(std::function<void()> func, std::size_t stack_size);
+    detail::Fiber::Id SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size);
 
 private:
     friend class detail::Fiber;
@@ -168,7 +184,7 @@ private:
 private:
     Config config_;
     bool running_ {false};
-    detail::Fiber::Id next_fiber_id_ {1};
+    bool stopping_ {false};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;

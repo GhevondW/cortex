@@ -14,6 +14,7 @@ namespace cortex::tiny_fiber {
  * Must be called from within a fiber.
  *
  * @throws std::logic_error if called outside of a fiber.
+ * @throws SchedulerStoppingError if the scheduler is stopping.
  */
 void Yield();
 
@@ -22,7 +23,18 @@ void Yield();
  *
  * @return true if yielded, false if no other fibers are ready.
  * @throws std::logic_error if called outside of a fiber.
+ * @throws SchedulerStoppingError if the scheduler is stopping.
  */
 bool YieldIfOthersReady();
+
+/**
+ * @brief Check if the current scheduler is stopping.
+ *
+ * Fibers can use this to exit gracefully during shutdown.
+ *
+ * @return true if the scheduler is stopping, false otherwise.
+ * @throws std::logic_error if called outside of a fiber.
+ */
+bool IsStopping();
 
 } // namespace cortex::tiny_fiber

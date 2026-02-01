@@ -6,6 +6,7 @@
  */
 
 #include <cortex/tiny_fiber/condition_variable.hpp>
+#include <cortex/tiny_fiber/errors/scheduler_stopping_error.hpp>
 #include <cortex/tiny_fiber/future.hpp>
 #include <cortex/tiny_fiber/mutex.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>

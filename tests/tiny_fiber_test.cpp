@@ -567,3 +567,175 @@ TEST(TinyFiberStepTest, StepWithMutex) {
     // f2 should run after f1 completes due to mutex
     EXPECT_EQ(value, 3);
 }
+
+// ============================================================================
+// Cleanup/Resource Management Tests
+// ============================================================================
+
+TEST(TinyFiberCleanupTest, SchedulerDestroyedWithIncompleteFibers) {
+    // Test that scheduler destruction with incomplete fibers doesn't crash or leak
+    int counter = 0;
+
+    {
+        auto scheduler = tf::Scheduler::Create([&counter] {
+            // Spawn a fiber that will yield forever
+            auto f1 = tf::Spawn([&counter] {
+                counter++;
+                while (true) {
+                    tf::Yield();
+                    counter++;
+                }
+            });
+
+            // Don't wait for f1 - let it be incomplete
+            tf::Yield();
+            counter++;
+        });
+
+        // Run only a few steps, leaving fibers incomplete
+        scheduler.Step();
+        scheduler.Step();
+        scheduler.Step();
+
+        // Scheduler goes out of scope with incomplete fibers
+        // This should not crash or leak memory
+    }
+
+    // Verify some work was done
+    EXPECT_GT(counter, 0);
+}
+
+TEST(TinyFiberCleanupTest, SchedulerDestroyedImmediately) {
+    // Test destroying scheduler without running any steps
+    {
+        auto scheduler = tf::Scheduler::Create([] {
+            tf::Spawn([] {
+                tf::Yield();
+                tf::Yield();
+            });
+        });
+        // Destroy immediately without stepping
+    }
+    // Should not crash
+    SUCCEED();
+}
+
+TEST(TinyFiberCleanupTest, SimpleIncompleteCleanup) {
+    // Very simple test - just verify cleanup of an incomplete scheduler
+    {
+        auto scheduler = tf::Scheduler::Create([] {
+            tf::Yield();
+            // This line never reached if scheduler is destroyed early
+        });
+
+        // Don't run any steps - destroy immediately
+    }
+    SUCCEED();
+}
+
+TEST(TinyFiberCleanupTest, FutureDestroyedBeforeCompletion) {
+    // Test that Future destructor handles incomplete fiber
+    {
+        auto scheduler = tf::Scheduler::Create([] {
+            {
+                auto future = tf::Spawn([] {
+                    tf::Yield();
+                    tf::Yield();
+                    return 42;
+                });
+
+                tf::Yield();
+                // Future goes out of scope before fiber completes
+                // Destructor should wait
+            }
+            // After this scope, future's fiber should be complete
+        });
+
+        while (!scheduler.IsDone()) {
+            scheduler.Step();
+        }
+    }
+    SUCCEED();
+}
+
+TEST(TinyFiberCleanupTest, GracefulShutdownWithStopSignal) {
+    // Test that fibers receive SchedulerStoppingError and can exit gracefully
+    bool fiber_caught_stop = false;
+    bool fiber_cleanup_ran = false;
+
+    {
+        auto scheduler = tf::Scheduler::Create([&] {
+            auto f1 = tf::Spawn([&] {
+                try {
+                    while (true) {
+                        tf::Yield();
+                    }
+                } catch (const tf::SchedulerStoppingError&) {
+                    fiber_caught_stop = true;
+                    fiber_cleanup_ran = true;
+                }
+            });
+
+            tf::Yield(); // Let f1 start
+            // Main fiber exits, scheduler will be destroyed
+        });
+
+        // Run a few steps
+        scheduler.Step();
+        scheduler.Step();
+        // Scheduler goes out of scope - should signal stop
+    }
+
+    EXPECT_TRUE(fiber_caught_stop);
+    EXPECT_TRUE(fiber_cleanup_ran);
+}
+
+TEST(TinyFiberCleanupTest, ManualStop) {
+    // Test manually calling Stop() before destruction
+    bool fiber_exited = false;
+
+    auto scheduler = tf::Scheduler::Create([&] {
+        try {
+            while (true) {
+                tf::Yield();
+            }
+        } catch (const tf::SchedulerStoppingError&) {
+            fiber_exited = true;
+        }
+    });
+
+    scheduler.Step(); // Start fiber
+    EXPECT_FALSE(fiber_exited);
+
+    scheduler.Stop(); // Signal stop
+
+    // Run to let fiber handle the stop signal
+    while (!scheduler.IsDone()) {
+        scheduler.Step();
+    }
+
+    EXPECT_TRUE(fiber_exited);
+}
+
+TEST(TinyFiberCleanupTest, IsStoppingCheck) {
+    // Test that IsStopping() works correctly
+    bool checked_stopping = false;
+
+    auto scheduler = tf::Scheduler::Create([&] {
+        while (!tf::IsStopping()) {
+            tf::Yield();
+        }
+        checked_stopping = true;
+    });
+
+    scheduler.Step();
+    EXPECT_FALSE(checked_stopping);
+
+    scheduler.Stop();
+
+    while (!scheduler.IsDone()) {
+        scheduler.Step();
+    }
+
+    EXPECT_TRUE(checked_stopping);
+}

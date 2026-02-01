@@ -2,15 +2,29 @@
 
 #include <cassert>
 #include <stdexcept>
+#include <utility>
 
 namespace cortex::tiny_fiber::detail {
 
-Fiber::Fiber(Id id, Coroutine coroutine)
-    : id_(id)
-    , coroutine_(std::move(coroutine)) {}
+std::unique_ptr<Fiber> Fiber::Make(Body body, std::size_t stack_size, MemoryResourceSharedPtr resource) {
+    static Id g_fiber_id = 1;
+    return std::make_unique<Fiber>(PrivateTag {}, g_fiber_id++, std::move(body), stack_size, std::move(resource));
+}
 
-void Fiber::Resume() {
-    coroutine_.Resume();
+Fiber::Fiber(PrivateTag, Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource)
+    : BaseCoroutine(stack_size, std::move(resource))
+    , id_(id)
+    , body_(std::move(body)) {}
+
+void Fiber::Continuation(CoroutineSuspendContext& ctx) {
+    // Store suspend context so Yield() can use it
+    suspend_ctx_ = &ctx;
+
+    // Execute the user's function
+    body_();
+
+    // Clear context when done
+    suspend_ctx_ = nullptr;
 }
 
 void Fiber::Suspend() {
