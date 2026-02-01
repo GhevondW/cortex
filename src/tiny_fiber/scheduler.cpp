@@ -188,7 +188,7 @@ void Scheduler::RunLoop() {
     g_current_scheduler = nullptr;
 }
 
-detail::Fiber::Id Scheduler::SpawnFiberInternal(std::function<void()> func, std::size_t stack_size) {
+detail::Fiber::Id Scheduler::SpawnFiberInternal(fu2::unique_function<void()> func, std::size_t stack_size) {
     auto id = next_fiber_id_++;
 
     // We need to capture the fiber pointer, but it doesn't exist yet.
@@ -196,7 +196,7 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(std::function<void()> func, std:
     auto fiber_ptr_holder = std::make_shared<detail::Fiber*>(nullptr);
 
     auto coroutine = Coroutine::Make(
-        [fiber_ptr_holder, f = std::move(func)](CoroutineSuspendContext& ctx) {
+        [fiber_ptr_holder, f = std::move(func)](CoroutineSuspendContext& ctx) mutable {
             // Set the suspend context so Yield() can use it
             if (*fiber_ptr_holder) {
                 (*fiber_ptr_holder)->SetSuspendContext(&ctx);
@@ -206,7 +206,7 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(std::function<void()> func, std:
         stack_size,
         config_.memory_resource);
 
-    auto fiber = std::make_unique<detail::Fiber>(id, std::move(coroutine));
+    auto fiber = detail::Fiber::Make(id, std::move(coroutine));
     auto* fiber_raw_ptr = fiber.get();
     *fiber_ptr_holder = fiber_raw_ptr;
 

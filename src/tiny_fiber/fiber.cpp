@@ -5,7 +5,7 @@
 
 namespace cortex::tiny_fiber::detail {
 
-Fiber::Fiber(Id id, Coroutine coroutine)
+Fiber::Fiber(Id id, Coroutine coroutine, PrivateTag)
     : id_(id)
     , coroutine_(std::move(coroutine)) {}
 

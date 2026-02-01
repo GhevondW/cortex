@@ -29,28 +29,40 @@ enum class FiberState : std::uint8_t {
  * Wraps a cortex::Coroutine and tracks state for the scheduler.
  */
 class Fiber {
+private:
+    struct PrivateTag {};
+
 public:
     using Id = std::uint64_t;
 
-    Fiber(Id id, Coroutine coroutine);
+public:
+    Fiber(Id id, Coroutine coroutine, PrivateTag);
+
+    static auto Make(const Id id, Coroutine coroutine) {
+        return std::make_unique<Fiber>(id, std::move(coroutine), PrivateTag {});
+    }
 
     Fiber(const Fiber&) = delete;
     Fiber& operator=(const Fiber&) = delete;
-    Fiber(Fiber&&) = default;
-    Fiber& operator=(Fiber&&) = default;
+    Fiber(Fiber&&) noexcept = delete;
+    Fiber& operator=(Fiber&&) noexcept = delete;
 
     [[nodiscard]] Id GetId() const noexcept {
         return id_;
     }
+
     [[nodiscard]] FiberState GetState() const noexcept {
         return state_;
     }
+
     [[nodiscard]] bool IsDone() const noexcept {
         return coroutine_.IsDone();
     }
+
     [[nodiscard]] bool HasException() const noexcept {
         return exception_ != nullptr;
     }
+
     [[nodiscard]] std::exception_ptr GetException() const noexcept {
         return exception_;
     }
@@ -58,6 +70,7 @@ public:
     void SetState(FiberState state) noexcept {
         state_ = state;
     }
+
     void SetException(std::exception_ptr ex) noexcept {
         exception_ = std::move(ex);
     }
@@ -68,6 +81,7 @@ public:
     void SetSuspendContext(CoroutineSuspendContext* ctx) noexcept {
         suspend_ctx_ = ctx;
     }
+
     [[nodiscard]] CoroutineSuspendContext* GetSuspendContext() const noexcept {
         return suspend_ctx_;
     }
@@ -77,6 +91,7 @@ public:
 
     // Fibers waiting for this fiber to complete
     void AddWaiter(Fiber* waiter);
+
     std::deque<Fiber*> TakeWaiters();
 
 private:

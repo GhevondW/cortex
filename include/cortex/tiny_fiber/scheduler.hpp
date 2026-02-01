@@ -8,6 +8,8 @@
 #include <memory>
 #include <unordered_map>
 
+#include <function2/function2.hpp>
+
 /**
  * @file scheduler.hpp
  * @brief Cooperative fiber scheduler for tiny_fiber.
@@ -147,7 +149,7 @@ public:
 
     // Internal API - used by Spawn template function
     // Not intended for direct use
-    detail::Fiber::Id SpawnFiberInternal(std::function<void()> func, std::size_t stack_size);
+    detail::Fiber::Id SpawnFiberInternal(fu2::unique_function<void()> func, std::size_t stack_size);
 
 private:
     friend class detail::Fiber;
