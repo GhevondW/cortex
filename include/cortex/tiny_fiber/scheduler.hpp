@@ -4,11 +4,8 @@
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 
 #include <deque>
-#include <functional>
 #include <memory>
 #include <unordered_map>
-
-#include <function2/function2.hpp>
 
 /**
  * @file scheduler.hpp
@@ -89,7 +86,7 @@ public:
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
     Scheduler(Scheduler&& other) noexcept;
-    Scheduler& operator=(Scheduler&& other) noexcept;
+    Scheduler& operator=(Scheduler&& other) noexcept = delete;
     ~Scheduler();
 
     /**
@@ -149,7 +146,7 @@ public:
 
     // Internal API - used by Spawn template function
     // Not intended for direct use
-    detail::Fiber::Id SpawnFiberInternal(fu2::unique_function<void()> func, std::size_t stack_size);
+    detail::Fiber::Id SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size);
 
 private:
     friend class detail::Fiber;
@@ -188,7 +185,6 @@ private:
     Config config_;
     bool running_ {false};
     bool stopping_ {false};
-    detail::Fiber::Id next_fiber_id_ {1};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;

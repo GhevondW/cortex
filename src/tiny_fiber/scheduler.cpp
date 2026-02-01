@@ -74,29 +74,12 @@ Scheduler::Scheduler(Scheduler&& other) noexcept
     : config_(std::move(other.config_))
     , running_(other.running_)
     , stopping_(other.stopping_)
-    , next_fiber_id_(other.next_fiber_id_)
     , current_fiber_(other.current_fiber_)
     , ready_queue_(std::move(other.ready_queue_))
     , fibers_(std::move(other.fibers_)) {
     other.running_ = false;
     other.stopping_ = false;
     other.current_fiber_ = nullptr;
-}
-
-Scheduler& Scheduler::operator=(Scheduler&& other) noexcept {
-    if (this != &other) {
-        config_ = std::move(other.config_);
-        running_ = other.running_;
-        stopping_ = other.stopping_;
-        next_fiber_id_ = other.next_fiber_id_;
-        current_fiber_ = other.current_fiber_;
-        ready_queue_ = std::move(other.ready_queue_);
-        fibers_ = std::move(other.fibers_);
-        other.running_ = false;
-        other.stopping_ = false;
-        other.current_fiber_ = nullptr;
-    }
-    return *this;
 }
 
 bool Scheduler::Step() {
@@ -188,27 +171,10 @@ void Scheduler::RunLoop() {
     g_current_scheduler = nullptr;
 }
 
-detail::Fiber::Id Scheduler::SpawnFiberInternal(fu2::unique_function<void()> func, std::size_t stack_size) {
-    auto id = next_fiber_id_++;
-
-    // We need to capture the fiber pointer, but it doesn't exist yet.
-    // Use a shared_ptr to a pointer that we'll fill in after creating the fiber.
-    auto fiber_ptr_holder = std::make_shared<detail::Fiber*>(nullptr);
-
-    auto coroutine = Coroutine::Make(
-        [fiber_ptr_holder, f = std::move(func)](CoroutineSuspendContext& ctx) mutable {
-            // Set the suspend context so Yield() can use it
-            if (*fiber_ptr_holder) {
-                (*fiber_ptr_holder)->SetSuspendContext(&ctx);
-            }
-            f();
-        },
-        stack_size,
-        config_.memory_resource);
-
-    auto fiber = detail::Fiber::Make(id, std::move(coroutine));
+detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size) {
+    auto fiber = detail::Fiber::Make(std::move(func), stack_size, config_.memory_resource);
+    const auto id = fiber->GetId();
     auto* fiber_raw_ptr = fiber.get();
-    *fiber_ptr_holder = fiber_raw_ptr;
 
     fibers_[id] = std::move(fiber);
     Schedule(fiber_raw_ptr);
