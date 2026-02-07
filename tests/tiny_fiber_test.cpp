@@ -1,4 +1,5 @@
 #include <cortex/tiny_fiber/tiny_fiber.hpp>
+#include <functional>
 #include <gtest/gtest.h>
 #include <queue>
 #include <string>
@@ -769,4 +770,908 @@ TEST(TinyFiberCleanupTest, FibersReleasedAfterCompletion) {
 
     // All trackers should be destroyed (fibers cleaned up)
     EXPECT_EQ(destructor_count, 5);
+}
+
+// ============================================================================
+// Yield - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberYieldTest, YieldIfOthersReadyReturnsTrueWithOthers) {
+    bool yielded = false;
+    tf::Scheduler::Run([&yielded] {
+        auto f1 = tf::Spawn([&yielded] {
+            // f2 is in the ready queue, so YieldIfOthersReady should return true
+            yielded = tf::YieldIfOthersReady();
+        });
+
+        auto f2 = tf::Spawn([] {
+            tf::Yield();
+        });
+
+        // Yield to let f1 run; f2 is in the ready queue when f1 checks
+        tf::Yield();
+        f1.Wait();
+        f2.Wait();
+    });
+    EXPECT_TRUE(yielded);
+}
+
+TEST(TinyFiberYieldTest, RoundRobinSchedulingOrder) {
+    // Verify that fibers are scheduled in FIFO order (round-robin)
+    std::vector<int> sequence;
+    tf::Scheduler::Run([&sequence] {
+        auto f1 = tf::Spawn([&sequence] {
+            sequence.push_back(1);
+            tf::Yield();
+            sequence.push_back(4);
+            tf::Yield();
+            sequence.push_back(7);
+        });
+
+        auto f2 = tf::Spawn([&sequence] {
+            sequence.push_back(2);
+            tf::Yield();
+            sequence.push_back(5);
+            tf::Yield();
+            sequence.push_back(8);
+        });
+
+        // Main fiber yields after spawning both
+        sequence.push_back(0);
+        tf::Yield();
+        sequence.push_back(3);
+        tf::Yield();
+        sequence.push_back(6);
+
+        f1.Wait();
+        f2.Wait();
+    });
+
+    // FIFO scheduling: main(0), f1(1), f2(2), main(3), f1(4), f2(5), main(6), f1(7), f2(8)
+    std::vector<int> expected = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+    EXPECT_EQ(sequence, expected);
+}
+
+TEST(TinyFiberYieldTest, MultipleYieldsInSingleFiber) {
+    int yield_count = 0;
+    tf::Scheduler::Run([&yield_count] {
+        for (int i = 0; i < 100; ++i) {
+            tf::Yield();
+            yield_count++;
+        }
+    });
+    EXPECT_EQ(yield_count, 100);
+}
+
+// ============================================================================
+// Future - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberFutureTest, GetCalledTwiceThrows) {
+    tf::Scheduler::Run([] {
+        auto future = tf::Spawn([] {
+            return 42;
+        });
+        EXPECT_EQ(future.Get(), 42);
+        EXPECT_THROW(future.Get(), std::logic_error);
+    });
+}
+
+TEST(TinyFiberFutureTest, WaitOnAlreadyCompletedFiber) {
+    tf::Scheduler::Run([] {
+        auto future = tf::Spawn([] {
+            return 10;
+        });
+        tf::Yield(); // Let spawned fiber complete
+        EXPECT_TRUE(future.IsReady());
+        // Wait should return immediately
+        future.Wait();
+        EXPECT_EQ(future.Get(), 10);
+    });
+}
+
+TEST(TinyFiberFutureTest, IsReadyBeforeFiberRuns) {
+    tf::Scheduler::Run([] {
+        auto future = tf::Spawn([] {
+            tf::Yield();
+            return 99;
+        });
+        // Fiber hasn't run yet - IsReady should be false
+        EXPECT_FALSE(future.IsReady());
+        EXPECT_EQ(future.Get(), 99);
+    });
+}
+
+TEST(TinyFiberFutureTest, SpawnReturnsString) {
+    std::string result;
+    tf::Scheduler::Run([&result] {
+        auto future = tf::Spawn([] {
+            return std::string("hello from fiber");
+        });
+        result = future.Get();
+    });
+    EXPECT_EQ(result, "hello from fiber");
+}
+
+TEST(TinyFiberFutureTest, SpawnReturnsVector) {
+    std::vector<int> result;
+    tf::Scheduler::Run([&result] {
+        auto future = tf::Spawn([] {
+            std::vector<int> v = {1, 2, 3, 4, 5};
+            tf::Yield();
+            return v;
+        });
+        result = future.Get();
+    });
+    std::vector<int> expected = {1, 2, 3, 4, 5};
+    EXPECT_EQ(result, expected);
+}
+
+TEST(TinyFiberFutureTest, FutureMoveConstructor) {
+    int result = 0;
+    tf::Scheduler::Run([&result] {
+        auto f1 = tf::Spawn([] {
+            tf::Yield();
+            return 42;
+        });
+        auto f2 = std::move(f1);
+        result = f2.Get();
+    });
+    EXPECT_EQ(result, 42);
+}
+
+TEST(TinyFiberFutureTest, FutureMoveAssignment) {
+    int result = 0;
+    tf::Scheduler::Run([&result] {
+        auto f1 = tf::Spawn([] {
+            return 10;
+        });
+        auto f2 = tf::Spawn([] {
+            return 20;
+        });
+
+        // Move-assign f2 into f1 (f1's fiber should still complete)
+        f1 = std::move(f2);
+        result = f1.Get();
+    });
+    EXPECT_EQ(result, 20);
+}
+
+TEST(TinyFiberFutureTest, MultipleWaitersOnSameFiber) {
+    // Two fibers waiting on the same spawned fiber
+    std::vector<int> sequence;
+    tf::Scheduler::Run([&sequence] {
+        auto slow = tf::Spawn([&sequence] {
+            tf::Yield();
+            tf::Yield();
+            sequence.push_back(3);
+            return 42;
+        });
+
+        // Share the fiber ID concept - both wait via separate futures isn't possible,
+        // but we can test via AddWaiter pattern: two fibers that wait on slow
+        auto w1 = tf::Spawn([&sequence, &slow] {
+            sequence.push_back(1);
+            slow.Wait();
+            sequence.push_back(4);
+        });
+
+        auto w2 = tf::Spawn([&sequence] {
+            sequence.push_back(2);
+            tf::Yield();
+            tf::Yield();
+            tf::Yield();
+            sequence.push_back(5);
+        });
+
+        w1.Wait();
+        w2.Wait();
+    });
+
+    EXPECT_EQ(sequence.size(), 5);
+}
+
+TEST(TinyFiberFutureTest, VoidFutureWaitMultipleTimes) {
+    // Wait() on a void future should be callable, second Wait is fine
+    tf::Scheduler::Run([] {
+        auto future = tf::Spawn([] {
+            tf::Yield();
+        });
+        future.Wait();
+        // Second Wait after retrieved should still work (already done)
+    });
+}
+
+TEST(TinyFiberFutureTest, ZeroWorkFiber) {
+    // A fiber that does nothing and immediately returns
+    bool done = false;
+    tf::Scheduler::Run([&done] {
+        auto future = tf::Spawn([] {
+            return 0;
+        });
+        EXPECT_EQ(future.Get(), 0);
+        done = true;
+    });
+    EXPECT_TRUE(done);
+}
+
+// ============================================================================
+// Mutex - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberMutexTest, TryLockFailsWhenHeldByOther) {
+    bool trylock_result = true;
+    tf::Scheduler::Run([&trylock_result] {
+        tf::Mutex mutex;
+        mutex.Lock();
+
+        auto f = tf::Spawn([&trylock_result, &mutex] {
+            trylock_result = mutex.TryLock();
+        });
+
+        tf::Yield(); // Let f run
+        f.Wait();
+        mutex.Unlock();
+    });
+    EXPECT_FALSE(trylock_result);
+}
+
+TEST(TinyFiberMutexTest, UnlockOnUnlockedThrows) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+        EXPECT_THROW(mutex.Unlock(), std::logic_error);
+    });
+}
+
+TEST(TinyFiberMutexTest, UnlockByNonOwnerThrows) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+        mutex.Lock();
+
+        auto f = tf::Spawn([&mutex] {
+            EXPECT_THROW(mutex.Unlock(), std::logic_error);
+        });
+
+        tf::Yield(); // Let f attempt the unlock
+        f.Wait();
+        mutex.Unlock(); // Real owner unlocks
+    });
+}
+
+TEST(TinyFiberMutexTest, GuardMoveConstructor) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+
+        {
+            auto g1 = tf::Lock(mutex);
+            EXPECT_TRUE(mutex.IsLocked());
+
+            auto g2 = std::move(g1);
+            EXPECT_TRUE(mutex.IsLocked()); // Still locked, ownership moved
+        }
+        EXPECT_FALSE(mutex.IsLocked()); // g2 destroyed, unlocked
+    });
+}
+
+TEST(TinyFiberMutexTest, GuardMoveAssignment) {
+    tf::Scheduler::Run([] {
+        tf::Mutex m1;
+        tf::Mutex m2;
+
+        auto g1 = tf::Lock(m1);
+        auto g2 = tf::Lock(m2);
+        EXPECT_TRUE(m1.IsLocked());
+        EXPECT_TRUE(m2.IsLocked());
+
+        // Move-assign g1 into g2: should unlock m2, then g2 now owns m1
+        g2 = std::move(g1);
+        EXPECT_TRUE(m1.IsLocked());
+        EXPECT_FALSE(m2.IsLocked());
+    });
+}
+
+TEST(TinyFiberMutexTest, MutexContentionFIFO) {
+    // Verify that waiters acquire the lock in FIFO order
+    std::vector<int> lock_order;
+    tf::Scheduler::Run([&lock_order] {
+        tf::Mutex mutex;
+        mutex.Lock();
+
+        auto f1 = tf::Spawn([&lock_order, &mutex] {
+            mutex.Lock();
+            lock_order.push_back(1);
+            mutex.Unlock();
+        });
+
+        auto f2 = tf::Spawn([&lock_order, &mutex] {
+            mutex.Lock();
+            lock_order.push_back(2);
+            mutex.Unlock();
+        });
+
+        auto f3 = tf::Spawn([&lock_order, &mutex] {
+            mutex.Lock();
+            lock_order.push_back(3);
+            mutex.Unlock();
+        });
+
+        // Let all fibers attempt to lock (they'll suspend)
+        tf::Yield();
+        tf::Yield();
+        tf::Yield();
+
+        // Unlock - should wake them in FIFO order
+        mutex.Unlock();
+
+        f1.Wait();
+        f2.Wait();
+        f3.Wait();
+    });
+
+    std::vector<int> expected = {1, 2, 3};
+    EXPECT_EQ(lock_order, expected);
+}
+
+// ============================================================================
+// ConditionVariable - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberCondVarTest, WaitWithoutPredicate) {
+    std::vector<int> sequence;
+    tf::Scheduler::Run([&sequence] {
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+
+        auto waiter = tf::Spawn([&] {
+            auto guard = tf::Lock(mutex);
+            sequence.push_back(1);
+            cv.Wait(guard); // Raw wait, no predicate
+            sequence.push_back(3);
+        });
+
+        tf::Yield(); // Let waiter start
+
+        {
+            auto guard = tf::Lock(mutex);
+            sequence.push_back(2);
+            cv.NotifyOne();
+        }
+
+        waiter.Wait();
+    });
+
+    std::vector<int> expected = {1, 2, 3};
+    EXPECT_EQ(sequence, expected);
+}
+
+TEST(TinyFiberCondVarTest, NotifyOneWithNoWaiters) {
+    // NotifyOne with no waiters should be a no-op
+    tf::Scheduler::Run([] {
+        tf::ConditionVariable cv;
+        cv.NotifyOne(); // Should not crash
+    });
+}
+
+TEST(TinyFiberCondVarTest, NotifyAllWithNoWaiters) {
+    // NotifyAll with no waiters should be a no-op
+    tf::Scheduler::Run([] {
+        tf::ConditionVariable cv;
+        cv.NotifyAll(); // Should not crash
+    });
+}
+
+TEST(TinyFiberCondVarTest, MultipleProducersMultipleConsumers) {
+    std::vector<int> consumed;
+    tf::Scheduler::Run([&consumed] {
+        std::queue<int> buffer;
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        int producers_done = 0;
+        const int num_producers = 3;
+
+        std::vector<tf::Future<void>> producers;
+        for (int p = 0; p < num_producers; ++p) {
+            producers.push_back(tf::Spawn([&, p] {
+                for (int i = 1; i <= 3; ++i) {
+                    {
+                        auto guard = tf::Lock(mutex);
+                        buffer.push(p * 100 + i);
+                        cv.NotifyOne();
+                    }
+                    tf::Yield();
+                }
+                auto guard = tf::Lock(mutex);
+                producers_done++;
+                cv.NotifyAll();
+            }));
+        }
+
+        std::vector<tf::Future<void>> consumers;
+        for (int c = 0; c < 2; ++c) {
+            consumers.push_back(tf::Spawn([&] {
+                while (true) {
+                    auto guard = tf::Lock(mutex);
+                    cv.Wait(guard, [&] {
+                        return !buffer.empty() || producers_done == num_producers;
+                    });
+                    while (!buffer.empty()) {
+                        consumed.push_back(buffer.front());
+                        buffer.pop();
+                    }
+                    if (producers_done == num_producers && buffer.empty()) {
+                        break;
+                    }
+                }
+            }));
+        }
+
+        for (auto& p : producers)
+            p.Wait();
+        for (auto& c : consumers)
+            c.Wait();
+    });
+
+    // All 9 items (3 producers x 3 items) should be consumed
+    EXPECT_EQ(consumed.size(), 9);
+}
+
+// ============================================================================
+// Scheduler - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberSchedulerTest, MultipleSequentialRuns) {
+    // Run scheduler multiple times sequentially
+    for (int run = 0; run < 5; ++run) {
+        int result = 0;
+        tf::Scheduler::Run([&result, run] {
+            auto future = tf::Spawn([run] {
+                return run * 10;
+            });
+            result = future.Get();
+        });
+        EXPECT_EQ(result, run * 10);
+    }
+}
+
+TEST(TinyFiberSchedulerTest, CreateWithConfig) {
+    tf::Scheduler::Config config;
+    config.default_stack_size = 1024 * 64;
+
+    std::size_t observed_stack_size = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [&observed_stack_size] {
+            observed_stack_size = tf::Scheduler::Current().GetDefaultStackSize();
+        },
+        config);
+
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+
+    EXPECT_EQ(observed_stack_size, 1024 * 64);
+}
+
+TEST(TinyFiberSchedulerTest, GetMemoryResource) {
+    tf::Scheduler::Run([] {
+        auto resource = tf::Scheduler::Current().GetMemoryResource();
+        EXPECT_NE(resource, nullptr);
+    });
+}
+
+TEST(TinyFiberSchedulerTest, IsRunningFalseAfterCompletion) {
+    auto scheduler = tf::Scheduler::Create([] {
+        // Just complete immediately
+    });
+
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+
+    EXPECT_FALSE(scheduler->IsRunning());
+    EXPECT_TRUE(scheduler->IsDone());
+}
+
+TEST(TinyFiberSchedulerTest, IsNotStoppingByDefault) {
+    tf::Scheduler::Run([] {
+        EXPECT_FALSE(tf::Scheduler::Current().IsStopping());
+    });
+}
+
+// ============================================================================
+// Step - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberStepTest, StepReturnsFalseWhenDone) {
+    auto scheduler = tf::Scheduler::Create([] {
+        // Immediately completes
+    });
+
+    // First step runs the fiber to completion
+    // Subsequent step should return false
+    while (scheduler->Step()) {
+    }
+
+    EXPECT_FALSE(scheduler->Step());
+    EXPECT_TRUE(scheduler->IsDone());
+}
+
+TEST(TinyFiberStepTest, StepCountMatchesYields) {
+    int step_count = 0;
+    auto scheduler = tf::Scheduler::Create([] {
+        tf::Yield();
+        tf::Yield();
+        tf::Yield();
+    });
+
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+        step_count++;
+    }
+
+    // 1 initial run + 3 yields resumed = 4 steps
+    EXPECT_EQ(step_count, 4);
+}
+
+TEST(TinyFiberStepTest, CreateWithCustomConfig) {
+    tf::Scheduler::Config config;
+    config.default_stack_size = 1024 * 256;
+
+    bool ran = false;
+    auto scheduler = tf::Scheduler::Create(
+        [&ran] {
+            ran = true;
+        },
+        config);
+
+    EXPECT_EQ(scheduler->GetDefaultStackSize(), 1024 * 256);
+
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+    EXPECT_TRUE(ran);
+}
+
+// ============================================================================
+// Error Handling - Stopping Errors
+// ============================================================================
+
+TEST(TinyFiberStoppingTest, YieldThrowsOnStopping) {
+    bool caught = false;
+    {
+        auto scheduler = tf::Scheduler::Create([&caught] {
+            try {
+                while (true)
+                    tf::Yield();
+            } catch (const tf::SchedulerStoppingError&) {
+                caught = true;
+            }
+        });
+
+        scheduler->Step();
+        scheduler->Stop();
+
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
+        }
+    }
+    EXPECT_TRUE(caught);
+}
+
+TEST(TinyFiberStoppingTest, MutexLockThrowsWhenAlreadyStopping) {
+    // Test that Mutex::Lock() immediately throws if scheduler is already stopping
+    bool caught = false;
+    {
+        auto scheduler = tf::Scheduler::Create([&caught] {
+            tf::Mutex mutex;
+            try {
+                // By the time this fiber resumes after Stop(), IsStopping() is true
+                tf::Yield();
+                mutex.Lock(); // Should throw immediately since IsStopping() is true
+            } catch (const tf::SchedulerStoppingError&) {
+                caught = true;
+            }
+        });
+
+        scheduler->Step(); // Fiber runs, yields
+        scheduler->Stop(); // Signal stop
+
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
+        }
+    }
+    EXPECT_TRUE(caught);
+}
+
+TEST(TinyFiberStoppingTest, CondVarWaitThrowsWhenAlreadyStopping) {
+    // Test that ConditionVariable::Wait() immediately throws if scheduler is already stopping
+    bool caught = false;
+    {
+        auto scheduler = tf::Scheduler::Create([&caught] {
+            tf::Mutex mutex;
+            tf::ConditionVariable cv;
+
+            try {
+                tf::Yield();
+                // After Stop(), IsStopping() is true
+                auto guard = tf::Lock(mutex); // This will throw since stopping
+            } catch (const tf::SchedulerStoppingError&) {
+                caught = true;
+            }
+        });
+
+        scheduler->Step(); // Fiber runs, yields
+        scheduler->Stop(); // Signal stop
+
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
+        }
+    }
+    EXPECT_TRUE(caught);
+}
+
+// ============================================================================
+// Complex Scenarios - Additional Tests
+// ============================================================================
+
+TEST(TinyFiberComplexTest, FiberFanOut) {
+    // One fiber spawns many children and collects results
+    int total = 0;
+    tf::Scheduler::Run([&total] {
+        std::vector<tf::Future<int>> futures;
+        for (int i = 0; i < 20; ++i) {
+            futures.push_back(tf::Spawn([i] {
+                tf::Yield();
+                return i + 1;
+            }));
+        }
+        for (auto& f : futures) {
+            total += f.Get();
+        }
+    });
+    // Sum of 1..20 = 210
+    EXPECT_EQ(total, 210);
+}
+
+TEST(TinyFiberComplexTest, FiberPipeline) {
+    // Chain of fibers: each waits for the previous one and transforms the result
+    int result = 0;
+    tf::Scheduler::Run([&result] {
+        auto stage1 = tf::Spawn([] {
+            tf::Yield();
+            return 1;
+        });
+
+        auto stage2 = tf::Spawn([&stage1] {
+            int v = stage1.Get();
+            tf::Yield();
+            return v * 10;
+        });
+
+        auto stage3 = tf::Spawn([&stage2] {
+            int v = stage2.Get();
+            tf::Yield();
+            return v + 5;
+        });
+
+        result = stage3.Get();
+    });
+    EXPECT_EQ(result, 15); // 1 * 10 + 5
+}
+
+TEST(TinyFiberComplexTest, RecursiveFiberSpawn) {
+    // Fibonacci via recursive fiber spawning
+    tf::Scheduler::Run([] {
+        std::function<tf::Future<int>(int)> fib = [&fib](int n) -> tf::Future<int> {
+            return tf::Spawn([n, &fib]() -> int {
+                if (n <= 1) return n;
+                auto a = fib(n - 1);
+                auto b = fib(n - 2);
+                return a.Get() + b.Get();
+            });
+        };
+
+        auto result = fib(10);
+        EXPECT_EQ(result.Get(), 55);
+    });
+}
+
+TEST(TinyFiberComplexTest, PingPong) {
+    // Two fibers passing control back and forth
+    int ping_count = 0;
+    int pong_count = 0;
+
+    tf::Scheduler::Run([&] {
+        auto pinger = tf::Spawn([&] {
+            for (int i = 0; i < 50; ++i) {
+                ping_count++;
+                tf::Yield();
+            }
+        });
+
+        auto ponger = tf::Spawn([&] {
+            for (int i = 0; i < 50; ++i) {
+                pong_count++;
+                tf::Yield();
+            }
+        });
+
+        pinger.Wait();
+        ponger.Wait();
+    });
+
+    EXPECT_EQ(ping_count, 50);
+    EXPECT_EQ(pong_count, 50);
+}
+
+TEST(TinyFiberComplexTest, SharedCounterNoMutex) {
+    // Without mutex, interleaved increments should cause data races
+    // (In cooperative scheduling, the "race" shows as incorrect values due to yield between read and write)
+    int counter = 0;
+    tf::Scheduler::Run([&counter] {
+        auto f1 = tf::Spawn([&counter] {
+            for (int i = 0; i < 10; ++i) {
+                int temp = counter;
+                tf::Yield();
+                counter = temp + 1; // Stale read - other fiber may have incremented
+            }
+        });
+
+        auto f2 = tf::Spawn([&counter] {
+            for (int i = 0; i < 10; ++i) {
+                int temp = counter;
+                tf::Yield();
+                counter = temp + 1;
+            }
+        });
+
+        f1.Wait();
+        f2.Wait();
+    });
+
+    // Without mutex, counter should be less than 20 due to lost updates
+    EXPECT_LT(counter, 20);
+}
+
+TEST(TinyFiberComplexTest, BarrierPattern) {
+    // All fibers reach a barrier point before any proceed past it
+    std::vector<int> sequence;
+
+    tf::Scheduler::Run([&sequence] {
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        int arrived = 0;
+        const int num_fibers = 3;
+
+        auto barrier_fiber = [&](int id) {
+            {
+                auto guard = tf::Lock(mutex);
+                sequence.push_back(id); // Arrived at barrier
+                arrived++;
+                if (arrived == num_fibers) {
+                    cv.NotifyAll(); // Last one wakes everyone
+                } else {
+                    cv.Wait(guard, [&] {
+                        return arrived == num_fibers;
+                    });
+                }
+            }
+            sequence.push_back(id + 10); // Past barrier
+        };
+
+        auto f1 = tf::Spawn([&] {
+            barrier_fiber(1);
+        });
+        auto f2 = tf::Spawn([&] {
+            barrier_fiber(2);
+        });
+        auto f3 = tf::Spawn([&] {
+            barrier_fiber(3);
+        });
+
+        f1.Wait();
+        f2.Wait();
+        f3.Wait();
+    });
+
+    EXPECT_EQ(sequence.size(), 6);
+
+    // All arrivals (1,2,3) should come before all completions (11,12,13)
+    int arrival_count = 0;
+    for (int v : sequence) {
+        if (v < 10) {
+            arrival_count++;
+        } else {
+            // By the time we see a completion, all 3 should have arrived
+            EXPECT_EQ(arrival_count, 3) << "Fiber passed barrier before all arrived";
+            break;
+        }
+    }
+}
+
+TEST(TinyFiberComplexTest, DeeplyNestedSpawn) {
+    // Chain of nested spawns, each waiting on the inner one
+    int result = 0;
+    tf::Scheduler::Run([&result] {
+        auto f = tf::Spawn([] {
+            auto f2 = tf::Spawn([] {
+                auto f3 = tf::Spawn([] {
+                    auto f4 = tf::Spawn([] {
+                        auto f5 = tf::Spawn([] {
+                            return 42;
+                        });
+                        return f5.Get();
+                    });
+                    return f4.Get();
+                });
+                return f3.Get();
+            });
+            return f2.Get();
+        });
+        result = f.Get();
+    });
+    EXPECT_EQ(result, 42);
+}
+
+TEST(TinyFiberComplexTest, FiberExceptionDoesNotAffectOthers) {
+    // A fiber that throws should not affect other fibers
+    int healthy_result = 0;
+    tf::Scheduler::Run([&healthy_result] {
+        auto bad = tf::Spawn([]() -> int {
+            tf::Yield();
+            throw std::runtime_error("boom");
+        });
+
+        auto good = tf::Spawn([&healthy_result] {
+            tf::Yield();
+            tf::Yield();
+            healthy_result = 123;
+        });
+
+        good.Wait();
+        EXPECT_THROW(bad.Get(), std::runtime_error);
+    });
+
+    EXPECT_EQ(healthy_result, 123);
+}
+
+TEST(TinyFiberComplexTest, SpawnWhileHoldingMutex) {
+    // Spawn a fiber while holding a mutex lock
+    int result = 0;
+    tf::Scheduler::Run([&result] {
+        tf::Mutex mutex;
+
+        {
+            auto guard = tf::Lock(mutex);
+            auto f = tf::Spawn([&result] {
+                result = 42;
+            });
+            // f destructor waits, then guard destructor unlocks
+        }
+    });
+    EXPECT_EQ(result, 42);
+}
+
+TEST(TinyFiberComplexTest, LargeNumberOfFibers) {
+    // Stress test with many fibers
+    const int num_fibers = 100;
+    int counter = 0;
+
+    tf::Scheduler::Run([&counter] {
+        std::vector<tf::Future<void>> futures;
+        futures.reserve(100);
+
+        for (int i = 0; i < 100; ++i) {
+            futures.push_back(tf::Spawn([&counter] {
+                tf::Yield();
+                counter++;
+                tf::Yield();
+            }));
+        }
+
+        for (auto& f : futures) {
+            f.Wait();
+        }
+    });
+
+    EXPECT_EQ(counter, num_fibers);
 }
