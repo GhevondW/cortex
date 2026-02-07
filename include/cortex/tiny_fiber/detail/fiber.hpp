@@ -51,8 +51,8 @@ public:
         return id_;
     }
 
-    [[nodiscard]] FiberState GetState() const noexcept {
-        return state_;
+    [[nodiscard]] bool IsSuspended() const noexcept {
+        return state_ == FiberState::Suspended;
     }
 
     [[nodiscard]] bool HasException() const noexcept {
@@ -63,31 +63,33 @@ public:
         return exception_;
     }
 
-    void SetState(FiberState state) noexcept {
-        state_ = state;
-    }
-
     void SetException(std::exception_ptr ex) noexcept {
         exception_ = std::move(ex);
     }
 
-    void SetSuspendContext(CoroutineSuspendContext* ctx) noexcept {
-        suspend_ctx_ = ctx;
-    }
+    // Run this fiber (Ready -> Running, resumes coroutine execution)
+    void Run();
 
-    [[nodiscard]] CoroutineSuspendContext* GetSuspendContext() const noexcept {
-        return suspend_ctx_;
-    }
+    // Yield control back to the scheduler (Running -> Ready, suspends)
+    void Yield();
 
-    // Suspend the fiber (must be called while fiber is running)
-    void Suspend();
+    // Park until woken by another fiber (Running -> Suspended, suspends)
+    void Park();
 
-    // Fibers waiting for this fiber to complete
+    // Wake a parked fiber (Suspended -> Ready)
+    void Wake();
+
+    // Mark fiber as finished and return its waiters (Running -> Finished)
+    std::vector<Fiber*> Complete();
+
+    // Add a fiber that is waiting for this fiber to finish
     void AddWaiter(Fiber* waiter);
-    std::vector<Fiber*> TakeWaiters();
 
 private:
     void Continuation(CoroutineSuspendContext& ctx) override;
+
+    // Suspend the coroutine (yields control back to the resumer)
+    void Suspend();
 
 private:
     Id id_;

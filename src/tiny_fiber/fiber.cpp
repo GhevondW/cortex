@@ -17,7 +17,7 @@ Fiber::Fiber(PrivateTag, Id id, Body body, std::size_t stack_size, MemoryResourc
     , body_(std::move(body)) {}
 
 void Fiber::Continuation(CoroutineSuspendContext& ctx) {
-    // Store suspend context so Yield() can use it
+    // Store suspend context so Yield/Park can use it
     suspend_ctx_ = &ctx;
 
     // Execute the user's function
@@ -25,6 +25,35 @@ void Fiber::Continuation(CoroutineSuspendContext& ctx) {
 
     // Clear context when done
     suspend_ctx_ = nullptr;
+}
+
+void Fiber::Run() {
+    assert(state_ == FiberState::Ready);
+    state_ = FiberState::Running;
+    Resume();
+}
+
+void Fiber::Yield() {
+    assert(state_ == FiberState::Running);
+    state_ = FiberState::Ready;
+    Suspend();
+}
+
+void Fiber::Park() {
+    assert(state_ == FiberState::Running);
+    state_ = FiberState::Suspended;
+    Suspend();
+}
+
+void Fiber::Wake() {
+    assert(state_ == FiberState::Suspended);
+    state_ = FiberState::Ready;
+}
+
+std::vector<Fiber*> Fiber::Complete() {
+    suspend_ctx_ = nullptr;
+    state_ = FiberState::Finished;
+    return std::move(waiters_);
 }
 
 void Fiber::Suspend() {
@@ -38,12 +67,6 @@ void Fiber::AddWaiter(Fiber* waiter) {
     if (waiter) {
         waiters_.push_back(waiter);
     }
-}
-
-std::vector<Fiber*> Fiber::TakeWaiters() {
-    std::vector<Fiber*> waiters(std::move(waiters_));
-    waiters_.clear();
-    return waiters;
 }
 
 } // namespace cortex::tiny_fiber::detail

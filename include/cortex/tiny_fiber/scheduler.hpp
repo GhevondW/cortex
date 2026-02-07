@@ -169,7 +169,7 @@ private:
         return current_fiber_;
     }
 
-    // Schedule a fiber to run
+    // Wake a suspended fiber and enqueue it to run
     void Schedule(detail::Fiber* fiber);
 
     // Suspend current fiber

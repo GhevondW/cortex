@@ -37,7 +37,7 @@ Scheduler::~Scheduler() {
 
         if (current_fiber_ && !current_fiber_->IsDone()) {
             try {
-                current_fiber_->Resume();
+                current_fiber_->Run();
             } catch (...) {
                 // Ignore exceptions during shutdown
             }
@@ -64,7 +64,7 @@ void Scheduler::Stop() {
 
     // Wake up all suspended fibers so they can exit gracefully
     for (auto& [id, fiber] : fibers_) {
-        if (fiber && fiber->GetState() == detail::FiberState::Suspended) {
+        if (fiber && fiber->IsSuspended()) {
             Schedule(fiber.get());
         }
     }
@@ -96,21 +96,17 @@ bool Scheduler::Step() {
     ready_queue_.pop_front();
 
     assert(current_fiber_);
-    current_fiber_->SetState(detail::FiberState::Running);
 
     try {
-        current_fiber_->Resume();
+        current_fiber_->Run();
     } catch (...) {
         current_fiber_->SetException(std::current_exception());
     }
 
     if (current_fiber_->IsDone()) {
-        current_fiber_->SetSuspendContext(nullptr);
-        current_fiber_->SetState(detail::FiberState::Finished);
-
-        auto waiters = current_fiber_->TakeWaiters();
+        auto waiters = current_fiber_->Complete();
         for (auto* waiter : waiters) {
-            if (waiter && waiter->GetState() == detail::FiberState::Suspended) {
+            if (waiter && waiter->IsSuspended()) {
                 Schedule(waiter);
             }
         }
@@ -147,7 +143,9 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::s
     auto* fiber_raw_ptr = fiber.get();
 
     fibers_[id] = std::move(fiber);
-    Schedule(fiber_raw_ptr);
+
+    // New fibers start in Ready state, just enqueue
+    ready_queue_.push_back(fiber_raw_ptr);
 
     return id;
 }
@@ -162,7 +160,7 @@ detail::Fiber* Scheduler::GetFiber(detail::Fiber::Id id) {
 
 void Scheduler::Schedule(detail::Fiber* fiber) {
     if (fiber) {
-        fiber->SetState(detail::FiberState::Ready);
+        fiber->Wake();
         ready_queue_.push_back(fiber);
     }
 }
@@ -172,8 +170,7 @@ void Scheduler::SuspendCurrent() {
         throw std::logic_error("No fiber is currently running");
     }
 
-    current_fiber_->SetState(detail::FiberState::Suspended);
-    current_fiber_->Suspend();
+    current_fiber_->Park();
 }
 
 void Scheduler::YieldCurrent() {
@@ -181,9 +178,9 @@ void Scheduler::YieldCurrent() {
         throw std::logic_error("No fiber is currently running");
     }
 
-    // Put current fiber back in ready queue before suspending
-    Schedule(current_fiber_);
-    current_fiber_->Suspend();
+    // Enqueue first, then yield (Yield sets Ready + suspends)
+    ready_queue_.push_back(current_fiber_);
+    current_fiber_->Yield();
 }
 
 bool Scheduler::HasOtherReadyFibers() const {
