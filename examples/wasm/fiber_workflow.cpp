@@ -217,7 +217,7 @@ CORTEX_API void start_workflow(int num_tasks, int num_workers) {
 #endif
 
     // Create scheduler for manual stepping
-    g_scheduler = std::make_unique<tf::Scheduler>(tf::Scheduler::Create([num_tasks, num_workers] {
+    g_scheduler = tf::Scheduler::Create([num_tasks, num_workers] {
         // Create sync primitives on fiber stack
         tf::Mutex mutex;
         tf::ConditionVariable cv;
@@ -250,7 +250,7 @@ CORTEX_API void start_workflow(int num_tasks, int num_workers) {
 #ifdef __EMSCRIPTEN__
         js_workflow_complete();
 #endif
-    }));
+    });
 }
 
 CORTEX_API int step_workflow() {

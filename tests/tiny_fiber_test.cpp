@@ -496,14 +496,14 @@ TEST(TinyFiberStepTest, BasicStep) {
         sequence.push_back(3);
     });
 
-    EXPECT_FALSE(scheduler.IsDone());
+    EXPECT_FALSE(scheduler->IsDone());
 
     // Step through
-    while (scheduler.Step()) {
+    while (scheduler->Step()) {
         // Each step runs until yield
     }
 
-    EXPECT_TRUE(scheduler.IsDone());
+    EXPECT_TRUE(scheduler->IsDone());
     std::vector<int> expected = {1, 2, 3};
     EXPECT_EQ(sequence, expected);
 }
@@ -529,8 +529,8 @@ TEST(TinyFiberStepTest, MultipleFibers) {
     });
 
     int steps = 0;
-    while (!scheduler.IsDone()) {
-        scheduler.Step();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
         steps++;
     }
 
@@ -560,8 +560,8 @@ TEST(TinyFiberStepTest, StepWithMutex) {
         f2.Wait();
     });
 
-    while (!scheduler.IsDone()) {
-        scheduler.Step();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
     }
 
     // f2 should run after f1 completes due to mutex
@@ -593,9 +593,9 @@ TEST(TinyFiberCleanupTest, SchedulerDestroyedWithIncompleteFibers) {
         });
 
         // Run only a few steps, leaving fibers incomplete
-        scheduler.Step();
-        scheduler.Step();
-        scheduler.Step();
+        scheduler->Step();
+        scheduler->Step();
+        scheduler->Step();
 
         // Scheduler goes out of scope with incomplete fibers
         // This should not crash or leak memory
@@ -651,8 +651,8 @@ TEST(TinyFiberCleanupTest, FutureDestroyedBeforeCompletion) {
             // After this scope, future's fiber should be complete
         });
 
-        while (!scheduler.IsDone()) {
-            scheduler.Step();
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
         }
     }
     SUCCEED();
@@ -681,8 +681,8 @@ TEST(TinyFiberCleanupTest, GracefulShutdownWithStopSignal) {
         });
 
         // Run a few steps
-        scheduler.Step();
-        scheduler.Step();
+        scheduler->Step();
+        scheduler->Step();
         // Scheduler goes out of scope - should signal stop
     }
 
@@ -704,14 +704,14 @@ TEST(TinyFiberCleanupTest, ManualStop) {
         }
     });
 
-    scheduler.Step(); // Start fiber
+    scheduler->Step(); // Start fiber
     EXPECT_FALSE(fiber_exited);
 
-    scheduler.Stop(); // Signal stop
+    scheduler->Stop(); // Signal stop
 
     // Run to let fiber handle the stop signal
-    while (!scheduler.IsDone()) {
-        scheduler.Step();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
     }
 
     EXPECT_TRUE(fiber_exited);
@@ -728,13 +728,13 @@ TEST(TinyFiberCleanupTest, IsStoppingCheck) {
         checked_stopping = true;
     });
 
-    scheduler.Step();
+    scheduler->Step();
     EXPECT_FALSE(checked_stopping);
 
-    scheduler.Stop();
+    scheduler->Stop();
 
-    while (!scheduler.IsDone()) {
-        scheduler.Step();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
     }
 
     EXPECT_TRUE(checked_stopping);

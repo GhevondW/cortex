@@ -62,16 +62,16 @@ public:
      * This allows yielding back to JS event loop between fiber switches.
      *
      * @param entry The function to run in the initial fiber.
-     * @return A Scheduler instance to step through.
+     * @return A unique_ptr to the Scheduler instance.
      */
     template <typename F>
-    static Scheduler Create(F&& entry);
+    static std::unique_ptr<Scheduler> Create(F&& entry);
 
     /**
      * @brief Create a scheduler for manual stepping with custom config.
      */
     template <typename F>
-    static Scheduler Create(F&& entry, Config config);
+    static std::unique_ptr<Scheduler> Create(F&& entry, Config config);
 
     /**
      * @brief Get the current scheduler.
@@ -85,8 +85,8 @@ public:
 
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
-    Scheduler(Scheduler&& other) noexcept;
-    Scheduler& operator=(Scheduler&& other) noexcept = delete;
+    Scheduler(Scheduler&&) = delete;
+    Scheduler& operator=(Scheduler&&) = delete;
     ~Scheduler();
 
     /**
@@ -144,9 +144,9 @@ public:
      */
     void Stop();
 
-    // Internal API - used by Spawn template function
-    // Not intended for direct use
+    /// @cond INTERNAL
     detail::Fiber::Id SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size);
+    /// @endcond
 
 private:
     friend class detail::Fiber;
@@ -208,15 +208,14 @@ void Scheduler::Run(F&& entry, Config config) {
 }
 
 template <typename F>
-Scheduler Scheduler::Create(F&& entry) {
+std::unique_ptr<Scheduler> Scheduler::Create(F&& entry) {
     return Create(std::forward<F>(entry), Config {});
 }
 
 template <typename F>
-Scheduler Scheduler::Create(F&& entry, Config config) {
-    Scheduler scheduler(std::move(config));
-    scheduler.SpawnFiberInternal(std::forward<F>(entry), scheduler.config_.default_stack_size);
-    // Don't set running_ here - Step() will handle it
+std::unique_ptr<Scheduler> Scheduler::Create(F&& entry, Config config) {
+    std::unique_ptr<Scheduler> scheduler(new Scheduler(std::move(config)));
+    scheduler->SpawnFiberInternal(std::forward<F>(entry), scheduler->config_.default_stack_size);
     return scheduler;
 }
 

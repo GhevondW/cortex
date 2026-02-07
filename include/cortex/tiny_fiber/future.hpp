@@ -18,9 +18,7 @@ namespace cortex::tiny_fiber {
 
 namespace detail {
 
-/**
- * @brief Shared state for a fiber's result.
- */
+// Shared state for a fiber's result (internal).
 template <typename T>
 struct FutureState {
     Fiber::Id fiber_id {0};

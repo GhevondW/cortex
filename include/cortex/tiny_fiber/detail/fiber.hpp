@@ -5,9 +5,9 @@
 #include <cortex/memory_resource.hpp>
 
 #include <cstdint>
-#include <deque>
 #include <exception>
 #include <memory>
+#include <vector>
 
 #include <function2/function2.hpp>
 
@@ -15,9 +15,7 @@ namespace cortex::tiny_fiber::detail {
 
 class Scheduler;
 
-/**
- * @brief Internal fiber states
- */
+// Internal fiber states
 enum class FiberState : std::uint8_t {
     Ready, // In ready queue, waiting to run
     Running, // Currently executing
@@ -25,12 +23,9 @@ enum class FiberState : std::uint8_t {
     Finished // Completed execution
 };
 
-/**
- * @brief Internal fiber representation
- *
- * Inherits from BaseCoroutine to get proper coroutine lifecycle management.
- * The user's function is stored and called from Continuation().
- */
+// Internal fiber representation.
+// Inherits from BaseCoroutine to get proper coroutine lifecycle management.
+// The user's function is stored and called from Continuation().
 class Fiber final : public BaseCoroutine {
 private:
     struct PrivateTag {};
@@ -39,15 +34,7 @@ public:
     using Id = std::uint64_t;
     using Body = fu2::unique_function<void()>;
 
-    /**
-     * @brief Create a new fiber.
-     *
-     * @param id Unique fiber ID
-     * @param body The function to execute
-     * @param stack_size Stack size in bytes
-     * @param resource Memory resource for allocation
-     * @return unique_ptr to the new Fiber
-     */
+    // Create a new fiber with the given body, stack size, and memory resource.
     static std::unique_ptr<Fiber> Make(Body body, std::size_t stack_size, MemoryResourceSharedPtr resource);
 
     // Constructor is public but requires PrivateTag (only Make can call it)
@@ -97,7 +84,7 @@ public:
 
     // Fibers waiting for this fiber to complete
     void AddWaiter(Fiber* waiter);
-    std::deque<Fiber*> TakeWaiters();
+    std::vector<Fiber*> TakeWaiters();
 
 private:
     void Continuation(CoroutineSuspendContext& ctx) override;
@@ -108,7 +95,7 @@ private:
     Body body_;
     CoroutineSuspendContext* suspend_ctx_ {nullptr};
     std::exception_ptr exception_ {nullptr};
-    std::deque<Fiber*> waiters_;
+    std::vector<Fiber*> waiters_;
 };
 
 } // namespace cortex::tiny_fiber::detail
