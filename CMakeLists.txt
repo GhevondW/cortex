@@ -9,6 +9,7 @@ project(cortex
 # --- Options ---
 option(CORTEX_BUILD_TESTS "Build unit tests" ON)
 option(CORTEX_BUILD_EXAMPLES "Build examples" OFF)
+option(CORTEX_BUILD_APPS "Build applications (AlgoViz, etc.)" OFF)
 option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 
 # --- Module Path ---
@@ -29,4 +30,8 @@ endif()
 
 if(CORTEX_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+if(CORTEX_BUILD_APPS)
+    add_subdirectory(apps)
 endif()

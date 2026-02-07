@@ -21,7 +21,8 @@ Try the interactive WASM examples in your browser (no installation required):
 [![Docs](https://img.shields.io/badge/docs-doxygen-blue?style=for-the-badge)](https://GhevondW.github.io/cortex/docs/)
 
 - **[All Examples](https://GhevondW.github.io/cortex/)** - Browse all demos
-- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** - Cooperative multitasking demo (New!)
+- **[AlgoViz - BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** - Interactive binary search tree algorithm visualizer (New!)
+- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** - Cooperative multitasking demo
 - **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** - Recursive backtracking visualization (Must See!)
 - **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** - See coroutines in action! (Recommended)
 - **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** - Simple suspend/resume demo
@@ -109,6 +110,12 @@ docker compose up serve-example
 # Or http://localhost:8080/examples/sudoku_demo.html (sudoku solver - must see!)
 # Or http://localhost:8080/examples/particle_demo.html (recommended interactive demo)
 # Or http://localhost:8080/examples/index.html (basic example)
+```
+
+**AlgoViz (Local Browser):**
+```bash
+./dev.sh algoviz
+# Open http://localhost:8080
 ```
 
 ## Development

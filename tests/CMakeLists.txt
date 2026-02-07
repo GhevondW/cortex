@@ -37,16 +37,20 @@ if(EMSCRIPTEN)
     add_test(NAME cortex_wasm_generator_test COMMAND node cortex_generator_test.js)
     add_test(NAME cortex_wasm_tiny_fiber_test COMMAND node cortex_tiny_fiber_test.js)
 
-    target_link_options(cortex_coroutine_test PRIVATE
-            "-sEXIT_RUNTIME=1" "-sALLOW_MEMORY_GROWTH=1" "-sNODERAWFS=1" "-fexceptions")
-    target_link_options(cortex_memory_resource_test PRIVATE
-            "-sEXIT_RUNTIME=1" "-sALLOW_MEMORY_GROWTH=1" "-sNODERAWFS=1" "-fexceptions")
-    target_link_options(cortex_base_coroutine_test PRIVATE
-            "-sEXIT_RUNTIME=1" "-sALLOW_MEMORY_GROWTH=1" "-sNODERAWFS=1" "-fexceptions")
-    target_link_options(cortex_generator_test PRIVATE
-            "-sEXIT_RUNTIME=1" "-sALLOW_MEMORY_GROWTH=1" "-sNODERAWFS=1" "-fexceptions")
-    target_link_options(cortex_tiny_fiber_test PRIVATE
-            "-sEXIT_RUNTIME=1" "-sALLOW_MEMORY_GROWTH=1" "-sNODERAWFS=1" "-fexceptions")
+    set(WASM_TEST_LINK_OPTIONS
+        "-sEXIT_RUNTIME=1"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sNODERAWFS=1"
+        "-fexceptions"
+        "-sASYNCIFY_STACK_SIZE=1048576"
+        "-sSTACK_SIZE=1048576"
+    )
+
+    target_link_options(cortex_coroutine_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
+    target_link_options(cortex_memory_resource_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
+    target_link_options(cortex_base_coroutine_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
+    target_link_options(cortex_generator_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
+    target_link_options(cortex_tiny_fiber_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
 
 else()
     include(GoogleTest)
