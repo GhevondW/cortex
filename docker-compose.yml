@@ -74,3 +74,27 @@ services:
         echo '' &&
         python3 -m http.server 8080
         "
+
+  # 6. Build and Serve AlgoViz BST Visualizer
+  serve-algoviz:
+      build: .
+      volumes:
+        - .:/workspace
+      ports:
+        - "8080:8080"
+      environment:
+        - BUILD_TYPE=${BUILD_TYPE:-Release}
+      command: >
+        bash -c "
+        source /opt/emsdk/emsdk_env.sh &&
+        rm -rf build/wasm-algoviz &&
+        emcmake cmake -B build/wasm-algoviz -G Ninja -DCMAKE_BUILD_TYPE=$${BUILD_TYPE} -DCORTEX_BUILD_APPS=ON &&
+        cmake --build build/wasm-algoviz --config $${BUILD_TYPE} --target algo_viz &&
+        echo '' &&
+        echo '✅ AlgoViz built successfully in $${BUILD_TYPE} mode!' &&
+        echo '' &&
+        echo '  → http://localhost:8080' &&
+        echo '' &&
+        cd build/wasm-algoviz/apps/algo_viz &&
+        python3 -m http.server 8080
+        "
