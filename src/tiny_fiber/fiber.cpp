@@ -40,7 +40,7 @@ void Fiber::AddWaiter(Fiber* waiter) {
     }
 }
 
-std::deque<Fiber*> Fiber::TakeWaiters() {
+std::vector<Fiber*> Fiber::TakeWaiters() {
     return std::move(waiters_);
 }
 

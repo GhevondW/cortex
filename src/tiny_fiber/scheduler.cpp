@@ -70,19 +70,6 @@ void Scheduler::Stop() {
     }
 }
 
-Scheduler::Scheduler(Scheduler&& other) noexcept
-    : config_(std::move(other.config_))
-    , running_(other.running_)
-    , stopping_(other.stopping_)
-    , current_fiber_(other.current_fiber_)
-    , ready_queue_(std::move(other.ready_queue_))
-    , fibers_(std::move(other.fibers_))
-    , pending_cleanup_(std::move(other.pending_cleanup_)) {
-    other.running_ = false;
-    other.stopping_ = false;
-    other.current_fiber_ = nullptr;
-}
-
 void Scheduler::ProcessPendingCleanup() {
     for (auto id : pending_cleanup_) {
         fibers_.erase(id);
@@ -102,7 +89,6 @@ bool Scheduler::Step() {
         return false;
     }
 
-    // Always set as current scheduler (handles moved schedulers)
     running_ = true;
     g_current_scheduler = this;
 
@@ -148,50 +134,11 @@ void Scheduler::RunLoop() {
     assert(!running_);
     assert(g_current_scheduler == nullptr);
 
-    running_ = true;
-    g_current_scheduler = this;
-
-    while (!ready_queue_.empty()) {
-        // Clean up finished fibers from previous iteration
-        ProcessPendingCleanup();
-
-        current_fiber_ = ready_queue_.front();
-        ready_queue_.pop_front();
-
-        assert(current_fiber_);
-        current_fiber_->SetState(detail::FiberState::Running);
-
-        try {
-            current_fiber_->Resume();
-        } catch (...) {
-            current_fiber_->SetException(std::current_exception());
-        }
-
-        if (current_fiber_->IsDone()) {
-            // Only clear suspend context when fiber is completely done
-            current_fiber_->SetSuspendContext(nullptr);
-            current_fiber_->SetState(detail::FiberState::Finished);
-
-            // Wake up all fibers waiting on this one
-            auto waiters = current_fiber_->TakeWaiters();
-            for (auto* waiter : waiters) {
-                if (waiter && waiter->GetState() == detail::FiberState::Suspended) {
-                    Schedule(waiter);
-                }
-            }
-
-            // Schedule fiber for cleanup (will be deleted at start of next iteration)
-            pending_cleanup_.push_back(current_fiber_->GetId());
-        }
-
-        current_fiber_ = nullptr;
+    while (Step()) {
     }
 
-    // Final cleanup
+    // Clean up the last completed fiber(s)
     ProcessPendingCleanup();
-
-    running_ = false;
-    g_current_scheduler = nullptr;
 }
 
 detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size) {
