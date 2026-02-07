@@ -41,7 +41,9 @@ void Fiber::AddWaiter(Fiber* waiter) {
 }
 
 std::vector<Fiber*> Fiber::TakeWaiters() {
-    return std::move(waiters_);
+    std::vector<Fiber*> waiters(std::move(waiters_));
+    waiters_.clear();
+    return waiters;
 }
 
 } // namespace cortex::tiny_fiber::detail
