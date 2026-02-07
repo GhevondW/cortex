@@ -35,6 +35,9 @@ jobs:
           docker compose up --abort-on-container-exit build-example-native
           docker compose up --abort-on-container-exit build-example-wasm
       
+      - name: Build AlgoViz
+        run: docker compose up --abort-on-container-exit build-algoviz
+      
       - name: Archive build artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -32,7 +32,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y doxygen graphviz
       
-      - name: Configure CMake for WASM (Release Mode with Optimizations)
+      - name: Configure CMake for WASM Examples (Release)
         run: |
           emcmake cmake -B build/wasm -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -44,19 +44,41 @@ jobs:
       - name: Build WASM Examples (Optimized)
         run: cmake --build build/wasm --config Release
 
+      - name: Configure CMake for AlgoViz (Release)
+        run: |
+          emcmake cmake -B build/wasm-algoviz -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_BUILD_APPS=ON
+        env:
+          CXXFLAGS: "-O3"
+          LDFLAGS: "-O3"
+
+      - name: Build AlgoViz (Optimized)
+        run: cmake --build build/wasm-algoviz --config Release --target algo_viz
+
       - name: Generate Doxygen Docs
         run: doxygen Doxyfile
       
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/examples
+          mkdir -p deploy/algoviz
           mkdir -p deploy/docs
+
+          # Copy examples
           cp build/wasm/examples/*.html deploy/examples/
           cp build/wasm/examples/*.js deploy/examples/
           cp build/wasm/examples/*.wasm deploy/examples/
+
+          # Copy AlgoViz
+          cp build/wasm-algoviz/apps/algo_viz/*.html deploy/algoviz/
+          cp build/wasm-algoviz/apps/algo_viz/*.js deploy/algoviz/
+          cp build/wasm-algoviz/apps/algo_viz/*.wasm deploy/algoviz/
+
+          # Copy docs
           cp -r doc/html/* deploy/docs/
           
-          # Create a root index.html that redirects to examples
+          # Create a root index.html that links to everything
           cat > deploy/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
@@ -67,6 +89,7 @@ jobs:
           </head>
           <body>
               <p>Redirecting to <a href="examples/examples_index.html">Cortex Examples</a>...</p>
+              <p><a href="algoviz/index.html">AlgoViz - BST Visualizer</a></p>
           </body>
           </html>
           EOF

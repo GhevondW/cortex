@@ -75,7 +75,20 @@ services:
         python3 -m http.server 8080
         "
 
-  # 6. Build and Serve AlgoViz BST Visualizer
+  # 6. Build AlgoViz (compile check)
+  build-algoviz:
+    build: .
+    volumes: [".:/workspace"]
+    command: >
+      bash -c "
+      source /opt/emsdk/emsdk_env.sh &&
+      rm -rf build/wasm-algoviz &&
+      emcmake cmake -B build/wasm-algoviz -G Ninja -DCORTEX_BUILD_APPS=ON &&
+      cmake --build build/wasm-algoviz --target algo_viz &&
+      echo 'AlgoViz build succeeded'
+      "
+
+  # 7. Build and Serve AlgoViz BST Visualizer
   serve-algoviz:
       build: .
       volumes:
