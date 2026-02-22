@@ -60,7 +60,13 @@ add_custom_command(TARGET algo_viz POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
             ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html
             ${CMAKE_CURRENT_BINARY_DIR}/index.html
-    COMMENT "AlgoViz: Copying index.html to build directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/web/css
+            ${CMAKE_CURRENT_BINARY_DIR}/css
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/web/js
+            ${CMAKE_CURRENT_BINARY_DIR}/js
+    COMMENT "AlgoViz: Copying web assets to build directory"
 )
 
 # --- Apply project-wide settings ---
