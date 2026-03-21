@@ -55,12 +55,12 @@ target_link_options(algo_viz PRIVATE
     "${ALGOVIZ_OPT_FLAGS}"
 )
 
-# --- Copy web assets to build directory ---
+# --- Copy complete web app to build directory ---
 add_custom_command(TARGET algo_viz POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-            ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html
-            ${CMAKE_CURRENT_BINARY_DIR}/index.html
-    COMMENT "AlgoViz: Copying index.html to build directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/web
+            ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "AlgoViz: Copying web app to build directory"
 )
 
 # --- Apply project-wide settings ---
