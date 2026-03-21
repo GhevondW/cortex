@@ -70,10 +70,8 @@ jobs:
           cp build/wasm/examples/*.js deploy/examples/
           cp build/wasm/examples/*.wasm deploy/examples/
 
-          # Copy AlgoViz
-          cp build/wasm-algoviz/apps/algo_viz/*.html deploy/algoviz/
-          cp build/wasm-algoviz/apps/algo_viz/*.js deploy/algoviz/
-          cp build/wasm-algoviz/apps/algo_viz/*.wasm deploy/algoviz/
+          # Copy full AlgoViz app bundle (includes src/ styles/modules)
+          cp -R build/wasm-algoviz/apps/algo_viz/. deploy/algoviz/
 
           # Copy docs
           cp -r doc/html/* deploy/docs/
