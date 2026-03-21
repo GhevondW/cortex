@@ -65,19 +65,14 @@ jobs:
           mkdir -p deploy/algoviz
           mkdir -p deploy/docs
 
-          # Copy examples
-          cp build/wasm/examples/*.html deploy/examples/
-          cp build/wasm/examples/*.js deploy/examples/
-          cp build/wasm/examples/*.wasm deploy/examples/
+          # Copy examples and all generated runtime artifacts
+          cp -R build/wasm/examples/. deploy/examples/
 
-          # Copy AlgoViz static web assets from source
-          cp -R apps/algo_viz/web/. deploy/algoviz/
-          # Copy compiled AlgoViz WASM runtime artifacts
-          cp build/wasm-algoviz/apps/algo_viz/algo_viz.js deploy/algoviz/
-          cp build/wasm-algoviz/apps/algo_viz/algo_viz.wasm deploy/algoviz/
+          # Copy the built AlgoViz app bundle (static web + compiled runtime)
+          cp -R build/wasm-algoviz/apps/algo_viz/. deploy/algoviz/
 
           # Copy docs
-          cp -r doc/html/* deploy/docs/
+          cp -R doc/html/. deploy/docs/
 
           # Fail fast if required AlgoViz assets are missing
           test -f deploy/algoviz/index.html
@@ -116,4 +111,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

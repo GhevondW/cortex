@@ -26,6 +26,11 @@ doc/
 *.wast
 *.wat
 
+# Keep AlgoViz frontend source JS files in git
+!apps/algo_viz/web/vite.config.js
+!apps/algo_viz/web/src/main.js
+!apps/algo_viz/web/src/js/*.js
+
 # CMake
 CMakeCache.txt
 CMakeFiles/
