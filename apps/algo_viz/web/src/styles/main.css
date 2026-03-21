@@ -34,6 +34,7 @@ body {
         var(--bg);
     color: var(--text-primary);
     line-height: 1.45;
+    overflow-x: hidden;
 }
 
 #app {
@@ -231,6 +232,7 @@ body {
     display: grid;
     grid-template-columns: minmax(0, 3fr) minmax(360px, 1fr);
     gap: clamp(10px, 1vw, 14px);
+    min-width: 0;
 }
 
 .surface {
@@ -340,6 +342,7 @@ body {
     display: grid;
     gap: clamp(10px, 1vw, 14px);
     align-content: start;
+    min-width: 0;
 }
 
 .panel {
@@ -472,6 +475,99 @@ select:focus {
     gap: 8px;
 }
 
+.triple-group {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+}
+
+.uf-surface {
+    grid-column: 1;
+    min-height: calc(100vh - 130px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: riseIn 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.uf-graph-wrap {
+    flex: 1;
+    min-height: clamp(340px, 56vh, 540px);
+    background:
+        radial-gradient(circle at 20% 15%, rgba(124, 149, 255, 0.1), transparent 30%),
+        linear-gradient(180deg, #171b24 0%, #141821 100%);
+}
+
+.uf-graph {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.uf-edge {
+    stroke: #596886;
+    stroke-width: 2;
+    opacity: 0.7;
+}
+
+.uf-edge-highlight {
+    stroke: var(--accent);
+    stroke-width: 3;
+    opacity: 1;
+}
+
+.uf-node {
+    fill: #2a3550;
+    stroke: #5f77b5;
+    stroke-width: 2;
+}
+
+.uf-node-root {
+    fill: rgba(75, 212, 191, 0.25);
+    stroke: var(--accent);
+}
+
+.uf-node-highlight {
+    fill: rgba(147, 167, 255, 0.35);
+    stroke: #a6b7ff;
+}
+
+.uf-node-label {
+    fill: #f6f8ff;
+    font-size: 12px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+}
+
+.uf-sub-label {
+    fill: #aeb8ce;
+    font-size: 10px;
+    text-anchor: middle;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.uf-state-dump {
+    margin: 0;
+    min-height: 112px;
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow: auto;
+}
+
+.uf-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+
 .divider {
     height: 1px;
     background: var(--stroke-soft);
@@ -558,6 +654,25 @@ input[type="range"] {
 
     .canvas-surface {
         min-height: 520px;
+    }
+
+    .uf-surface {
+        min-height: 520px;
+    }
+
+    .triple-group {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 1250px) {
+    .uf-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .uf-shell .uf-surface,
+    .uf-shell .panel-grid {
+        grid-column: 1;
     }
 }
 

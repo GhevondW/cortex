@@ -1,7 +1,7 @@
 /// @file main.cpp
-/// @brief AlgoViz BST Visualizer — WASM engine
+/// @brief AlgoViz Visualizers — WASM engine
 ///
-/// Contains: JS bridge functions, 8 tree algorithms, and the extern "C" API.
+/// Contains: tree visualization algorithms, Union-Find (DSU) API, and the extern "C" bridge.
 /// Pattern follows the proven Cortex WASM demos (sudoku_solver.cpp, fiber_workflow.cpp).
 
 #include "bst.hpp"
@@ -13,6 +13,8 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <utility>
+#include <vector>
 
 // =============================================================================
 // JS Bridge Functions
@@ -616,6 +618,31 @@ namespace {
 algoviz::BST g_tree;
 std::unique_ptr<cortex::Coroutine> g_coro;
 int g_operation_value = 0;
+std::vector<int> g_uf_parent;
+std::vector<int> g_uf_rank;
+std::vector<int> g_uf_set_size;
+int g_uf_components = 0;
+
+[[nodiscard]] bool uf_valid_index(int index) {
+    return index >= 0 && index < static_cast<int>(g_uf_parent.size());
+}
+
+[[nodiscard]] int uf_find_root_no_compress(int index) {
+    while (g_uf_parent[static_cast<std::size_t>(index)] != index) {
+        index = g_uf_parent[static_cast<std::size_t>(index)];
+    }
+    return index;
+}
+
+[[nodiscard]] int uf_find_root_compress(int index) {
+    const int root = uf_find_root_no_compress(index);
+    while (g_uf_parent[static_cast<std::size_t>(index)] != index) {
+        const int parent = g_uf_parent[static_cast<std::size_t>(index)];
+        g_uf_parent[static_cast<std::size_t>(index)] = root;
+        index = parent;
+    }
+    return root;
+}
 
 } // namespace
 
@@ -760,9 +787,86 @@ CORTEX_API int get_node_parent(int id) {
     return g_tree.valid(id) ? g_tree[id].parent : -1;
 }
 
+// --- Union-Find / DSU API ---
+
+CORTEX_API void uf_init(int n) {
+    if (n < 1) n = 1;
+    if (n > 128) n = 128;
+
+    g_coro.reset();
+    g_uf_parent.resize(static_cast<std::size_t>(n));
+    g_uf_rank.assign(static_cast<std::size_t>(n), 0);
+    g_uf_set_size.assign(static_cast<std::size_t>(n), 1);
+    g_uf_components = n;
+
+    for (int i = 0; i < n; i += 1) {
+        g_uf_parent[static_cast<std::size_t>(i)] = i;
+    }
+
+    std::cout << "[AlgoViz][UF] Initialized " << n << " nodes\n";
+}
+
+CORTEX_API int uf_count() {
+    return static_cast<int>(g_uf_parent.size());
+}
+
+CORTEX_API int uf_component_count() {
+    return g_uf_components;
+}
+
+CORTEX_API int uf_get_parent(int index) {
+    if (!uf_valid_index(index)) return -1;
+    return g_uf_parent[static_cast<std::size_t>(index)];
+}
+
+CORTEX_API int uf_get_rank(int index) {
+    if (!uf_valid_index(index)) return -1;
+    return g_uf_rank[static_cast<std::size_t>(index)];
+}
+
+CORTEX_API int uf_get_set_size(int index) {
+    if (!uf_valid_index(index)) return -1;
+    const int root = uf_find_root_no_compress(index);
+    return g_uf_set_size[static_cast<std::size_t>(root)];
+}
+
+CORTEX_API int uf_find(int index) {
+    if (!uf_valid_index(index)) return -1;
+    return uf_find_root_compress(index);
+}
+
+CORTEX_API int uf_union(int a, int b) {
+    if (!uf_valid_index(a) || !uf_valid_index(b)) return 0;
+
+    int root_a = uf_find_root_compress(a);
+    int root_b = uf_find_root_compress(b);
+    if (root_a == root_b) return 0;
+
+    const int rank_a = g_uf_rank[static_cast<std::size_t>(root_a)];
+    const int rank_b = g_uf_rank[static_cast<std::size_t>(root_b)];
+    if (rank_a < rank_b) {
+        std::swap(root_a, root_b);
+    }
+
+    g_uf_parent[static_cast<std::size_t>(root_b)] = root_a;
+    g_uf_set_size[static_cast<std::size_t>(root_a)] += g_uf_set_size[static_cast<std::size_t>(root_b)];
+
+    if (rank_a == rank_b) {
+        g_uf_rank[static_cast<std::size_t>(root_a)] += 1;
+    }
+
+    g_uf_components -= 1;
+    return 1;
+}
+
+CORTEX_API int uf_connected(int a, int b) {
+    if (!uf_valid_index(a) || !uf_valid_index(b)) return 0;
+    return uf_find_root_compress(a) == uf_find_root_compress(b) ? 1 : 0;
+}
+
 } // extern "C"
 
 int main() {
-    std::cout << "AlgoViz BST Visualizer Ready\n";
+    std::cout << "AlgoViz Visualizers Ready\n";
     return 0;
 }

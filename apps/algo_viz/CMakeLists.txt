@@ -3,7 +3,7 @@ if(NOT EMSCRIPTEN)
     return()
 endif()
 
-message(STATUS "AlgoViz: Configuring BST Visualizer")
+message(STATUS "AlgoViz: Configuring visualizers")
 
 # --- Optimization flags based on build type ---
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -45,7 +45,16 @@ target_link_options(algo_viz PRIVATE
 '_get_node_value',\
 '_get_node_left',\
 '_get_node_right',\
-'_get_node_parent'\
+'_get_node_parent',\
+'_uf_init',\
+'_uf_count',\
+'_uf_component_count',\
+'_uf_get_parent',\
+'_uf_get_rank',\
+'_uf_get_set_size',\
+'_uf_find',\
+'_uf_union',\
+'_uf_connected'\
 ]"
     "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
     "-sALLOW_MEMORY_GROWTH=1"

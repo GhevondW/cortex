@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoViz Pro - Union-Find Visualizer</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./src/styles/main.css">
+</head>
+<body>
+    <div id="app">
+        <header class="topbar">
+            <div>
+                <h1 class="app-title">AlgoViz Pro</h1>
+                <p class="app-subtitle">Union-Find (Disjoint Set Union)</p>
+            </div>
+            <div class="topbar-actions">
+                <a class="btn btn-ghost" href="./index.html">Back to Catalog</a>
+                <span class="chip">Powered by Cortex</span>
+            </div>
+        </header>
+
+        <main class="workspace-page">
+            <div class="app-shell uf-shell">
+                <section class="surface uf-surface">
+                    <div class="uf-graph-wrap">
+                        <svg id="ufGraph" class="uf-graph" viewBox="0 0 860 560" role="img" aria-label="Union Find graph"></svg>
+                    </div>
+                    <footer class="output-bar">
+                        <span class="output-label">Result</span>
+                        <span class="output-values" id="ufResult">Initializing runtime...</span>
+                    </footer>
+                </section>
+
+                <aside class="panel-grid">
+                    <section class="surface panel">
+                        <h2 class="panel-title">Dataset</h2>
+                        <label class="field-label" for="ufSizeInput">Node count</label>
+                        <input id="ufSizeInput" type="number" min="2" max="32" value="10">
+                        <div class="speed-row">
+                            <label class="field-label" for="ufSpeedSlider">Animation</label>
+                            <input id="ufSpeedSlider" type="range" min="1" max="100" value="60">
+                            <span id="ufSpeedLabel">420ms</span>
+                        </div>
+                        <div class="btn-row">
+                            <button class="btn btn-accent" id="ufInitBtn" disabled>Initialize</button>
+                            <button class="btn btn-secondary" id="ufRandomBtn" disabled>Random Unions</button>
+                            <button class="btn btn-ghost" id="ufResetBtn" disabled>Reset</button>
+                        </div>
+                    </section>
+
+                    <section class="surface panel">
+                        <h2 class="panel-title">Operations</h2>
+                        <label class="field-label" for="ufFindInput">Find root(x)</label>
+                        <div class="triple-group">
+                            <input id="ufFindInput" type="number" min="0" value="3">
+                            <button class="btn btn-primary" id="ufFindBtn" disabled>Find</button>
+                        </div>
+
+                        <label class="field-label" for="ufUnionAInput">Union(a, b)</label>
+                        <div class="triple-group">
+                            <input id="ufUnionAInput" type="number" min="0" value="2">
+                            <input id="ufUnionBInput" type="number" min="0" value="7">
+                            <button class="btn btn-primary" id="ufUnionBtn" disabled>Union</button>
+                        </div>
+
+                        <label class="field-label" for="ufConnAInput">Connected(a, b)</label>
+                        <div class="triple-group">
+                            <input id="ufConnAInput" type="number" min="0" value="2">
+                            <input id="ufConnBInput" type="number" min="0" value="7">
+                            <button class="btn btn-secondary" id="ufConnBtn" disabled>Check</button>
+                        </div>
+                    </section>
+
+                    <section class="surface panel">
+                        <h2 class="panel-title">Arrays</h2>
+                        <pre class="uf-state-dump" id="ufStateDump">parent: []</pre>
+                    </section>
+                </aside>
+
+                <section class="surface status-row">
+                    <span id="ufStatusText">Initializing WASM module...</span>
+                    <div class="stats">
+                        <span>Nodes: <strong id="ufNodesEl">0</strong></span>
+                        <span>Components: <strong id="ufComponentsEl">0</strong></span>
+                        <span>Ops: <strong id="ufOpsEl">0</strong></span>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="./src/js/union_find.js"></script>
+</body>
+</html>
