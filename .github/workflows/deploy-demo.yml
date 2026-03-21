@@ -70,11 +70,21 @@ jobs:
           cp build/wasm/examples/*.js deploy/examples/
           cp build/wasm/examples/*.wasm deploy/examples/
 
-          # Copy full AlgoViz app bundle (includes src/ styles/modules)
-          cp -R build/wasm-algoviz/apps/algo_viz/. deploy/algoviz/
+          # Copy AlgoViz static web assets from source
+          cp -R apps/algo_viz/web/. deploy/algoviz/
+          # Copy compiled AlgoViz WASM runtime artifacts
+          cp build/wasm-algoviz/apps/algo_viz/algo_viz.js deploy/algoviz/
+          cp build/wasm-algoviz/apps/algo_viz/algo_viz.wasm deploy/algoviz/
 
           # Copy docs
           cp -r doc/html/* deploy/docs/
+
+          # Fail fast if required AlgoViz assets are missing
+          test -f deploy/algoviz/index.html
+          test -f deploy/algoviz/src/main.js
+          test -f deploy/algoviz/src/styles/main.css
+          test -f deploy/algoviz/algo_viz.js
+          test -f deploy/algoviz/algo_viz.wasm
           
           # Create a root index.html that links to everything
           cat > deploy/index.html << 'EOF'
