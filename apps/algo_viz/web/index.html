@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlgoViz Pro - BST Visualizer</title>
+    <title>AlgoViz Pro - Visualization Catalog</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="./src/styles/main.css">
 </head>
 <body>
@@ -11,102 +12,61 @@
         <header class="topbar">
             <div>
                 <h1 class="app-title">AlgoViz Pro</h1>
-                <p class="app-subtitle">BST Visualizer</p>
+                <p class="app-subtitle">Visualization Catalog</p>
             </div>
             <span class="chip">Powered by Cortex</span>
         </header>
 
-        <main class="app-shell">
-            <section class="surface canvas-surface">
-                <div class="canvas-container" id="canvasContainer">
-                    <canvas id="treeCanvas"></canvas>
-                    <div class="canvas-empty-msg" id="emptyMsg">Load a preset tree or add nodes to begin</div>
-                    <div class="canvas-toolbar">
-                        <button class="icon-btn" id="zoomInBtn" title="Zoom in">+</button>
-                        <button class="icon-btn" id="zoomOutBtn" title="Zoom out">-</button>
-                        <button class="icon-btn" id="fitBtn" title="Fit to view">&#x2922;</button>
-                        <button class="icon-btn" id="spreadHBtn" title="Spread horizontally">&#x2194;</button>
-                        <button class="icon-btn" id="shrinkHBtn" title="Shrink horizontally">&#x21A4;</button>
-                        <button class="icon-btn" id="spreadVBtn" title="Spread vertically">&#x2195;</button>
-                        <button class="icon-btn" id="shrinkVBtn" title="Shrink vertically">&#x21A5;</button>
-                    </div>
-                </div>
-                <footer class="output-bar">
-                    <span class="output-label">Output</span>
-                    <span class="output-values" id="traversalOutput">&mdash;</span>
-                </footer>
+        <main class="home-page">
+            <section class="surface home-hero">
+                <p class="eyebrow">Visualization Catalog</p>
+                <h2 class="hero-title">Choose What You Want To Explore</h2>
+                <p class="hero-copy">
+                    Start with Binary Search Tree algorithms. This catalog will grow as new visualizers are added.
+                </p>
             </section>
 
-            <aside class="panel-grid">
-                <section class="surface panel">
-                    <h2 class="panel-title">Algorithm</h2>
-                    <label class="field-label" for="algorithmSelect">Operation</label>
-                    <select id="algorithmSelect">
-                        <option value="0">BST Insert</option>
-                        <option value="1">BST Delete</option>
-                        <option value="2">BST Find</option>
-                        <option value="3">In-order Traversal</option>
-                        <option value="4">Pre-order Traversal</option>
-                        <option value="5">Post-order Traversal</option>
-                        <option value="6">BFS (Level-order)</option>
-                        <option value="7">DFS (Depth-first)</option>
-                    </select>
+            <section class="surface catalog-toolbar">
+                <label class="field-label" for="catalogSearch">Find algorithm</label>
+                <input id="catalogSearch" type="text" placeholder="Binary Search Tree, Graph, Heap..." disabled>
+                <p class="catalog-note">Interactive filtering comes next. For now, choose from the cards below.</p>
+            </section>
 
-                    <div id="valueInputGroup">
-                        <label class="field-label" for="valueInput">Value</label>
-                        <input type="number" id="valueInput" value="42" min="1" max="999">
-                    </div>
+            <section class="catalog-grid">
+                <article class="surface viz-card">
+                    <span class="viz-badge">Available</span>
+                    <h3>Binary Search Tree</h3>
+                    <p>Run and inspect insert, delete, find, DFS, BFS, and traversal algorithms step by step.</p>
+                    <ul class="viz-points">
+                        <li>Interactive execution controls</li>
+                        <li>Preset trees and custom values</li>
+                        <li>Canvas pan, zoom, and layout tuning</li>
+                    </ul>
+                    <a class="btn btn-primary" href="./bst.html">Open BST Visualizer</a>
+                </article>
 
-                    <div class="btn-row">
-                        <button class="btn btn-primary" id="runBtn" disabled>Run</button>
-                        <button class="btn btn-secondary" id="stepBtn" disabled>Step</button>
-                        <button class="btn btn-secondary" id="pauseBtn" disabled>Pause</button>
-                        <button class="btn btn-ghost" id="resetBtn" disabled>Reset</button>
-                    </div>
+                <article class="surface viz-card viz-card-disabled" aria-disabled="true">
+                    <span class="viz-badge viz-badge-muted">Coming Soon</span>
+                    <h3>More Visualizers</h3>
+                    <p>Graph, dynamic programming, and advanced data structure visualizations are planned next.</p>
+                    <button class="btn btn-secondary" disabled>In Roadmap</button>
+                </article>
 
-                    <div class="speed-row">
-                        <label class="field-label" for="speedSlider">Speed</label>
-                        <input type="range" id="speedSlider" min="1" max="100" value="60">
-                        <span id="speedLabel">300ms</span>
-                    </div>
-                </section>
+                <article class="surface viz-card viz-card-disabled" aria-disabled="true">
+                    <span class="viz-badge viz-badge-muted">Coming Soon</span>
+                    <h3>Graph Traversals</h3>
+                    <p>BFS/DFS visualizations for directed and undirected graphs with path highlighting.</p>
+                    <button class="btn btn-secondary" disabled>In Roadmap</button>
+                </article>
 
-                <section class="surface panel">
-                    <h2 class="panel-title">Tree</h2>
-                    <label class="field-label" for="presetSelect">Preset</label>
-                    <select id="presetSelect">
-                        <option value="0">Balanced (7 nodes)</option>
-                        <option value="1">Skewed Left (5 nodes)</option>
-                        <option value="2">Skewed Right (5 nodes)</option>
-                        <option value="3">Larger (10 nodes)</option>
-                    </select>
-
-                    <button class="btn btn-accent" id="loadPresetBtn" disabled>Load preset</button>
-
-                    <div class="divider"></div>
-
-                    <label class="field-label" for="addValueInput">Add Node</label>
-                    <div class="inline-group">
-                        <input type="number" id="addValueInput" placeholder="Value" min="1" max="999">
-                        <button class="btn btn-secondary" id="addNodeBtn" disabled>Add</button>
-                    </div>
-
-                    <div class="btn-row">
-                        <button class="btn btn-secondary" id="randomBtn" disabled>Random (8)</button>
-                        <button class="btn btn-danger" id="clearBtn" disabled>Clear tree</button>
-                    </div>
-                </section>
-            </aside>
-
-            <section class="surface status-row">
-                <span id="statusText">Initializing WASM module...</span>
-                <div class="stats">
-                    <span>Comparisons: <strong id="comparisonsEl">0</strong></span>
-                    <span>Steps: <strong id="stepsEl">0</strong></span>
-                </div>
+                <article class="surface viz-card viz-card-disabled" aria-disabled="true">
+                    <span class="viz-badge viz-badge-muted">Coming Soon</span>
+                    <h3>Heap Operations</h3>
+                    <p>Min-heap and max-heap insert/extract animations with array and tree dual view.</p>
+                    <button class="btn btn-secondary" disabled>In Roadmap</button>
+                </article>
             </section>
         </main>
     </div>
-    <script type="module" src="./src/main.js"></script>
 </body>
 </html>

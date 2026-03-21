@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoViz Pro - Binary Search Tree Visualizer</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./src/styles/main.css">
+</head>
+<body>
+    <div id="app">
+        <header class="topbar">
+            <div>
+                <h1 class="app-title">AlgoViz Pro</h1>
+                <p class="app-subtitle">Binary Search Tree Visualizer</p>
+            </div>
+            <div class="topbar-actions">
+                <a class="btn btn-ghost" href="./index.html">Back to Catalog</a>
+                <span class="chip">Powered by Cortex</span>
+            </div>
+        </header>
+
+        <main class="workspace-page">
+            <div class="app-shell">
+                <section class="surface canvas-surface">
+                    <div class="canvas-container" id="canvasContainer">
+                        <canvas id="treeCanvas"></canvas>
+                        <div class="canvas-empty-msg" id="emptyMsg">Load a preset tree or add nodes to begin</div>
+                        <div class="canvas-toolbar">
+                            <button class="icon-btn" id="zoomInBtn" title="Zoom in">+</button>
+                            <button class="icon-btn" id="zoomOutBtn" title="Zoom out">-</button>
+                            <button class="icon-btn" id="fitBtn" title="Fit to view">&#x2922;</button>
+                            <button class="icon-btn" id="spreadHBtn" title="Spread horizontally">&#x2194;</button>
+                            <button class="icon-btn" id="shrinkHBtn" title="Shrink horizontally">&#x21A4;</button>
+                            <button class="icon-btn" id="spreadVBtn" title="Spread vertically">&#x2195;</button>
+                            <button class="icon-btn" id="shrinkVBtn" title="Shrink vertically">&#x21A5;</button>
+                        </div>
+                    </div>
+                    <footer class="output-bar">
+                        <span class="output-label">Output</span>
+                        <span class="output-values" id="traversalOutput">&mdash;</span>
+                    </footer>
+                </section>
+
+                <aside class="panel-grid">
+                    <section class="surface panel">
+                        <h2 class="panel-title">Algorithm</h2>
+                        <label class="field-label" for="algorithmSelect">Operation</label>
+                        <select id="algorithmSelect"></select>
+
+                        <div id="valueInputGroup">
+                            <label class="field-label" for="valueInput">Value</label>
+                            <input type="number" id="valueInput" value="42" min="1" max="999">
+                        </div>
+
+                        <div class="btn-row">
+                            <button class="btn btn-primary" id="runBtn" disabled>Run</button>
+                            <button class="btn btn-secondary" id="stepBtn" disabled>Step</button>
+                            <button class="btn btn-secondary" id="pauseBtn" disabled>Pause</button>
+                            <button class="btn btn-ghost" id="resetBtn" disabled>Reset</button>
+                        </div>
+
+                        <div class="speed-row">
+                            <label class="field-label" for="speedSlider">Speed</label>
+                            <input type="range" id="speedSlider" min="1" max="100" value="60">
+                            <span id="speedLabel">300ms</span>
+                        </div>
+                    </section>
+
+                    <section class="surface panel">
+                        <h2 class="panel-title">Tree</h2>
+                        <label class="field-label" for="presetSelect">Preset</label>
+                        <select id="presetSelect"></select>
+
+                        <button class="btn btn-accent" id="loadPresetBtn" disabled>Load preset</button>
+
+                        <div class="divider"></div>
+
+                        <label class="field-label" for="addValueInput">Add Node</label>
+                        <div class="inline-group">
+                            <input type="number" id="addValueInput" placeholder="Value" min="1" max="999">
+                            <button class="btn btn-secondary" id="addNodeBtn" disabled>Add</button>
+                        </div>
+
+                        <div class="btn-row">
+                            <button class="btn btn-secondary" id="randomBtn" disabled>Random (8)</button>
+                            <button class="btn btn-danger" id="clearBtn" disabled>Clear tree</button>
+                        </div>
+                    </section>
+                </aside>
+
+                <section class="surface status-row">
+                    <span id="statusText">Initializing WASM module...</span>
+                    <div class="stats">
+                        <span>Comparisons: <strong id="comparisonsEl">0</strong></span>
+                        <span>Steps: <strong id="stepsEl">0</strong></span>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

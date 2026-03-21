@@ -2,44 +2,29 @@ import { getDom } from "./js/dom.js";
 import { createState } from "./js/state.js";
 import { loadWasmRuntime } from "./js/wasm.js";
 import { createTreeRenderer } from "./js/treeRenderer.js";
-import { createHashRenderer } from "./js/hashRenderer.js";
 
 const dom = getDom();
 const state = createState();
 const renderer = createTreeRenderer(dom, state);
-const hashRenderer = createHashRenderer(dom);
 let wasmModule = null;
 
-const SAMPLE_CONFIG = {
-    bst: {
-        algorithms: [
-            { id: 0, label: "BST Insert", needsValue: true },
-            { id: 1, label: "BST Delete", needsValue: true },
-            { id: 2, label: "BST Find", needsValue: true },
-            { id: 3, label: "In-order Traversal", needsValue: false },
-            { id: 4, label: "Pre-order Traversal", needsValue: false },
-            { id: 5, label: "Post-order Traversal", needsValue: false },
-            { id: 6, label: "BFS (Level-order)", needsValue: false },
-            { id: 7, label: "DFS (Depth-first)", needsValue: false },
-        ],
-        presets: [
-            { id: 0, label: "Balanced (7 nodes)" },
-            { id: 1, label: "Skewed Left (5 nodes)" },
-            { id: 2, label: "Skewed Right (5 nodes)" },
-            { id: 3, label: "Larger (10 nodes)" },
-        ],
-    },
-    hash: {
-        algorithms: [
-            { id: 8, label: "Hash Insert", needsValue: true },
-            { id: 9, label: "Hash Find", needsValue: true },
-            { id: 10, label: "Hash Delete", needsValue: true },
-        ],
-        presets: [
-            { id: 0, label: "Mixed keys" },
-            { id: 1, label: "Collision-heavy keys" },
-        ],
-    },
+const BST_CONFIG = {
+    algorithms: [
+        { id: 0, label: "BST Insert", needsValue: true },
+        { id: 1, label: "BST Delete", needsValue: true },
+        { id: 2, label: "BST Find", needsValue: true },
+        { id: 3, label: "In-order Traversal", needsValue: false },
+        { id: 4, label: "Pre-order Traversal", needsValue: false },
+        { id: 5, label: "Post-order Traversal", needsValue: false },
+        { id: 6, label: "BFS (Level-order)", needsValue: false },
+        { id: 7, label: "DFS (Depth-first)", needsValue: false },
+    ],
+    presets: [
+        { id: 0, label: "Balanced (7 nodes)" },
+        { id: 1, label: "Skewed Left (5 nodes)" },
+        { id: 2, label: "Skewed Right (5 nodes)" },
+        { id: 3, label: "Larger (10 nodes)" },
+    ],
 };
 
 function getDelay(sliderValue) {
@@ -56,6 +41,7 @@ function updateSpeedDisplay() {
 }
 
 function syncTreeFromWasm() {
+    if (!wasmModule) return;
     state.treeNodes = {};
     state.rootId = wasmModule.ccall("get_root_id", "number", [], []);
     const count = wasmModule.ccall("get_node_count", "number", [], []);
@@ -73,13 +59,32 @@ function syncTreeFromWasm() {
 function clearHighlightsAndOutput() {
     state.nodeHighlights = {};
     state.edgeHighlights = {};
-    hashRenderer.clearHighlights();
     dom.traversalOutput.textContent = "\u2014";
 }
 
-function updateButtons() {
+function stopPlayback() {
+    state.isRunning = false;
+    state.isPaused = false;
+    if (state.playTimer) {
+        clearTimeout(state.playTimer);
+        state.playTimer = null;
+    }
+}
+
+function resetExecution() {
+    stopPlayback();
+    if (wasmModule) {
+        wasmModule.ccall("reset_algorithm", null, [], []);
+    }
+}
+
+function getSelectedAlgorithm() {
     const selectedId = Number.parseInt(dom.algorithmSelect.value, 10);
-    const selectedAlgo = SAMPLE_CONFIG[dom.sampleSelect.value].algorithms.find((a) => a.id === selectedId);
+    return BST_CONFIG.algorithms.find((algorithm) => algorithm.id === selectedId) || null;
+}
+
+function updateButtons() {
+    const selectedAlgo = getSelectedAlgorithm();
     const needsValue = selectedAlgo ? selectedAlgo.needsValue : true;
     dom.valueInputGroup.style.display = needsValue ? "" : "none";
 
@@ -107,43 +112,24 @@ function updateButtons() {
     dom.clearBtn.disabled = !state.isReady;
 }
 
-function updateSelectOptions() {
-    const sample = SAMPLE_CONFIG[dom.sampleSelect.value];
-    dom.algorithmSelect.innerHTML = sample.algorithms.map((a) => `<option value="${a.id}">${a.label}</option>`).join("");
-    dom.presetSelect.innerHTML = sample.presets.map((p) => `<option value="${p.id}">${p.label}</option>`).join("");
-    const isHash = dom.sampleSelect.value === "hash";
-    dom.canvas.hidden = isHash;
-    dom.hashContainer.hidden = !isHash;
-    dom.emptyMsg.hidden = isHash;
-    const toolbar = dom.canvasContainer.querySelector(".canvas-toolbar");
-    if (toolbar) {
-        toolbar.hidden = isHash;
-    }
+function populateControls() {
+    dom.algorithmSelect.innerHTML = BST_CONFIG.algorithms
+        .map((algorithm) => `<option value="${algorithm.id}">${algorithm.label}</option>`)
+        .join("");
+    dom.presetSelect.innerHTML = BST_CONFIG.presets
+        .map((preset) => `<option value="${preset.id}">${preset.label}</option>`)
+        .join("");
     updateButtons();
 }
 
-function showHomePage() {
-    dom.workspacePage.hidden = true;
-    dom.homePage.hidden = false;
-}
-
-function showWorkspace(sample) {
-    dom.homePage.hidden = true;
-    dom.workspacePage.hidden = false;
-    dom.sampleSelect.value = sample;
-    updateSelectOptions();
+function loadPreset(presetId, fit = true) {
+    if (!wasmModule) return;
+    resetExecution();
+    wasmModule.ccall("build_preset_tree", null, ["number"], [presetId]);
     clearHighlightsAndOutput();
-    if (!wasmModule || !state.isReady) {
-        dom.statusText.textContent = "Initializing WASM module...";
-        return;
-    }
-    if (sample === "hash") {
-        wasmModule.ccall("build_preset_hash", null, ["number"], [0]);
-    } else {
-        wasmModule.ccall("build_preset_tree", null, ["number"], [0]);
-    }
-    rerenderFromWasm(true);
-    dom.statusText.textContent = "Ready. Select an algorithm and click Run.";
+    dom.comparisonsEl.textContent = "0";
+    dom.stepsEl.textContent = "0";
+    rerenderFromWasm(fit);
 }
 
 async function scheduleStep() {
@@ -160,6 +146,7 @@ async function scheduleStep() {
 }
 
 async function startAlgorithm(autoPlay) {
+    if (!wasmModule || !state.isReady) return;
     if (state.isRunning) return;
     state.isRunning = true;
     state.isPaused = !autoPlay;
@@ -181,6 +168,7 @@ async function startAlgorithm(autoPlay) {
 }
 
 async function doSingleStep() {
+    if (!wasmModule || !state.isReady) return;
     if (!state.isRunning) {
         await startAlgorithm(false);
         return;
@@ -192,18 +180,7 @@ async function doSingleStep() {
 }
 
 function rerenderFromWasm(fit = true) {
-    if (dom.sampleSelect.value === "hash") {
-        const size = wasmModule.ccall("get_hash_size", "number", [], []);
-        const slots = [];
-        for (let i = 0; i < size; i += 1) {
-            slots.push({
-                state: wasmModule.ccall("get_hash_slot_state", "number", ["number"], [i]),
-                value: wasmModule.ccall("get_hash_slot_value", "number", ["number"], [i]),
-            });
-        }
-        hashRenderer.setSlots(slots);
-        return;
-    }
+    if (!wasmModule) return;
     syncTreeFromWasm();
     renderer.layoutTree();
     if (fit) renderer.fitTreeToView();
@@ -274,74 +251,16 @@ function registerWasmCallbacks() {
     };
 
     window.onTreeDone = () => {
-        state.isRunning = false;
-        state.isPaused = false;
-        if (state.playTimer) {
-            clearTimeout(state.playTimer);
-            state.playTimer = null;
-        }
+        stopPlayback();
         updateButtons();
         syncTreeFromWasm();
         renderer.drawTree();
     };
-
-    window.onHashVisitSlot = (index) => {
-        hashRenderer.highlight(index);
-    };
-
-    window.onHashClearHighlights = () => {
-        hashRenderer.clearHighlights();
-    };
-
-    window.onHashSetSlot = (index, slotState, value) => {
-        hashRenderer.setSlot(index, slotState, value);
-    };
-
-    window.onHashDone = () => {
-        state.isRunning = false;
-        state.isPaused = false;
-        if (state.playTimer) {
-            clearTimeout(state.playTimer);
-            state.playTimer = null;
-        }
-        updateButtons();
-        rerenderFromWasm(false);
-    };
 }
 
 function wireEvents() {
-    dom.openTreeBtn.addEventListener("click", () => showWorkspace("bst"));
-    dom.openHashBtn.addEventListener("click", () => showWorkspace("hash"));
-    dom.backHomeBtn.addEventListener("click", () => {
-        if (state.playTimer) {
-            clearTimeout(state.playTimer);
-            state.playTimer = null;
-        }
-        state.isRunning = false;
-        state.isPaused = false;
-        updateButtons();
-        showHomePage();
-    });
-
     dom.speedSlider.addEventListener("input", updateSpeedDisplay);
     dom.algorithmSelect.addEventListener("change", updateButtons);
-    dom.sampleSelect.addEventListener("change", () => {
-        state.isRunning = false;
-        state.isPaused = false;
-        if (state.playTimer) {
-            clearTimeout(state.playTimer);
-            state.playTimer = null;
-        }
-        updateSelectOptions();
-        clearHighlightsAndOutput();
-        if (!wasmModule) return;
-        if (dom.sampleSelect.value === "hash") {
-            wasmModule.ccall("build_preset_hash", null, ["number"], [0]);
-        } else {
-            wasmModule.ccall("build_preset_tree", null, ["number"], [0]);
-        }
-        rerenderFromWasm(true);
-    });
     dom.runBtn.addEventListener("click", () => startAlgorithm(true));
     dom.stepBtn.addEventListener("click", () => doSingleStep());
 
@@ -358,11 +277,7 @@ function wireEvents() {
     });
 
     dom.resetBtn.addEventListener("click", () => {
-        if (state.playTimer) clearTimeout(state.playTimer);
-        state.playTimer = null;
-        state.isRunning = false;
-        state.isPaused = false;
-        wasmModule.ccall("reset_algorithm", null, [], []);
+        resetExecution();
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
         dom.statusText.textContent = "Reset. Ready.";
@@ -370,25 +285,18 @@ function wireEvents() {
     });
 
     dom.loadPresetBtn.addEventListener("click", () => {
+        if (!wasmModule) return;
         const presetId = Number.parseInt(dom.presetSelect.value, 10);
-        if (dom.sampleSelect.value === "hash") {
-            wasmModule.ccall("build_preset_hash", null, ["number"], [presetId]);
-        } else {
-            wasmModule.ccall("build_preset_tree", null, ["number"], [presetId]);
-        }
-        clearHighlightsAndOutput();
-        rerenderFromWasm(true);
+        loadPreset(presetId, true);
         dom.statusText.textContent = "Preset loaded. Ready.";
     });
 
     dom.addNodeBtn.addEventListener("click", () => {
+        if (!wasmModule) return;
         const val = Number.parseInt(dom.addValueInput.value, 10);
         if (Number.isNaN(val)) return;
-        if (dom.sampleSelect.value === "hash") {
-            wasmModule.ccall("add_hash_value", null, ["number"], [val]);
-        } else {
-            wasmModule.ccall("add_node", null, ["number"], [val]);
-        }
+        resetExecution();
+        wasmModule.ccall("add_node", null, ["number"], [val]);
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
         dom.addValueInput.value = "";
@@ -400,28 +308,17 @@ function wireEvents() {
     });
 
     dom.randomBtn.addEventListener("click", () => {
-        if (dom.sampleSelect.value === "hash") {
-            wasmModule.ccall("clear_hash_table", null, [], []);
-            const used = new Set();
-            for (let i = 0; i < 10; i += 1) {
-                let v = 0;
-                do {
-                    v = Math.floor(Math.random() * 120) + 1;
-                } while (used.has(v));
-                used.add(v);
-                wasmModule.ccall("add_hash_value", null, ["number"], [v]);
-            }
-        } else {
-            wasmModule.ccall("clear_tree", null, [], []);
-            const used = new Set();
-            for (let i = 0; i < 8; i += 1) {
-                let v = 0;
-                do {
-                    v = Math.floor(Math.random() * 95) + 5;
-                } while (used.has(v));
-                used.add(v);
-                wasmModule.ccall("add_node", null, ["number"], [v]);
-            }
+        if (!wasmModule) return;
+        resetExecution();
+        wasmModule.ccall("clear_tree", null, [], []);
+        const used = new Set();
+        for (let i = 0; i < 8; i += 1) {
+            let v = 0;
+            do {
+                v = Math.floor(Math.random() * 95) + 5;
+            } while (used.has(v));
+            used.add(v);
+            wasmModule.ccall("add_node", null, ["number"], [v]);
         }
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
@@ -429,11 +326,9 @@ function wireEvents() {
     });
 
     dom.clearBtn.addEventListener("click", () => {
-        if (dom.sampleSelect.value === "hash") {
-            wasmModule.ccall("clear_hash_table", null, [], []);
-        } else {
-            wasmModule.ccall("clear_tree", null, [], []);
-        }
+        if (!wasmModule) return;
+        resetExecution();
+        wasmModule.ccall("clear_tree", null, [], []);
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
         dom.statusText.textContent = "Tree cleared. Ready.";
@@ -463,17 +358,16 @@ async function bootstrap() {
     registerWasmCallbacks();
     wireEvents();
     renderer.bindCanvasGestures();
+    populateControls();
     updateSpeedDisplay();
-    updateSelectOptions();
-    showHomePage();
     updateButtons();
+    renderer.resizeCanvas();
 
     try {
         wasmModule = await loadWasmRuntime();
         state.isReady = true;
-        wasmModule.ccall("build_preset_tree", null, ["number"], [0]);
-        renderer.resizeCanvas();
-        dom.statusText.textContent = "Ready. Choose a sample from the home page.";
+        loadPreset(0, true);
+        dom.statusText.textContent = "Ready. Select an algorithm and click Run.";
         updateButtons();
     } catch (error) {
         dom.statusText.textContent = `WASM failed to initialize: ${error.message}`;

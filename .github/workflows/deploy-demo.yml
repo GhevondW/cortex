@@ -76,6 +76,7 @@ jobs:
 
           # Fail fast if required AlgoViz assets are missing
           test -f deploy/algoviz/index.html
+          test -f deploy/algoviz/bst.html
           test -f deploy/algoviz/src/main.js
           test -f deploy/algoviz/src/styles/main.css
           test -f deploy/algoviz/algo_viz.js
