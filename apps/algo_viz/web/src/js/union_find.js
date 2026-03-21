@@ -3,6 +3,10 @@ import { loadWasmRuntime } from "./wasm.js";
 const MIN_NODES = 2;
 const MAX_NODES = 32;
 const DEFAULT_NODES = 10;
+const VIEW_MARGIN = 72;
+const ZOOM_STEP = 1.18;
+const MIN_VIEW_FRACTION = 0.18;
+const MAX_VIEW_MULTIPLIER = 4.5;
 
 function required(id) {
     const element = document.getElementById(id);
@@ -13,7 +17,11 @@ function required(id) {
 }
 
 const dom = {
+    graphWrap: required("ufGraphWrap"),
     graph: required("ufGraph"),
+    zoomInBtn: required("ufZoomInBtn"),
+    zoomOutBtn: required("ufZoomOutBtn"),
+    fitBtn: required("ufFitBtn"),
     result: required("ufResult"),
     status: required("ufStatusText"),
     nodesEl: required("ufNodesEl"),
@@ -49,6 +57,21 @@ const state = {
     layoutHeight: 560,
     animationMs: 420,
     animationFrame: null,
+    viewport: {
+        x: -VIEW_MARGIN,
+        y: -VIEW_MARGIN,
+        width: 960 + VIEW_MARGIN * 2,
+        height: 560 + VIEW_MARGIN * 2,
+    },
+    viewportInitialized: false,
+    isPanning: false,
+    panPointerId: null,
+    panStartClientX: 0,
+    panStartClientY: 0,
+    panStartViewportX: 0,
+    panStartViewportY: 0,
+    panStartViewportWidth: 0,
+    panStartViewportHeight: 0,
     highlightNodes: new Set(),
     highlightEdges: new Set(),
     highlightTimer: null,
@@ -269,13 +292,218 @@ function nodeRadius() {
     return Math.max(10, Math.min(22, 24 - Math.floor(state.count / 3)));
 }
 
+function getGraphRect() {
+    return dom.graphWrap.getBoundingClientRect();
+}
+
+function getGraphAspect() {
+    const rect = getGraphRect();
+    if (rect.width > 0 && rect.height > 0) return rect.width / rect.height;
+    if (state.viewport.height > 0) return state.viewport.width / state.viewport.height;
+    return 16 / 9;
+}
+
+function clampViewport(viewport) {
+    const aspect = Math.max(0.2, getGraphAspect());
+    const minWidth = Math.max(180, state.layoutWidth * MIN_VIEW_FRACTION);
+    const maxWidth = Math.max(state.layoutWidth * MAX_VIEW_MULTIPLIER, state.layoutWidth + VIEW_MARGIN * 2);
+
+    let width = Number.isFinite(viewport.width) ? viewport.width : state.layoutWidth;
+    width = Math.max(minWidth, Math.min(maxWidth, width));
+    let height = width / aspect;
+
+    const minHeight = Math.max(120, state.layoutHeight * MIN_VIEW_FRACTION);
+    const maxHeight = Math.max(state.layoutHeight * MAX_VIEW_MULTIPLIER, state.layoutHeight + VIEW_MARGIN * 2);
+    if (height < minHeight) {
+        height = minHeight;
+        width = height * aspect;
+    } else if (height > maxHeight) {
+        height = maxHeight;
+        width = height * aspect;
+    }
+
+    let x = Number.isFinite(viewport.x) ? viewport.x : (state.layoutWidth - width) / 2;
+    let y = Number.isFinite(viewport.y) ? viewport.y : (state.layoutHeight - height) / 2;
+
+    const panMargin = Math.max(48, Math.min(width, height) * 0.08);
+    const minX = -panMargin;
+    const maxX = state.layoutWidth - width + panMargin;
+    const minY = -panMargin;
+    const maxY = state.layoutHeight - height + panMargin;
+
+    if (minX <= maxX) {
+        x = Math.max(minX, Math.min(maxX, x));
+    } else {
+        x = (state.layoutWidth - width) / 2;
+    }
+
+    if (minY <= maxY) {
+        y = Math.max(minY, Math.min(maxY, y));
+    } else {
+        y = (state.layoutHeight - height) / 2;
+    }
+
+    return { x, y, width, height };
+}
+
+function setViewport(viewport) {
+    const clamped = clampViewport(viewport);
+    state.viewport = clamped;
+    state.viewportInitialized = true;
+}
+
+function applyViewport() {
+    if (!state.viewportInitialized) {
+        const aspect = Math.max(0.2, getGraphAspect());
+        const contentWidth = state.layoutWidth + VIEW_MARGIN * 2;
+        const contentHeight = state.layoutHeight + VIEW_MARGIN * 2;
+        const contentAspect = contentWidth / contentHeight;
+        let width = contentWidth;
+        let height = contentHeight;
+        if (contentAspect > aspect) {
+            height = width / aspect;
+        } else {
+            width = height * aspect;
+        }
+        setViewport({
+            x: (state.layoutWidth - width) / 2,
+            y: (state.layoutHeight - height) / 2,
+            width,
+            height,
+        });
+    }
+
+    dom.graph.setAttribute(
+        "viewBox",
+        `${state.viewport.x.toFixed(2)} ${state.viewport.y.toFixed(2)} ${state.viewport.width.toFixed(2)} ${state.viewport.height.toFixed(2)}`,
+    );
+}
+
+function fitViewportToContent() {
+    state.viewportInitialized = false;
+    applyViewport();
+}
+
+function updateViewportForLayoutChange(previousLayoutWidth, previousLayoutHeight, forceFit = false) {
+    if (forceFit || !state.viewportInitialized) {
+        fitViewportToContent();
+        return;
+    }
+
+    const previous = state.viewport;
+    const zoomX = previous.width > 0 ? previousLayoutWidth / previous.width : 1;
+    const zoomY = previous.height > 0 ? previousLayoutHeight / previous.height : 1;
+    const zoom = Math.max(0.1, Math.min(zoomX, zoomY));
+    const aspect = Math.max(0.2, getGraphAspect());
+    let width = state.layoutWidth / zoom;
+    let height = width / aspect;
+
+    const centerRatioX = previousLayoutWidth > 0 ? (previous.x + previous.width / 2) / previousLayoutWidth : 0.5;
+    const centerRatioY = previousLayoutHeight > 0 ? (previous.y + previous.height / 2) / previousLayoutHeight : 0.5;
+    const centerX = centerRatioX * state.layoutWidth;
+    const centerY = centerRatioY * state.layoutHeight;
+
+    if (!Number.isFinite(height) || height <= 0) {
+        height = state.layoutHeight;
+        width = height * aspect;
+    }
+
+    setViewport({
+        x: centerX - width / 2,
+        y: centerY - height / 2,
+        width,
+        height,
+    });
+}
+
+function zoomAtClient(clientX, clientY, factor) {
+    if (!state.viewportInitialized) fitViewportToContent();
+    const rect = dom.graph.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const sx = (clientX - rect.left) / rect.width;
+    const sy = (clientY - rect.top) / rect.height;
+    const clampedSx = Math.max(0, Math.min(1, sx));
+    const clampedSy = Math.max(0, Math.min(1, sy));
+
+    const targetWidth = state.viewport.width / factor;
+    const worldX = state.viewport.x + clampedSx * state.viewport.width;
+    const worldY = state.viewport.y + clampedSy * state.viewport.height;
+
+    setViewport({
+        x: worldX - clampedSx * targetWidth,
+        y: worldY - clampedSy * (targetWidth / getGraphAspect()),
+        width: targetWidth,
+        height: targetWidth / getGraphAspect(),
+    });
+    renderGraph();
+}
+
+function zoomCentered(factor) {
+    const rect = dom.graph.getBoundingClientRect();
+    zoomAtClient(rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+}
+
+function beginPan(event) {
+    if (event.button !== 0) return;
+    if (!state.viewportInitialized) fitViewportToContent();
+    state.isPanning = true;
+    state.panPointerId = event.pointerId;
+    state.panStartClientX = event.clientX;
+    state.panStartClientY = event.clientY;
+    state.panStartViewportX = state.viewport.x;
+    state.panStartViewportY = state.viewport.y;
+    state.panStartViewportWidth = state.viewport.width;
+    state.panStartViewportHeight = state.viewport.height;
+    dom.graphWrap.classList.add("dragging");
+    if (typeof dom.graph.setPointerCapture === "function") {
+        dom.graph.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+}
+
+function panToPointer(event) {
+    if (!state.isPanning) return;
+    if (event.pointerId !== state.panPointerId) return;
+
+    const rect = getGraphRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const dx = event.clientX - state.panStartClientX;
+    const dy = event.clientY - state.panStartClientY;
+    setViewport({
+        x: state.panStartViewportX - (dx / rect.width) * state.panStartViewportWidth,
+        y: state.panStartViewportY - (dy / rect.height) * state.panStartViewportHeight,
+        width: state.panStartViewportWidth,
+        height: state.panStartViewportHeight,
+    });
+    renderGraph();
+}
+
+function endPan(event = null) {
+    if (!state.isPanning) return;
+    if (event && state.panPointerId !== null && event.pointerId !== state.panPointerId) return;
+
+    if (event && typeof dom.graph.releasePointerCapture === "function") {
+        try {
+            dom.graph.releasePointerCapture(state.panPointerId);
+        } catch {
+            /* no-op */
+        }
+    }
+
+    state.isPanning = false;
+    state.panPointerId = null;
+    dom.graphWrap.classList.remove("dragging");
+}
+
 function renderGraph() {
     if (state.count === 0 || state.positions.length !== state.count) {
         dom.graph.innerHTML = "";
         return;
     }
 
-    dom.graph.setAttribute("viewBox", `0 0 ${state.layoutWidth} ${state.layoutHeight}`);
+    applyViewport();
     const radius = nodeRadius();
 
     const edges = [];
@@ -398,11 +626,18 @@ function animateToPositions(targetPositions) {
     });
 }
 
-async function syncFromWasm(previousParents, animateWhenChanged) {
+async function syncFromWasm(previousParents, animateWhenChanged, forceFit = false) {
+    const previousLayoutWidth = state.layoutWidth;
+    const previousLayoutHeight = state.layoutHeight;
     pullStateFromWasm();
     const layout = computeTreeLayout(state.parents);
     state.layoutWidth = layout.width;
     state.layoutHeight = layout.height;
+    const layoutChanged =
+        previousLayoutWidth !== state.layoutWidth || previousLayoutHeight !== state.layoutHeight;
+    if (forceFit || layoutChanged) {
+        updateViewportForLayoutChange(previousLayoutWidth, previousLayoutHeight, forceFit);
+    }
 
     const parentsChanged = previousParents ? !arraysEqual(previousParents, state.parents) : true;
     if (state.positions.length === 0 || state.positions.length !== layout.positions.length) {
@@ -431,8 +666,8 @@ async function initializeDataset() {
         dom.sizeInput.value = String(n);
         state.module.ccall("uf_init", null, ["number"], [n]);
         state.ops = 0;
-        await syncFromWasm(null, false);
-        setStatus(`Initialized ${n} singleton sets.`);
+        await syncFromWasm(null, false, true);
+        setStatus(`Initialized ${n} singleton sets. Drag to pan, scroll to zoom.`);
         setResult("Use Find / Union / Connected operations.");
     } finally {
         setBusy(false);
@@ -576,6 +811,33 @@ function wireEvents() {
     });
     dom.connBInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") void runConnected();
+    });
+
+    dom.graph.addEventListener(
+        "wheel",
+        (event) => {
+            event.preventDefault();
+            zoomAtClient(event.clientX, event.clientY, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+        },
+        { passive: false },
+    );
+
+    dom.graph.addEventListener("pointerdown", beginPan);
+    window.addEventListener("pointermove", panToPointer);
+    window.addEventListener("pointerup", (event) => endPan(event));
+    window.addEventListener("pointercancel", (event) => endPan(event));
+    window.addEventListener("blur", () => endPan());
+    window.addEventListener("resize", () => {
+        if (!state.viewportInitialized) return;
+        setViewport(state.viewport);
+        renderGraph();
+    });
+
+    dom.zoomInBtn.addEventListener("click", () => zoomCentered(1.24));
+    dom.zoomOutBtn.addEventListener("click", () => zoomCentered(1 / 1.24));
+    dom.fitBtn.addEventListener("click", () => {
+        fitViewportToContent();
+        renderGraph();
     });
 }
 

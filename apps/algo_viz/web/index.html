@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlgoViz Pro - Visualization Catalog</title>
     <link rel="icon" href="data:,">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("algoviz-theme");
+                if (saved === "dark" || saved === "light") {
+                    document.documentElement.dataset.theme = saved;
+                }
+            } catch {
+                /* no-op */
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="./src/styles/main.css">
 </head>
 <body>
@@ -14,7 +26,15 @@
                 <h1 class="app-title">AlgoViz Pro</h1>
                 <p class="app-subtitle">Visualization Catalog</p>
             </div>
-            <span class="chip">Powered by Cortex</span>
+            <div class="topbar-actions">
+                <nav class="top-nav" aria-label="Application pages">
+                    <a class="top-nav-link top-nav-link-active" href="./index.html" aria-current="page">Catalog</a>
+                    <a class="top-nav-link" href="./bst.html">BST</a>
+                    <a class="top-nav-link" href="./union_find.html">Union-Find</a>
+                </nav>
+                <button class="btn btn-ghost theme-toggle" type="button" data-theme-toggle>Light Mode</button>
+                <span class="chip">Powered by Cortex</span>
+            </div>
         </header>
 
         <main class="home-page">
@@ -73,5 +93,6 @@
             </section>
         </main>
     </div>
+    <script type="module" src="./src/js/theme.js"></script>
 </body>
 </html>

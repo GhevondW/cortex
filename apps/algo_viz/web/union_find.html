@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlgoViz Pro - Union-Find Visualizer</title>
     <link rel="icon" href="data:,">
+    <script>
+        (() => {
+            try {
+                const saved = localStorage.getItem("algoviz-theme");
+                if (saved === "dark" || saved === "light") {
+                    document.documentElement.dataset.theme = saved;
+                }
+            } catch {
+                /* no-op */
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="./src/styles/main.css">
 </head>
 <body>
@@ -15,7 +27,12 @@
                 <p class="app-subtitle">Union-Find (Disjoint Set Union)</p>
             </div>
             <div class="topbar-actions">
-                <a class="btn btn-ghost" href="./index.html">Back to Catalog</a>
+                <nav class="top-nav" aria-label="Application pages">
+                    <a class="top-nav-link" href="./index.html">Catalog</a>
+                    <a class="top-nav-link" href="./bst.html">BST</a>
+                    <a class="top-nav-link top-nav-link-active" href="./union_find.html" aria-current="page">Union-Find</a>
+                </nav>
+                <button class="btn btn-ghost theme-toggle" type="button" data-theme-toggle>Light Mode</button>
                 <span class="chip">Powered by Cortex</span>
             </div>
         </header>
@@ -23,8 +40,13 @@
         <main class="workspace-page">
             <div class="app-shell uf-shell">
                 <section class="surface uf-surface">
-                    <div class="uf-graph-wrap">
+                    <div class="uf-graph-wrap" id="ufGraphWrap">
                         <svg id="ufGraph" class="uf-graph" viewBox="0 0 860 560" role="img" aria-label="Union Find graph"></svg>
+                        <div class="canvas-toolbar uf-graph-toolbar">
+                            <button class="icon-btn" id="ufZoomInBtn" title="Zoom in">+</button>
+                            <button class="icon-btn" id="ufZoomOutBtn" title="Zoom out">-</button>
+                            <button class="icon-btn" id="ufFitBtn" title="Fit to view">&#x2922;</button>
+                        </div>
                     </div>
                     <footer class="output-bar">
                         <span class="output-label">Result</span>
@@ -89,6 +111,7 @@
             </div>
         </main>
     </div>
+    <script type="module" src="./src/js/theme.js"></script>
     <script type="module" src="./src/js/union_find.js"></script>
 </body>
 </html>

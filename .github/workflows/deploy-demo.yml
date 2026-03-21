@@ -79,6 +79,7 @@ jobs:
           test -f deploy/algoviz/bst.html
           test -f deploy/algoviz/union_find.html
           test -f deploy/algoviz/src/main.js
+          test -f deploy/algoviz/src/js/theme.js
           test -f deploy/algoviz/src/js/union_find.js
           test -f deploy/algoviz/src/styles/main.css
           test -f deploy/algoviz/algo_viz.js
