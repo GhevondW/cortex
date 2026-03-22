@@ -111,3 +111,27 @@ services:
         cd build/wasm-algoviz/apps/algo_viz &&
         python3 -m http.server 8080
         "
+
+  # 8. Build and Serve Image Editor MVP
+  serve-image-editor:
+      build: .
+      volumes:
+        - .:/workspace
+      ports:
+        - "8080:8080"
+      environment:
+        - BUILD_TYPE=${BUILD_TYPE:-Release}
+      command: >
+        bash -c "
+        source /opt/emsdk/emsdk_env.sh &&
+        rm -rf build/wasm-image-editor &&
+        emcmake cmake -B build/wasm-image-editor -G Ninja -DCMAKE_BUILD_TYPE=$${BUILD_TYPE} -DCORTEX_BUILD_APPS=ON &&
+        cmake --build build/wasm-image-editor --config $${BUILD_TYPE} --target image_editor &&
+        echo '' &&
+        echo '✅ Image Editor built successfully in $${BUILD_TYPE} mode!' &&
+        echo '' &&
+        echo '  → http://localhost:8080' &&
+        echo '' &&
+        cd build/wasm-image-editor/apps/image_editor &&
+        python3 -m http.server 8080
+        "

@@ -30,6 +30,7 @@ doc/
 !apps/algo_viz/web/vite.config.js
 !apps/algo_viz/web/src/main.js
 !apps/algo_viz/web/src/js/*.js
+!apps/image_editor/web/*.js
 
 # CMake
 CMakeCache.txt

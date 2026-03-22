@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex Image Editor MVP</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./styles.css?v=20260322h">
+</head>
+<body>
+    <div id="app">
+        <header class="topbar">
+            <div>
+                <h1 class="app-title">Cortex Studio</h1>
+                <p class="app-subtitle">Image Editor MVP</p>
+            </div>
+            <div class="topbar-actions">
+                <nav class="top-nav" aria-label="Application pages">
+                    <a class="top-nav-link top-nav-link-active" href="./index.html" aria-current="page">Editor</a>
+                </nav>
+                <span class="chip">Powered by Cortex</span>
+            </div>
+        </header>
+
+        <main class="workspace-page">
+            <div class="workspace-heading">
+                <div>
+                    <h2>Responsive Image Processing</h2>
+                    <p class="workspace-subtitle">Upload one image, then run a fixed grayscale and blur chain with live controls.</p>
+                </div>
+            </div>
+
+            <div class="app-shell">
+                <section class="surface canvas-surface">
+                    <div class="canvas-container" id="canvasContainer">
+                        <canvas id="previewCanvas"></canvas>
+                        <div class="canvas-empty-msg" id="emptyMsg">Load an image to begin.</div>
+                        <div class="canvas-toolbar">
+                            <span class="canvas-toolbar-chip">source -> grayscale -> blur</span>
+                        </div>
+                    </div>
+                    <footer class="output-bar">
+                        <span class="output-label">Preview</span>
+                        <span class="output-values" id="outputSummary">No image loaded</span>
+                    </footer>
+                </section>
+
+                <aside class="panel-grid">
+                    <section class="surface panel">
+                        <h2 class="panel-title">Image</h2>
+                        <label class="field-label" for="fileInput">Source File</label>
+                        <input id="fileInput" type="file" accept="image/*">
+
+                        <div class="divider"></div>
+
+                        <div class="stack-row">
+                            <span class="field-label">Source</span>
+                            <span class="field-value" id="imageMeta">No image loaded</span>
+                        </div>
+
+                        <div class="btn-row">
+                            <button class="btn btn-secondary" id="resetBtn" type="button" disabled>Reset Filters</button>
+                        </div>
+                    </section>
+
+                    <section class="surface panel">
+                        <h2 class="panel-title">Filters</h2>
+
+                        <div class="slider-group">
+                            <div class="slider-head">
+                                <label class="field-label" for="grayscaleSlider">Grayscale</label>
+                                <span class="field-value" id="grayscaleValue">0%</span>
+                            </div>
+                            <input id="grayscaleSlider" type="range" min="0" max="100" value="0" disabled>
+                        </div>
+
+                        <div class="slider-group">
+                            <div class="slider-head">
+                                <label class="field-label" for="blurSlider">Blur Radius</label>
+                                <span class="field-value" id="blurValue">0 px</span>
+                            </div>
+                            <input id="blurSlider" type="range" min="0" max="16" value="0" disabled>
+                        </div>
+
+                        <p class="panel-note">The preview updates live. Heavy work yields through Cortex so the page stays responsive.</p>
+                    </section>
+                </aside>
+
+                <section class="surface status-row">
+                    <span id="statusText">Initializing WASM module...</span>
+                    <div class="stats">
+                        <span>Image: <strong id="statusImage">none</strong></span>
+                        <span>Mode: <strong id="statusMode">Source</strong></span>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="./main.js?v=20260322h"></script>
+</body>
+</html>

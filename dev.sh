@@ -25,6 +25,7 @@ print_usage() {
     echo "  example-wasm      Build and run WASM example"
     echo "  serve             Serve WASM example in browser"
     echo "  algoviz           Build and serve AlgoViz BST Visualizer"
+    echo "  image-editor      Build and serve the Image Editor MVP"
     echo "  clean             Clean all build artifacts"
     echo "  format            Format all C++ code"
     echo "  shell             Open shell in development container"
@@ -78,6 +79,15 @@ case "${1:-help}" in
         echo -e "${YELLOW}Tip: To build in Debug mode, run: BUILD_TYPE=Debug ./dev.sh algoviz${NC}"
         docker compose up --build serve-algoviz
         ;;
+    image-editor)
+        echo -e "${GREEN}Building and serving the Image Editor MVP...${NC}"
+        echo -e "${YELLOW}Building in Release mode (optimized)${NC}"
+        echo ""
+        echo -e "  ${GREEN}→ http://localhost:8080${NC} ${YELLOW}(Cortex Image Editor MVP)${NC}"
+        echo ""
+        echo -e "${YELLOW}Tip: To build in Debug mode, run: BUILD_TYPE=Debug ./dev.sh image-editor${NC}"
+        docker compose up --build serve-image-editor
+        ;;
     clean)
         echo -e "${YELLOW}Cleaning build artifacts...${NC}"
         rm -rf build/
@@ -112,4 +122,3 @@ case "${1:-help}" in
         exit 1
         ;;
 esac
-
