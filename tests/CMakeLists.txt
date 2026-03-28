@@ -23,6 +23,13 @@ target_link_libraries(cortex_tiny_fiber_test PRIVATE cortex::cortex GTest::gtest
 cortex_apply_warnings(cortex_tiny_fiber_test)
 cortex_apply_sanitizers(cortex_tiny_fiber_test)
 
+if(NOT EMSCRIPTEN)
+    add_executable(cortex_fiber_test fiber_test.cpp)
+    target_link_libraries(cortex_fiber_test PRIVATE cortex::cortex GTest::gtest_main)
+    cortex_apply_warnings(cortex_fiber_test)
+    cortex_apply_sanitizers(cortex_fiber_test)
+endif()
+
 if(EMSCRIPTEN)
     # Configure all executables for WASM
     set_target_properties(cortex_coroutine_test PROPERTIES SUFFIX ".js")
@@ -59,4 +66,5 @@ else()
     gtest_discover_tests(cortex_base_coroutine_test)
     gtest_discover_tests(cortex_generator_test)
     gtest_discover_tests(cortex_tiny_fiber_test)
+    gtest_discover_tests(cortex_fiber_test)
 endif()
