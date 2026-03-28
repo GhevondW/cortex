@@ -5,13 +5,16 @@ A C++ stackful coroutine library with WebAssembly support, featuring cooperative
 ## Features
 
 - **Stackful Coroutines** - Full coroutine support with suspend/resume
-- **tiny_fiber Module** - Cooperative multitasking scheduler with:
+- **fiber Module (Native Only)** - Multithreaded cooperative fibers with worker threads and work-stealing scheduler
+- **tiny_fiber Module (Native + WASM)** - Cooperative multitasking scheduler with:
   - `Scheduler` - Fiber management with step-based API for WASM
   - `Future<T>` - Async result handling
   - `Mutex` / `ConditionVariable` - Cooperative synchronization (no OS threads!)
   - `Yield()` - Explicit context switching
 - **WebAssembly Support** - Runs in browsers via Emscripten
 - **Cross-Platform** - Native (Linux/macOS) and WASM from single codebase
+
+`cortex::fiber` is intentionally unavailable on WASM; use `cortex::tiny_fiber` for browser/client builds.
 
 ## Live Demo
 
@@ -46,6 +49,19 @@ int main() {
         tf::Yield();
         
         // Get result (blocks until fiber completes)
+        int result = future.Get();
+    });
+}
+```
+
+Native multithreaded fiber example:
+```cpp
+#include <cortex/fiber/fiber.hpp>
+namespace ff = cortex::fiber;
+
+int main() {
+    ff::Scheduler::Run([] {
+        auto future = ff::Spawn([] { return 42; });
         int result = future.Get();
     });
 }

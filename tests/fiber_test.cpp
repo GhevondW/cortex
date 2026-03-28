@@ -98,7 +98,8 @@ TEST(FiberFutureTest, GetCalledTwiceThrows) {
 
 TEST(FiberFutureTest, VoidWaitCalledTwiceThrows) {
     cf::Scheduler::Run([] {
-        auto future = cf::Spawn([] {});
+        auto future = cf::Spawn([] {
+        });
         future.Wait();
         EXPECT_THROW(future.Wait(), std::logic_error);
     });
@@ -417,7 +418,10 @@ TEST(FiberSchedulerTest, ConfigValuesAreApplied) {
     config.enable_work_stealing = false;
     config.default_stack_size = 128 * 1024;
 
-    auto scheduler = cf::Scheduler::Create([] {}, config);
+    auto scheduler = cf::Scheduler::Create(
+        [] {
+        },
+        config);
     EXPECT_EQ(scheduler->GetWorkerCount(), static_cast<std::size_t>(3));
     EXPECT_FALSE(scheduler->IsWorkStealingEnabled());
     EXPECT_EQ(scheduler->GetDefaultStackSize(), static_cast<std::size_t>(128 * 1024));
