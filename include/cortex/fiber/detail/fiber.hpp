@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cortex/fiber/detail/platform.hpp>
 #include <cortex/base_coroutine.hpp>
 #include <cortex/coroutine_suspend_context.hpp>
+#include <cortex/fiber/detail/platform.hpp>
 #include <cortex/memory_resource.hpp>
 
 #include <atomic>

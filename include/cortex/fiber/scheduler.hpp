@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cortex/fiber/detail/platform.hpp>
 #include <cortex/fiber/detail/fiber.hpp>
+#include <cortex/fiber/detail/platform.hpp>
 #include <cortex/memory_resource.hpp>
 
 #include <atomic>
