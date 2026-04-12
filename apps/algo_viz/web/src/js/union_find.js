@@ -569,16 +569,16 @@ function refreshInputBounds() {
 }
 
 function pullStateFromWasm() {
-    state.count = state.module.ccall("uf_count", "number", [], []);
-    state.components = state.module.ccall("uf_component_count", "number", [], []);
+    state.count = state.module._uf_count();
+    state.components = state.module._uf_component_count();
     state.parents = [];
     state.ranks = [];
     state.setSizes = [];
 
     for (let i = 0; i < state.count; i += 1) {
-        state.parents.push(state.module.ccall("uf_get_parent", "number", ["number"], [i]));
-        state.ranks.push(state.module.ccall("uf_get_rank", "number", ["number"], [i]));
-        state.setSizes.push(state.module.ccall("uf_get_set_size", "number", ["number"], [i]));
+        state.parents.push(state.module._uf_get_parent(i));
+        state.ranks.push(state.module._uf_get_rank(i));
+        state.setSizes.push(state.module._uf_get_set_size(i));
     }
 
     dom.nodesEl.textContent = String(state.count);
@@ -664,7 +664,7 @@ async function initializeDataset() {
         clearHighlights();
         const n = clampInt(dom.sizeInput.value, MIN_NODES, MAX_NODES);
         dom.sizeInput.value = String(n);
-        state.module.ccall("uf_init", null, ["number"], [n]);
+        state.module._uf_init(n);
         state.ops = 0;
         await syncFromWasm(null, false, true);
         setStatus(`Initialized ${n} singleton sets. Drag to pan, scroll to zoom.`);
@@ -683,7 +683,7 @@ async function runFind() {
     try {
         const beforeParents = state.parents.slice();
         const beforePath = getPath(x, beforeParents);
-        const root = state.module.ccall("uf_find", "number", ["number"], [x]);
+        const root = state.module._uf_find(x);
         state.ops += 1;
         await syncFromWasm(beforeParents, true);
 
@@ -713,7 +713,7 @@ async function runUnion() {
         const beforeParents = state.parents.slice();
         const pathA = getPath(a, beforeParents);
         const pathB = getPath(b, beforeParents);
-        const merged = state.module.ccall("uf_union", "number", ["number", "number"], [a, b]) === 1;
+        const merged = state.module._uf_union(a, b) === 1;
         state.ops += 1;
         await syncFromWasm(beforeParents, true);
 
@@ -747,7 +747,7 @@ async function runConnected() {
     setBusy(true);
     try {
         const beforeParents = state.parents.slice();
-        const connected = state.module.ccall("uf_connected", "number", ["number", "number"], [a, b]) === 1;
+        const connected = state.module._uf_connected(a, b) === 1;
         state.ops += 1;
         await syncFromWasm(beforeParents, true);
         setHighlights([a, b], [], true);
@@ -773,7 +773,7 @@ async function runRandomUnions() {
             const a = Math.floor(Math.random() * state.count);
             let b = Math.floor(Math.random() * state.count);
             if (a === b) b = (b + 1) % state.count;
-            merges += state.module.ccall("uf_union", "number", ["number", "number"], [a, b]) === 1 ? 1 : 0;
+            merges += state.module._uf_union(a, b) === 1 ? 1 : 0;
         }
 
         state.ops += trials;

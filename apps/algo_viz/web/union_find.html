@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlgoViz Pro - Union-Find Visualizer</title>
     <link rel="icon" href="data:,">
+    <link rel="preload" href="./algoviz_union_find.wasm" as="fetch" type="application/wasm" crossorigin>
     <script>
         (() => {
+            window.__ALGOVIZ_RUNTIME_URL__ = "./algoviz_union_find.js";
             try {
                 const saved = localStorage.getItem("algoviz-theme");
                 if (saved === "dark" || saved === "light") {

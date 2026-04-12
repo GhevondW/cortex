@@ -1,4 +1,3 @@
-#include <iostream>
 #include <memory>
 
 #include <cortex/config.hpp>
@@ -27,12 +26,10 @@ extern "C" {
 
 CORTEX_API void start_coroutine_example(int iterations) {
     auto coro = cortex::Coroutine::Make([iterations](cortex::CoroutineSuspendContext& ctx) {
-        std::cout << "[C++] Coroutine started with " << iterations << " iterations\n";
         for (int i = 1; i <= iterations; ++i) {
-            std::cout << "[Native] step " << i << "\n";
+            call_js_step(i);
             ctx.Suspend();
         }
-        std::cout << "[C++] Coroutine reached end of body\n";
     });
 
     global_coro = std::make_unique<cortex::Coroutine>(std::move(coro));
@@ -52,6 +49,5 @@ CORTEX_API int is_coroutine_done() {
 }
 
 int main() {
-    std::cout << "Cortex WASM Coroutine Example Ready\n";
     return 0;
 }

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cortex - Sudoku Solver with Coroutines</title>
+    <link rel="preload" href="sudoku_solver.wasm" as="fetch" type="application/wasm" crossorigin>
     <style>
         * {
             margin: 0;
@@ -630,10 +631,20 @@
             statusText.textContent = "✅ Ready! Select a puzzle and click Start";
             startBtn.disabled = false;
 
+            function setSudokuBoard(board) {
+                const stack = Module.stackSave();
+                try {
+                    const boardPtr = Module.stringToUTF8OnStack(board);
+                    Module._set_sudoku_board(boardPtr);
+                } finally {
+                    Module.stackRestore(stack);
+                }
+            }
+
             // Load default puzzle
             const defaultPuzzle = puzzles[puzzleSelect.value];
             loadPuzzle(defaultPuzzle);
-            Module.ccall('set_sudoku_board', null, ['string'], [defaultPuzzle]);
+            setSudokuBoard(defaultPuzzle);
 
             // Puzzle selection
             puzzleSelect.addEventListener('change', () => {
@@ -641,8 +652,8 @@
                 
                 const puzzle = puzzles[puzzleSelect.value];
                 loadPuzzle(puzzle);
-                Module.ccall('set_sudoku_board', null, ['string'], [puzzle]);
-                Module.ccall('reset_solver', null, [], []);
+                setSudokuBoard(puzzle);
+                Module._reset_solver();
                 attemptsEl.textContent = '0';
                 backtracksEl.textContent = '0';
                 statusText.textContent = "✅ Puzzle loaded! Click Start";
@@ -661,17 +672,17 @@
                 backtracksEl.textContent = '0';
 
                 console.log("Starting Sudoku solver");
-                await Module.ccall('start_solving', null, [], [], { async: true });
+                await Module._start_solving();
 
                 // Resume the coroutine with dynamic speed adjustment
                 const resumeLoop = async () => {
                     if (!isRunning) return;
                     
-                    if (!isPaused && Module.ccall('is_solving_done', 'number', [], []) === 0) {
-                        await Module.ccall('resume_solving', null, [], [], { async: true });
+                    if (!isPaused && Module._is_solving_done() === 0) {
+                        await Module._resume_solving();
                         // Use current speed value (allows real-time adjustment)
                         setTimeout(resumeLoop, currentSpeed);
-                    } else if (Module.ccall('is_solving_done', 'number', [], []) === 1) {
+                    } else if (Module._is_solving_done() === 1) {
                         // Solving complete
                         return;
                     } else {
@@ -700,11 +711,11 @@
                 pauseBtn.disabled = true;
                 pauseBtn.textContent = '⏸️ Pause';
 
-                Module.ccall('reset_solver', null, [], []);
+                Module._reset_solver();
                 
                 const puzzle = puzzles[puzzleSelect.value];
                 loadPuzzle(puzzle);
-                Module.ccall('set_sudoku_board', null, ['string'], [puzzle]);
+                setSudokuBoard(puzzle);
                 
                 attemptsEl.textContent = '0';
                 backtracksEl.textContent = '0';

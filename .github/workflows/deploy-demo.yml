@@ -37,9 +37,6 @@ jobs:
           emcmake cmake -B build/wasm -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCORTEX_BUILD_EXAMPLES=ON
-        env:
-          CXXFLAGS: "-O3"
-          LDFLAGS: "-O3"
       
       - name: Build WASM Examples (Optimized)
         run: cmake --build build/wasm --config Release
@@ -49,9 +46,6 @@ jobs:
           emcmake cmake -B build/wasm-algoviz -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCORTEX_BUILD_APPS=ON
-        env:
-          CXXFLAGS: "-O3"
-          LDFLAGS: "-O3"
 
       - name: Build AlgoViz (Optimized)
         run: cmake --build build/wasm-algoviz --config Release --target algo_viz
@@ -82,8 +76,10 @@ jobs:
           test -f deploy/algoviz/src/js/theme.js
           test -f deploy/algoviz/src/js/union_find.js
           test -f deploy/algoviz/src/styles/main.css
-          test -f deploy/algoviz/algo_viz.js
-          test -f deploy/algoviz/algo_viz.wasm
+          test -f deploy/algoviz/algoviz_bst.js
+          test -f deploy/algoviz/algoviz_bst.wasm
+          test -f deploy/algoviz/algoviz_union_find.js
+          test -f deploy/algoviz/algoviz_union_find.wasm
           
           # Create a root index.html that links to everything
           cat > deploy/index.html << 'EOF'
