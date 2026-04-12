@@ -5,7 +5,6 @@ A C++ stackful coroutine library with WebAssembly support, featuring cooperative
 ## Features
 
 - **Stackful Coroutines** - Full coroutine support with suspend/resume
-- **fiber Module (Native Only)** - Multithreaded cooperative fibers with worker threads and work-stealing scheduler
 - **tiny_fiber Module (Native + WASM)** - Cooperative multitasking scheduler with:
   - `Scheduler` - Fiber management with step-based API for WASM
   - `Future<T>` - Async result handling
@@ -13,8 +12,6 @@ A C++ stackful coroutine library with WebAssembly support, featuring cooperative
   - `Yield()` - Explicit context switching
 - **WebAssembly Support** - Runs in browsers via Emscripten
 - **Cross-Platform** - Native (Linux/macOS) and WASM from single codebase
-
-`cortex::fiber` is intentionally unavailable on WASM; use `cortex::tiny_fiber` for browser/client builds.
 
 ## Live Demo
 
@@ -25,7 +22,7 @@ Try the interactive WASM examples in your browser (no installation required):
 
 - **[All Examples](https://GhevondW.github.io/cortex/)** - Browse all demos
 - **[AlgoViz - BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** - Interactive binary search tree algorithm visualizer (New!)
-- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** - Cooperative multitasking demo
+- **[Tiny Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** - Cooperative multitasking demo
 - **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** - Recursive backtracking visualization (Must See!)
 - **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** - See coroutines in action! (Recommended)
 - **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** - Simple suspend/resume demo
@@ -49,19 +46,6 @@ int main() {
         tf::Yield();
         
         // Get result (blocks until fiber completes)
-        int result = future.Get();
-    });
-}
-```
-
-Native multithreaded fiber example:
-```cpp
-#include <cortex/fiber/fiber.hpp>
-namespace ff = cortex::fiber;
-
-int main() {
-    ff::Scheduler::Run([] {
-        auto future = ff::Spawn([] { return 42; });
         int result = future.Get();
     });
 }
