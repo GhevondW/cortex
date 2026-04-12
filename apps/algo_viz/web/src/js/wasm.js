@@ -1,6 +1,6 @@
 export function loadWasmRuntime() {
     return new Promise((resolve, reject) => {
-        const runtimeUrl = window.__ALGOVIZ_RUNTIME_URL__ || "./algo_viz.js";
+        const runtimeUrl = window.__ALGOVIZ_RUNTIME_URL__ || "./algoviz_bst.js";
         const runtimeHref = new URL(runtimeUrl, window.location.href).href;
         const moduleObj = {};
         moduleObj.locateFile = (path, scriptDirectory) => {

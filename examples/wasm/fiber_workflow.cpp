@@ -8,7 +8,6 @@
 
 #include <cmath>
 #include <deque>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -95,8 +94,9 @@ std::unique_ptr<tf::Scheduler> g_scheduler;
 void log_msg(const std::string& msg) {
 #ifdef __EMSCRIPTEN__
     js_log_message(msg.c_str());
-#endif
+#else
     std::cout << msg << std::endl;
+#endif
 }
 
 void update_fiber_state(int id, FiberVisualState state, int task_id = 0) {
@@ -267,6 +267,6 @@ CORTEX_API int is_workflow_done() {
 } // extern "C"
 
 int main() {
-    std::cout << "Cortex Fiber Workflow Demo Ready" << std::endl;
+    log_msg("Cortex Fiber Workflow Demo Ready");
     return 0;
 }

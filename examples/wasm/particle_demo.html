@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cortex - Coroutine Power Demo</title>
+    <link rel="preload" href="particle_simulation.wasm" as="fetch" type="application/wasm" crossorigin>
     <style>
         * {
             margin: 0;
@@ -523,13 +524,12 @@
                 updateProgress(0);
 
                 console.log("Starting computation WITH coroutines");
-                await Module.ccall('start_computation', null, ['number', 'number'], 
-                    [1, iterations], { async: true });
+                await Module._start_computation(1, iterations);
 
                 // Resume the coroutine periodically
                 resumeInterval = setInterval(async () => {
-                    if (Module.ccall('is_computation_done', 'number', [], []) === 0) {
-                        await Module.ccall('resume_computation', null, [], [], { async: true });
+                    if (Module._is_computation_done() === 0) {
+                        await Module._resume_computation();
                     } else {
                         clearInterval(resumeInterval);
                         resumeInterval = null;
@@ -549,8 +549,7 @@
                 console.log("Starting computation WITHOUT coroutines - UI will freeze!");
                 
                 // This will block everything!
-                await Module.ccall('start_computation', null, ['number', 'number'], 
-                    [0, iterations], { async: true });
+                await Module._start_computation(0, iterations);
                 
                 isRunning = false;
                 startWithCoroBtn.disabled = false;
@@ -560,4 +559,3 @@
     </script>
 </body>
 </html>
-

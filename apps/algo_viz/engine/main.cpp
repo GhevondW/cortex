@@ -9,7 +9,6 @@
 #include <cortex/config.hpp>
 #include <cortex/coroutine.hpp>
 
-#include <iostream>
 #include <memory>
 #include <queue>
 #include <string>
@@ -89,7 +88,6 @@ void js_tree_done() {}
 // =============================================================================
 
 namespace colors {
-constexpr int kDefault = 0;
 constexpr int kComparing = 1;
 constexpr int kVisiting = 2;
 constexpr int kFound = 3;
@@ -106,9 +104,17 @@ constexpr int kDelete = 8;
 
 namespace {
 
+void native_log_line(const std::string& msg) {
+#if !defined(__EMSCRIPTEN__)
+    std::cout << msg << '\n';
+#else
+    (void)msg;
+#endif
+}
+
 void log_msg(const std::string& msg) {
     js_tree_log(msg.c_str());
-    std::cout << "[AlgoViz] " << msg << "\n";
+    native_log_line("[AlgoViz] " + msg);
 }
 
 /// Unlink a node from the tree. The node must have at most one child.
@@ -689,7 +695,8 @@ CORTEX_API void build_preset_tree(int preset_id) {
     default:
         break;
     }
-    std::cout << "[AlgoViz] Preset " << preset_id << " loaded (" << g_tree.node_count() << " nodes)\n";
+    native_log_line("[AlgoViz] Preset " + std::to_string(preset_id) + " loaded (" +
+                    std::to_string(g_tree.node_count()) + " nodes)");
 }
 
 CORTEX_API void add_node(int value) {
@@ -803,7 +810,7 @@ CORTEX_API void uf_init(int n) {
         g_uf_parent[static_cast<std::size_t>(i)] = i;
     }
 
-    std::cout << "[AlgoViz][UF] Initialized " << n << " nodes\n";
+    native_log_line("[AlgoViz][UF] Initialized " + std::to_string(n) + " nodes");
 }
 
 CORTEX_API int uf_count() {
@@ -867,6 +874,6 @@ CORTEX_API int uf_connected(int a, int b) {
 } // extern "C"
 
 int main() {
-    std::cout << "AlgoViz Visualizers Ready\n";
+    native_log_line("AlgoViz Visualizers Ready");
     return 0;
 }

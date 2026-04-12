@@ -7,30 +7,51 @@ message(STATUS "AlgoViz: Configuring visualizers")
 
 # --- Optimization flags based on build type ---
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(ALGOVIZ_OPT_FLAGS "-O3")
+    set(ALGOVIZ_OPT_FLAGS "-Os")
     set(ALGOVIZ_ASSERT_FLAG "-sASSERTIONS=0")
 else()
     set(ALGOVIZ_OPT_FLAGS "-O0")
     set(ALGOVIZ_ASSERT_FLAG "-sASSERTIONS=1")
 endif()
 
-# --- Target ---
-add_executable(algo_viz engine/main.cpp)
-
-target_include_directories(algo_viz PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/engine
+set(ALGOVIZ_COMMON_LINK_FLAGS
+    "-sALLOW_MEMORY_GROWTH=1"
+    "-sEXIT_RUNTIME=0"
+    "-sASYNCIFY_STACK_SIZE=65536"
+    "-sENVIRONMENT=web"
+    "-sINCOMING_MODULE_JS_API=['locateFile','onAbort','onRuntimeInitialized']"
+    "${ALGOVIZ_ASSERT_FLAG}"
+    "${ALGOVIZ_OPT_FLAGS}"
 )
 
-target_link_libraries(algo_viz PRIVATE cortex::cortex)
+function(cortex_add_algoviz_runtime TARGET_NAME OUTPUT_NAME EXPORTED_FUNCTIONS)
+    add_executable(${TARGET_NAME} engine/main.cpp)
 
-set_target_properties(algo_viz PROPERTIES
-    SUFFIX ".js"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-)
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/engine
+    )
 
-# --- WASM link options ---
-target_link_options(algo_viz PRIVATE
-    "-sEXPORTED_FUNCTIONS=[\
+    target_link_libraries(${TARGET_NAME} PRIVATE cortex::cortex)
+
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        SUFFIX ".js"
+        OUTPUT_NAME "${OUTPUT_NAME}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+
+    target_link_options(${TARGET_NAME} PRIVATE
+        "-sEXPORTED_FUNCTIONS=${EXPORTED_FUNCTIONS}"
+        ${ALGOVIZ_COMMON_LINK_FLAGS}
+    )
+
+    cortex_apply_warnings(${TARGET_NAME})
+    cortex_apply_sanitizers(${TARGET_NAME})
+endfunction()
+
+cortex_add_algoviz_runtime(
+    algoviz_bst
+    "algoviz_bst"
+    "[\
 '_main',\
 '_build_preset_tree',\
 '_add_node',\
@@ -45,7 +66,15 @@ target_link_options(algo_viz PRIVATE
 '_get_node_value',\
 '_get_node_left',\
 '_get_node_right',\
-'_get_node_parent',\
+'_get_node_parent'\
+]"
+)
+
+cortex_add_algoviz_runtime(
+    algoviz_union_find
+    "algoviz_union_find"
+    "[\
+'_main',\
 '_uf_init',\
 '_uf_count',\
 '_uf_component_count',\
@@ -56,22 +85,14 @@ target_link_options(algo_viz PRIVATE
 '_uf_union',\
 '_uf_connected'\
 ]"
-    "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-    "-sALLOW_MEMORY_GROWTH=1"
-    "-sEXIT_RUNTIME=0"
-    "-sASYNCIFY_STACK_SIZE=1048576"
-    "${ALGOVIZ_ASSERT_FLAG}"
-    "${ALGOVIZ_OPT_FLAGS}"
 )
 
-# --- Copy complete web app to build directory ---
-add_custom_command(TARGET algo_viz POST_BUILD
+add_custom_target(algo_viz_assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/web
             ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "AlgoViz: Copying web app to build directory"
 )
 
-# --- Apply project-wide settings ---
-cortex_apply_warnings(algo_viz)
-cortex_apply_sanitizers(algo_viz)
+add_dependencies(algo_viz_assets algoviz_bst algoviz_union_find)
+add_custom_target(algo_viz DEPENDS algoviz_bst algoviz_union_find algo_viz_assets)

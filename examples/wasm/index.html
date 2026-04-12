@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cortex - Basic Coroutine Example</title>
+    <link rel="preload" href="wasm_example.wasm" as="fetch" type="application/wasm" crossorigin>
     <style>
         * {
             margin: 0;
@@ -242,7 +243,7 @@
                 appendLog("---");
                 
                 // Use { async: true } for functions that use fibers/Asyncify
-                await Module.ccall('start_coroutine_example', null, ['number'], [5], { async: true });
+                await Module._start_coroutine_example(5);
                 
                 startBtn.disabled = true;
                 resumeBtn.disabled = false;
@@ -254,9 +255,9 @@
                 appendLog("Resuming coroutine from JavaScript...", "info");
                 
                 // Use { async: true } for functions that use fibers/Asyncify
-                await Module.ccall('resume_coroutine_example', null, [], [], { async: true });
+                await Module._resume_coroutine_example();
                 
-                if (Module.ccall('is_coroutine_done', 'number', [], [])) {
+                if (Module._is_coroutine_done()) {
                     appendLog("---");
                     appendLog("✅ Coroutine Finished!", "step");
                     appendLog("All steps completed successfully!", "info");

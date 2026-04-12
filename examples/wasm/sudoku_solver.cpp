@@ -1,6 +1,5 @@
 #include <array>
 #include <chrono>
-#include <iostream>
 #include <memory>
 #include <string>
 
@@ -54,6 +53,14 @@ std::chrono::steady_clock::time_point start_time;
 
 // Solver coroutine
 std::unique_ptr<cortex::Coroutine> solver_coro;
+
+void native_log_line(const std::string& msg) {
+#if !defined(__EMSCRIPTEN__)
+    std::cout << msg << '\n';
+#else
+    (void)msg;
+#endif
+}
 
 // Check if placing value at (row, col) is valid
 bool is_valid(int row, int col, int value) {
@@ -170,7 +177,7 @@ CORTEX_API void set_sudoku_board(const char* board_string) {
         is_original[urow][ucol] = (value != 0);
     }
 
-    std::cout << "[C++] Board initialized\n";
+    native_log_line("[C++] Board initialized");
 }
 
 CORTEX_API void start_solving() {
@@ -178,7 +185,7 @@ CORTEX_API void start_solving() {
     backtrack_count = 0;
     start_time = std::chrono::steady_clock::now();
 
-    std::cout << "[C++] Starting Sudoku solver with coroutines\n";
+    native_log_line("[C++] Starting Sudoku solver with coroutines");
 
 #ifdef __EMSCRIPTEN__
     js_update_status("Solving...");
@@ -191,8 +198,9 @@ CORTEX_API void start_solving() {
         auto end_time = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
-        std::cout << "[C++] Solving complete! Success: " << success << ", Attempts: " << solve_attempts
-                  << ", Backtracks: " << backtrack_count << ", Time: " << elapsed << "ms\n";
+        native_log_line("[C++] Solving complete! Success: " + std::to_string(success) + ", Attempts: " +
+                        std::to_string(solve_attempts) + ", Backtracks: " + std::to_string(backtrack_count) +
+                        ", Time: " + std::to_string(elapsed) + "ms");
 
 #ifdef __EMSCRIPTEN__
         js_solving_complete(static_cast<double>(elapsed), success ? 1 : 0);
@@ -245,12 +253,12 @@ CORTEX_API void reset_solver() {
         }
     }
 
-    std::cout << "[C++] Solver reset\n";
+    native_log_line("[C++] Solver reset");
 }
 
 } // extern "C"
 
 int main() {
-    std::cout << "Cortex Sudoku Solver Demo Ready\n";
+    native_log_line("Cortex Sudoku Solver Demo Ready");
     return 0;
 }
