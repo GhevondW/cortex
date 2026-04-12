@@ -43,14 +43,14 @@ function updateSpeedDisplay() {
 function syncTreeFromWasm() {
     if (!wasmModule) return;
     state.treeNodes = {};
-    state.rootId = wasmModule.ccall("get_root_id", "number", [], []);
-    const count = wasmModule.ccall("get_node_count", "number", [], []);
+    state.rootId = wasmModule._get_root_id();
+    const count = wasmModule._get_node_count();
     for (let i = 0; i < count; i += 1) {
         state.treeNodes[i] = {
-            value: wasmModule.ccall("get_node_value", "number", ["number"], [i]),
-            left: wasmModule.ccall("get_node_left", "number", ["number"], [i]),
-            right: wasmModule.ccall("get_node_right", "number", ["number"], [i]),
-            parent: wasmModule.ccall("get_node_parent", "number", ["number"], [i]),
+            value: wasmModule._get_node_value(i),
+            left: wasmModule._get_node_left(i),
+            right: wasmModule._get_node_right(i),
+            parent: wasmModule._get_node_parent(i),
         };
     }
     dom.emptyMsg.style.display = state.rootId === -1 ? "flex" : "none";
@@ -74,7 +74,7 @@ function stopPlayback() {
 function resetExecution() {
     stopPlayback();
     if (wasmModule) {
-        wasmModule.ccall("reset_algorithm", null, [], []);
+        wasmModule._reset_algorithm();
     }
 }
 
@@ -125,7 +125,7 @@ function populateControls() {
 function loadPreset(presetId, fit = true) {
     if (!wasmModule) return;
     resetExecution();
-    wasmModule.ccall("build_preset_tree", null, ["number"], [presetId]);
+    wasmModule._build_preset_tree(presetId);
     clearHighlightsAndOutput();
     dom.comparisonsEl.textContent = "0";
     dom.stepsEl.textContent = "0";
@@ -136,10 +136,10 @@ async function scheduleStep() {
     if (!state.isRunning || state.isPaused) return;
     state.playTimer = setTimeout(async () => {
         if (!state.isRunning || state.isPaused) return;
-        await wasmModule.ccall("step_algorithm", null, [], [], { async: true });
+        await wasmModule._step_algorithm();
         state.stepCount += 1;
         dom.stepsEl.textContent = String(state.stepCount);
-        if (wasmModule.ccall("is_algorithm_done", "number", [], []) !== 1) {
+        if (wasmModule._is_algorithm_done() !== 1) {
             scheduleStep();
         }
     }, state.currentSpeed);
@@ -159,11 +159,11 @@ async function startAlgorithm(autoPlay) {
 
     const algoId = Number.parseInt(dom.algorithmSelect.value, 10);
     const value = Number.parseInt(dom.valueInput.value, 10) || 0;
-    wasmModule.ccall("set_operation_value", null, ["number"], [value]);
-    await wasmModule.ccall("start_algorithm", null, ["number"], [algoId], { async: true });
+    wasmModule._set_operation_value(value);
+    await wasmModule._start_algorithm(algoId);
     state.stepCount += 1;
     dom.stepsEl.textContent = String(state.stepCount);
-    if (wasmModule.ccall("is_algorithm_done", "number", [], []) === 1) return;
+    if (wasmModule._is_algorithm_done() === 1) return;
     if (autoPlay) scheduleStep();
 }
 
@@ -173,8 +173,8 @@ async function doSingleStep() {
         await startAlgorithm(false);
         return;
     }
-    if (wasmModule.ccall("is_algorithm_done", "number", [], []) === 1) return;
-    await wasmModule.ccall("step_algorithm", null, [], [], { async: true });
+    if (wasmModule._is_algorithm_done() === 1) return;
+    await wasmModule._step_algorithm();
     state.stepCount += 1;
     dom.stepsEl.textContent = String(state.stepCount);
 }
@@ -296,7 +296,7 @@ function wireEvents() {
         const val = Number.parseInt(dom.addValueInput.value, 10);
         if (Number.isNaN(val)) return;
         resetExecution();
-        wasmModule.ccall("add_node", null, ["number"], [val]);
+        wasmModule._add_node(val);
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
         dom.addValueInput.value = "";
@@ -310,7 +310,7 @@ function wireEvents() {
     dom.randomBtn.addEventListener("click", () => {
         if (!wasmModule) return;
         resetExecution();
-        wasmModule.ccall("clear_tree", null, [], []);
+        wasmModule._clear_tree();
         const used = new Set();
         for (let i = 0; i < 8; i += 1) {
             let v = 0;
@@ -318,7 +318,7 @@ function wireEvents() {
                 v = Math.floor(Math.random() * 95) + 5;
             } while (used.has(v));
             used.add(v);
-            wasmModule.ccall("add_node", null, ["number"], [v]);
+            wasmModule._add_node(v);
         }
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
@@ -328,7 +328,7 @@ function wireEvents() {
     dom.clearBtn.addEventListener("click", () => {
         if (!wasmModule) return;
         resetExecution();
-        wasmModule.ccall("clear_tree", null, [], []);
+        wasmModule._clear_tree();
         clearHighlightsAndOutput();
         rerenderFromWasm(true);
         dom.statusText.textContent = "Tree cleared. Ready.";

@@ -1,6 +1,5 @@
 #include <chrono>
 #include <cmath>
-#include <iostream>
 #include <memory>
 
 #include <cortex/config.hpp>
@@ -37,6 +36,14 @@ bool use_coroutine = true;
 int current_iteration = 0;
 int total_iterations = 0;
 std::chrono::steady_clock::time_point start_time;
+
+void native_log_line(const std::string& msg) {
+#if !defined(__EMSCRIPTEN__)
+    std::cout << msg << '\n';
+#else
+    (void)msg;
+#endif
+}
 } // namespace
 
 // Simulates heavy image processing work
@@ -79,7 +86,8 @@ void run_computation_with_coroutines(int iterations) {
 
     computation_coro =
         std::make_unique<cortex::Coroutine>(cortex::Coroutine::Make([iterations](cortex::CoroutineSuspendContext& ctx) {
-            std::cout << "[C++] Starting computation with coroutines (" << iterations << " iterations)\n";
+            native_log_line("[C++] Starting computation with coroutines (" + std::to_string(iterations) +
+                            " iterations)");
 
 #ifdef __EMSCRIPTEN__
             js_update_status("Processing with Coroutines...");
@@ -100,7 +108,7 @@ void run_computation_with_coroutines(int iterations) {
 #endif
 
                 if (i % 5 == 0) {
-                    std::cout << "[C++] Progress: " << percent << "%\n";
+                    native_log_line("[C++] Progress: " + std::to_string(percent) + "%");
                 }
 
                 // Suspend to allow UI updates - this is the key advantage!
@@ -111,7 +119,8 @@ void run_computation_with_coroutines(int iterations) {
             auto end_time = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
-            std::cout << "[C++] Computation complete! Result sum: " << result_sum << ", Time: " << elapsed << "ms\n";
+            native_log_line("[C++] Computation complete! Result sum: " + std::to_string(result_sum) +
+                            ", Time: " + std::to_string(elapsed) + "ms");
 
 #ifdef __EMSCRIPTEN__
             js_update_status("Complete!");
@@ -129,7 +138,7 @@ void run_computation_with_coroutines(int iterations) {
 void run_computation_without_coroutines(int iterations) {
     start_time = std::chrono::steady_clock::now();
 
-    std::cout << "[C++] Starting computation WITHOUT coroutines (" << iterations << " iterations)\n";
+    native_log_line("[C++] Starting computation WITHOUT coroutines (" + std::to_string(iterations) + " iterations)");
 
 #ifdef __EMSCRIPTEN__
     js_update_status("Processing WITHOUT Coroutines (UI will freeze)...");
@@ -148,7 +157,7 @@ void run_computation_without_coroutines(int iterations) {
 #endif
 
         if (i % 5 == 0) {
-            std::cout << "[C++] Progress: " << percent << "%\n";
+            native_log_line("[C++] Progress: " + std::to_string(percent) + "%");
         }
 
         // NO SUSPEND - UI will be frozen!
@@ -157,7 +166,8 @@ void run_computation_without_coroutines(int iterations) {
     auto end_time = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
-    std::cout << "[C++] Computation complete! Result sum: " << result_sum << ", Time: " << elapsed << "ms\n";
+    native_log_line("[C++] Computation complete! Result sum: " + std::to_string(result_sum) +
+                    ", Time: " + std::to_string(elapsed) + "ms");
 
 #ifdef __EMSCRIPTEN__
     js_update_status("Complete!");
@@ -197,6 +207,6 @@ CORTEX_API int get_total_iterations() {
 }
 
 int main() {
-    std::cout << "Cortex Particle Simulation Demo Ready\n";
+    native_log_line("Cortex Particle Simulation Demo Ready");
     return 0;
 }

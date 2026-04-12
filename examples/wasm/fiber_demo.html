@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cortex - Fiber Workflow Demo</title>
+    <link rel="preload" href="fiber_workflow.wasm" as="fetch" type="application/wasm" crossorigin>
     <style>
         * {
             margin: 0;
@@ -667,18 +668,16 @@
                 setProgress(0, numTasks);
 
                 // Start workflow
-                await Module.ccall('start_workflow', null, 
-                    ['number', 'number'], [numTasks, numWorkers], 
-                    { async: true });
+                await Module._start_workflow(numTasks, numWorkers);
 
                 // Step through the workflow with visible delays
                 stepInterval = setInterval(async () => {
-                    if (Module.ccall('is_workflow_done', 'number', [], []) === 1) {
+                    if (Module._is_workflow_done() === 1) {
                         clearInterval(stepInterval);
                         stepInterval = null;
                         return;
                     }
-                    await Module.ccall('step_workflow', null, [], [], { async: true });
+                    await Module._step_workflow();
                 }, 250);  // 250ms between each step - slower, more visible!
             };
 

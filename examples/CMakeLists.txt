@@ -1,12 +1,22 @@
 if(EMSCRIPTEN)
     # Optimization flags based on build type
     if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        set(WASM_OPTIMIZATION_FLAGS "-O3")
+        set(WASM_OPTIMIZATION_FLAGS "-Os")
         set(WASM_ASSERTIONS_FLAG "-sASSERTIONS=0")
     else()
         set(WASM_OPTIMIZATION_FLAGS "-O0")
         set(WASM_ASSERTIONS_FLAG "-sASSERTIONS=1")
     endif()
+
+    set(WASM_COMMON_LINK_FLAGS
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sASYNCIFY_STACK_SIZE=65536"
+        "-sENVIRONMENT=web,node"
+        "-sINCOMING_MODULE_JS_API=['locateFile','onAbort','onRuntimeInitialized']"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
+    )
 
     # WASM Example
     add_executable(wasm_example wasm/main.cpp)
@@ -17,12 +27,7 @@ if(EMSCRIPTEN)
     
     target_link_options(wasm_example PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_coroutine_example','_resume_coroutine_example','_is_coroutine_done']"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXIT_RUNTIME=0"
-        "-sASYNCIFY_STACK_SIZE=1048576"
-        "${WASM_ASSERTIONS_FLAG}"
-        "${WASM_OPTIMIZATION_FLAGS}"
+        ${WASM_COMMON_LINK_FLAGS}
     )
     
     # Copy HTML file to build directory
@@ -44,12 +49,7 @@ if(EMSCRIPTEN)
     
     target_link_options(particle_simulation PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_computation','_resume_computation','_is_computation_done','_get_current_iteration','_get_total_iterations']"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXIT_RUNTIME=0"
-        "-sASYNCIFY_STACK_SIZE=1048576"
-        "${WASM_ASSERTIONS_FLAG}"
-        "${WASM_OPTIMIZATION_FLAGS}"
+        ${WASM_COMMON_LINK_FLAGS}
     )
     
     # Copy HTML file to build directory
@@ -74,12 +74,8 @@ if(EMSCRIPTEN)
     
     target_link_options(sudoku_solver PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_set_sudoku_board','_start_solving','_resume_solving','_is_solving_done','_get_cell_value','_is_cell_original','_reset_solver']"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXIT_RUNTIME=0"
-        "-sASYNCIFY_STACK_SIZE=1048576"
-        "${WASM_ASSERTIONS_FLAG}"
-        "${WASM_OPTIMIZATION_FLAGS}"
+        "-sEXPORTED_RUNTIME_METHODS=['stringToUTF8OnStack','stackSave','stackRestore']"
+        ${WASM_COMMON_LINK_FLAGS}
     )
     
     # Copy HTML files to build directory
@@ -104,12 +100,7 @@ if(EMSCRIPTEN)
     
     target_link_options(fiber_workflow PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_workflow','_step_workflow','_is_workflow_done']"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap']"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sEXIT_RUNTIME=0"
-        "-sASYNCIFY_STACK_SIZE=1048576"
-        "${WASM_ASSERTIONS_FLAG}"
-        "${WASM_OPTIMIZATION_FLAGS}"
+        ${WASM_COMMON_LINK_FLAGS}
     )
     
     # Copy HTML files to build directory
