@@ -27,6 +27,7 @@ if(EMSCRIPTEN)
     
     target_link_options(wasm_example PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_coroutine_example','_resume_coroutine_example','_is_coroutine_done']"
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
         ${WASM_COMMON_LINK_FLAGS}
     )
     
@@ -49,6 +50,7 @@ if(EMSCRIPTEN)
     
     target_link_options(particle_simulation PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_computation','_resume_computation','_is_computation_done','_get_current_iteration','_get_total_iterations']"
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
         ${WASM_COMMON_LINK_FLAGS}
     )
     
@@ -74,7 +76,7 @@ if(EMSCRIPTEN)
     
     target_link_options(sudoku_solver PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_set_sudoku_board','_start_solving','_resume_solving','_is_solving_done','_get_cell_value','_is_cell_original','_reset_solver']"
-        "-sEXPORTED_RUNTIME_METHODS=['stringToUTF8OnStack','stackSave','stackRestore']"
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','stringToUTF8OnStack','stackSave','stackRestore']"
         ${WASM_COMMON_LINK_FLAGS}
     )
     
@@ -100,6 +102,7 @@ if(EMSCRIPTEN)
     
     target_link_options(fiber_workflow PRIVATE 
         "-sEXPORTED_FUNCTIONS=['_main','_start_workflow','_step_workflow','_is_workflow_done']"
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
         ${WASM_COMMON_LINK_FLAGS}
     )
     

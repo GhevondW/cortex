@@ -20,6 +20,7 @@ set(ALGOVIZ_COMMON_LINK_FLAGS
     "-sASYNCIFY_STACK_SIZE=65536"
     "-sENVIRONMENT=web"
     "-sINCOMING_MODULE_JS_API=['locateFile','onAbort','onRuntimeInitialized']"
+    "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
     "${ALGOVIZ_ASSERT_FLAG}"
     "${ALGOVIZ_OPT_FLAGS}"
 )
