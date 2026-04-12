@@ -61,7 +61,7 @@ case "${1:-help}" in
         echo -e "${YELLOW}Building in Release mode (optimized)${NC}"
         echo -e "${YELLOW}Available examples:${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/examples_index.html${NC} ${YELLOW}(All Examples)${NC}"
-        echo -e "  ${GREEN}→ http://localhost:8080/examples/fiber_demo.html${NC} ${YELLOW}(Fiber Workflow - New!)${NC}"
+        echo -e "  ${GREEN}→ http://localhost:8080/examples/fiber_demo.html${NC} ${YELLOW}(Tiny Fiber Workflow - New!)${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/sudoku_demo.html${NC} ${YELLOW}(Sudoku Solver - Must See!)${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/particle_demo.html${NC} ${YELLOW}(Particle Demo - Recommended!)${NC}"
         echo -e "  ${GREEN}→ http://localhost:8080/examples/index.html${NC} ${YELLOW}(Basic Example)${NC}"
@@ -112,4 +112,3 @@ case "${1:-help}" in
         exit 1
         ;;
 esac
-
