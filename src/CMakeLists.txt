@@ -15,6 +15,17 @@ set(CORTEX_TINY_FIBER_SRC
     tiny_fiber/condition_variable.cpp
 )
 
+# fiber sources
+if(NOT EMSCRIPTEN)
+    set(CORTEX_FIBER_SRC
+        fiber/fiber.cpp
+        fiber/scheduler.cpp
+        fiber/yield.cpp
+        fiber/mutex.cpp
+        fiber/condition_variable.cpp
+    )
+endif()
+
 target_sources(cortex
         PRIVATE
         base_coroutine.cpp
@@ -22,6 +33,7 @@ target_sources(cortex
         memory_resource.cpp
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
+        ${CORTEX_FIBER_SRC}
 )
 
 # Includes
