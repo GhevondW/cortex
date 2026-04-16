@@ -10,7 +10,6 @@ works across native and WASM builds through a unified API.
 - Stackful coroutines with a simple @c Resume / @c Suspend model
 - Unified API for native (Boost.Context) and WASM (Emscripten fibers)
 - @b tiny_fiber module for single-thread cooperative multitasking (native + WASM)
-- @b fiber module for multithreaded cooperative multitasking (native only)
 - Custom memory resource support for stack allocation
 - Designed for deterministic, cooperative control flow
 
@@ -57,24 +56,6 @@ while (!scheduler.IsDone()) {
 }
 @endcode
 
-@section fiber fiber Module (Native Only)
-Multithreaded cooperative multitasking with worker threads and work stealing:
-@code
-#include <cortex/fiber/fiber.hpp>
-namespace ff = cortex::fiber;
-
-ff::Scheduler::Run([] {
-    auto future = ff::Spawn([] {
-        ff::Yield();
-        return 42;
-    });
-
-    int result = future.Get();
-});
-@endcode
-
-@note @b cortex::fiber is not available on WebAssembly. Use @b cortex::tiny_fiber in WASM builds.
-
 @section generator Generator Example
 @code
 #include <cortex/generator.hpp>
@@ -96,7 +77,6 @@ while (gen.Next()) {
 - @ref cortex::BaseCoroutine "BaseCoroutine": OO wrapper for coroutines
 - @ref cortex::Generator "Generator": yield values across resumes
 - @ref cortex::tiny_fiber "tiny_fiber": single-thread cooperative fibers (native + WASM)
-- @ref cortex::fiber "fiber": multithreaded cooperative fibers (native only)
 
 @section resources Resources
 - Live demos: https://GhevondW.github.io/cortex/
