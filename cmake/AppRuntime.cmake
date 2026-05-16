@@ -26,7 +26,9 @@ set(CORTEX_WASM_APP_LINK_FLAGS
     "-sASYNCIFY_STACK_SIZE=65536"
     "-sENVIRONMENT=web"
     "-sINCOMING_MODULE_JS_API=['locateFile','onAbort','onRuntimeInitialized']"
-    "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
+    # HEAPU8 is required for apps that hand pixel/frame buffers across the
+    # WASM<->JS boundary (e.g. video_editor). UTF8ToString covers string args.
+    "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','HEAPU8']"
     "${_CORTEX_APP_ASSERT_FLAG}"
     "${_CORTEX_APP_OPT_FLAGS}"
 )
