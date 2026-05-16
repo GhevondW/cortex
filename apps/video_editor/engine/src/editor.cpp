@@ -9,6 +9,7 @@
 #include <video_editor/filters/saturation.hpp>
 #include <video_editor/pipeline.hpp>
 #include <video_editor/procedural_source.hpp>
+#include <video_editor/uploaded_source.hpp>
 
 #include <algorithm>
 
@@ -16,26 +17,42 @@ namespace cortex::video_editor {
 
 class Editor::Impl {
 public:
-    Impl(int width, int height, int frame_count)
-        : source_(width, height, frame_count) {
+    Impl(int width, int height, int frame_count) {
+        InstallProcedural(width, height, frame_count);
         RebuildChain();
-        pipeline_ = std::make_unique<Pipeline>(source_, chain_);
+        pipeline_ = std::make_unique<Pipeline>(*source_, chain_);
     }
 
     int Width() const noexcept {
-        return source_.Width();
+        return source_->Width();
     }
     int Height() const noexcept {
-        return source_.Height();
+        return source_->Height();
     }
     int FrameCount() const noexcept {
-        return source_.FrameCount();
+        return source_->FrameCount();
     }
     const FrameBuffer& Source(int idx) const {
-        return source_.At(idx);
+        return source_->At(idx);
     }
     const FrameBuffer& Output(int idx) const {
         return pipeline_->OutputAt(idx);
+    }
+
+    void ResetProcedural(int width, int height, int frame_count) {
+        TearDownRunner();
+        InstallProcedural(width, height, frame_count);
+        pipeline_ = std::make_unique<Pipeline>(*source_, chain_);
+    }
+
+    void ResetUploaded(int width, int height, int frame_count) {
+        TearDownRunner();
+        InstallUploaded(width, height, frame_count);
+        pipeline_ = std::make_unique<Pipeline>(*source_, chain_);
+    }
+
+    std::uint8_t* WritableSourcePixels(int idx) noexcept {
+        return uploaded_ ? uploaded_->WritablePixels(idx) : nullptr;
     }
 
     void SetBrightness(float v) {
@@ -113,7 +130,28 @@ private:
         }
     }
 
-    ProceduralFrameSource source_;
+    void InstallProcedural(int w, int h, int n) {
+        source_ = std::make_unique<ProceduralFrameSource>(w, h, n);
+        uploaded_ = nullptr;
+    }
+
+    void InstallUploaded(int w, int h, int n) {
+        auto src = std::make_unique<UploadedFrameSource>(w, h, n);
+        uploaded_ = src.get();
+        source_ = std::move(src);
+    }
+
+    void TearDownRunner() {
+        // Make sure any cooperative scheduler still owning a reference to the
+        // old pipeline is torn down before the source/pipeline is replaced.
+        if (runner_) {
+            runner_->Cancel();
+            runner_.reset();
+        }
+    }
+
+    std::unique_ptr<IFrameSource> source_;
+    UploadedFrameSource* uploaded_ {nullptr}; // non-owning; valid iff source_ is uploaded
     FilterChain chain_;
     std::unique_ptr<Pipeline> pipeline_;
     std::unique_ptr<IRunner> runner_;
@@ -149,6 +187,15 @@ const FrameBuffer& Editor::Source(int idx) const {
 }
 const FrameBuffer& Editor::Output(int idx) const {
     return impl_->Output(idx);
+}
+void Editor::ResetProcedural(int width, int height, int frame_count) {
+    impl_->ResetProcedural(width, height, frame_count);
+}
+void Editor::ResetUploaded(int width, int height, int frame_count) {
+    impl_->ResetUploaded(width, height, frame_count);
+}
+std::uint8_t* Editor::WritableSourcePixels(int idx) noexcept {
+    return impl_->WritableSourcePixels(idx);
 }
 void Editor::SetBrightness(float v) {
     impl_->SetBrightness(v);

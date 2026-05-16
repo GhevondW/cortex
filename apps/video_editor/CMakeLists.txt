@@ -4,6 +4,7 @@ message(STATUS "VideoEditor: Configuring engine library")
 add_library(video_editor_engine STATIC
     engine/src/frame_buffer.cpp
     engine/src/procedural_source.cpp
+    engine/src/uploaded_source.cpp
     engine/src/filters/brightness.cpp
     engine/src/filters/contrast.cpp
     engine/src/filters/saturation.cpp
@@ -49,7 +50,10 @@ if(EMSCRIPTEN)
 '_editor_apply_blocking',\
 '_editor_step',\
 '_editor_get_progress',\
-'_editor_cancel'\
+'_editor_cancel',\
+'_editor_reset_procedural',\
+'_editor_reset_uploaded',\
+'_editor_writable_source_pixels'\
 ]"
         engine/bridge/wasm_bridge.cpp
     )
@@ -75,6 +79,7 @@ if(CORTEX_BUILD_TESTS AND NOT EMSCRIPTEN)
         engine/tests/filter_chain_test.cpp
         engine/tests/pipeline_test.cpp
         engine/tests/runners_test.cpp
+        engine/tests/uploaded_source_test.cpp
     )
     target_link_libraries(video_editor_engine_test PRIVATE
         video_editor_engine

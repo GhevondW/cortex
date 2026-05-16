@@ -97,6 +97,35 @@ CORTEX_API const std::uint8_t* editor_get_output_frame(int idx) {
     return g_editor ? g_editor->Output(idx).Data() : nullptr;
 }
 
+// Replace the active source with a freshly-generated procedural one. Returns
+// 1 on success, 0 on bad arguments or missing editor. Used by the "reset to
+// procedural" button after an upload.
+CORTEX_API int editor_reset_procedural(int width, int height, int frame_count) {
+    if (!g_editor || width <= 0 || height <= 0 || frame_count <= 0) {
+        return 0;
+    }
+    g_editor->ResetProcedural(width, height, frame_count);
+    return 1;
+}
+
+// Replace the active source with a writable, zero-initialised uploaded one.
+// After this returns 1, JS should fill each frame's pixels by writing into
+// the pointer returned by editor_writable_source_pixels(idx).
+CORTEX_API int editor_reset_uploaded(int width, int height, int frame_count) {
+    if (!g_editor || width <= 0 || height <= 0 || frame_count <= 0) {
+        return 0;
+    }
+    g_editor->ResetUploaded(width, height, frame_count);
+    return 1;
+}
+
+// Returns a writable pointer into the source frame's RGBA8 pixel buffer, or
+// nullptr if no upload is active (procedural source) or idx is out of range.
+// The pointed-to region is exactly (Width() * Height() * 4) bytes.
+CORTEX_API std::uint8_t* editor_writable_source_pixels(int idx) {
+    return g_editor ? g_editor->WritableSourcePixels(idx) : nullptr;
+}
+
 CORTEX_API void editor_set_brightness(float v) {
     if (g_editor) g_editor->SetBrightness(v);
 }

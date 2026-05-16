@@ -3,6 +3,7 @@
 #include <video_editor/frame_buffer.hpp>
 #include <video_editor/progress_listener.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace cortex::video_editor {
@@ -26,6 +27,21 @@ public:
 
     [[nodiscard]] const FrameBuffer& Source(int idx) const;
     [[nodiscard]] const FrameBuffer& Output(int idx) const;
+
+    // Replace the active source with a freshly-generated procedural one.
+    // Cancels any in-flight runner and resizes internal buffers. Throws on
+    // non-positive dimensions.
+    void ResetProcedural(int width, int height, int frame_count);
+
+    // Replace the active source with a writable, zero-initialised uploaded
+    // source. Callers populate each frame via WritableSourcePixels(idx).
+    // Cancels any in-flight runner. Throws on non-positive dimensions.
+    void ResetUploaded(int width, int height, int frame_count);
+
+    // Returns a pointer to source frame idx's RGBA8 pixel buffer for in-place
+    // population by the upload flow, or nullptr if the active source is
+    // read-only (e.g. procedural) or idx is out of range.
+    [[nodiscard]] std::uint8_t* WritableSourcePixels(int idx) noexcept;
 
     // Filter parameters. Setters do not re-render; call RenderPreview() to
     // see the result on the currently-selected frame.
