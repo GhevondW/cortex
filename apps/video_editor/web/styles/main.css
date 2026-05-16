@@ -192,14 +192,40 @@ button:disabled {
     cursor: not-allowed;
 }
 
-button.primary {
+button.primary,
+.upload-label.primary {
     background: var(--accent-bg);
     border-color: var(--accent);
     color: var(--accent-strong);
 }
 
-button.primary:hover:not(:disabled) {
+button.primary:hover:not(:disabled),
+.upload-label.primary:hover:not(.disabled) {
     background: #344e66;
+}
+
+.upload-label {
+    display: inline-block;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 80ms ease-out;
+    user-select: none;
+}
+
+.upload-label:hover {
+    background: #353a44;
+}
+
+/* The native <input type="file"> is hidden; we toggle .disabled on its label
+   to communicate the busy state since :disabled doesn't propagate. */
+.upload-label.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .progress {

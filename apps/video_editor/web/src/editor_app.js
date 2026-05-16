@@ -3,24 +3,29 @@
 // of mutable state (current frame, AB-mode flag, run state) the demo needs.
 
 export class EditorApp {
-    constructor({ client, canvas, timeline, filters, apply, progress }) {
+    constructor({ client, canvas, timeline, filters, apply, progress, source, uploader }) {
         this._client = client;
         this._canvas = canvas;
         this._timeline = timeline;
         this._filters = filters;
         this._apply = apply;
         this._progress = progress;
+        this._source = source;
+        this._uploader = uploader;
 
         this._currentFrame = 0;
         this._showOutput = true;
         this._running = false;
+        this._uploading = false;
         this._stepRafId = 0;
+        this._defaults = null;
     }
 
     init(width, height, frameCount) {
         if (!this._client.init(width, height, frameCount)) {
             throw new Error("editor_init returned false");
         }
+        this._defaults = { width, height, frameCount };
         this._canvas.resize(width, height);
         this._timeline.setFrameCount(frameCount);
         this._installBridgeCallbacks();
@@ -30,6 +35,9 @@ export class EditorApp {
         this._client.renderPreview(0);
         this._redraw();
         this._progress.setStatus("Ready");
+        if (this._source) {
+            this._source.setInfo(`Procedural (${frameCount} frames)`);
+        }
     }
 
     _wireEvents() {
@@ -54,12 +62,27 @@ export class EditorApp {
 
         this._apply.addEventListener("apply-cooperative", () => this._startCooperative());
         this._apply.addEventListener("apply-blocking", () => this._runBlocking());
-        this._apply.addEventListener("cancel", () => this._client.cancel());
+        this._apply.addEventListener("cancel", () => {
+            if (this._uploading && this._uploader) {
+                this._uploader.cancel();
+            } else {
+                this._client.cancel();
+            }
+        });
         this._apply.addEventListener("toggle-ab", () => {
             this._showOutput = !this._showOutput;
             this._redraw();
             this._progress.setStatus(this._showOutput ? "Showing: edited" : "Showing: source");
         });
+
+        if (this._source) {
+            this._source.addEventListener("upload-selected", (e) => {
+                this._loadUploadedVideo(e.detail);
+            });
+            this._source.addEventListener("reset-procedural", () => {
+                this._resetToProcedural();
+            });
+        }
     }
 
     _applyFilterValues() {
@@ -135,5 +158,106 @@ export class EditorApp {
             ? this._client.outputFrame(this._currentFrame)
             : this._client.sourceFrame(this._currentFrame);
         this._canvas.draw(pixels, this._client.width(), this._client.height());
+    }
+
+    async _loadUploadedVideo(file) {
+        if (this._uploading) return;
+        if (this._running) {
+            // Stop any apply pass before mutating the source out from under it.
+            this._client.cancel();
+        }
+        this._uploading = true;
+        this._apply.setUploading(true);
+        this._filters.setEnabled(false);
+        this._source.setEnabled(false);
+        this._progress.set(0);
+        this._progress.setStatus("Loading video metadata…");
+
+        let plan;
+        try {
+            plan = await this._uploader.prepare(file);
+        } catch (err) {
+            this._finishUpload(`Upload failed: ${err.message}`);
+            return;
+        }
+
+        if (!this._client.resetUploaded(plan.width, plan.height, plan.frameCount)) {
+            this._finishUpload("Editor refused upload reset");
+            return;
+        }
+
+        this._canvas.resize(plan.width, plan.height);
+        this._timeline.setFrameCount(plan.frameCount);
+        this._currentFrame = 0;
+        this._timeline.setFrame(0);
+
+        const onProgress = (e) => {
+            const { current, total } = e.detail;
+            this._progress.set(current / total);
+            this._progress.setStatus(`Decoding ${current} / ${total} frames…`);
+        };
+        this._uploader.addEventListener("progress", onProgress);
+
+        try {
+            await this._uploader.extract((idx, data) => {
+                this._client.writeSourceFrame(idx, data);
+            });
+        } catch (err) {
+            this._uploader.removeEventListener("progress", onProgress);
+            const msg = err.message === "cancelled"
+                ? "Upload cancelled — restoring procedural source"
+                : `Upload failed: ${err.message}`;
+            this._fallbackToProcedural();
+            this._finishUpload(msg);
+            return;
+        }
+
+        this._uploader.removeEventListener("progress", onProgress);
+        this._applyFilterValues();
+        this._client.renderPreview(0);
+        this._redraw();
+        this._source.setInfo(`Uploaded video — ${plan.frameCount} frames @ ${plan.width}×${plan.height}`);
+        this._progress.set(1);
+        this._finishUpload(`Loaded ${plan.frameCount} frames`);
+    }
+
+    _finishUpload(statusText) {
+        this._uploading = false;
+        this._apply.setUploading(false);
+        this._filters.setEnabled(true);
+        this._source.setEnabled(true);
+        this._progress.setStatus(statusText);
+    }
+
+    _resetToProcedural() {
+        if (this._uploading || this._running) return;
+        const { width, height, frameCount } = this._defaults;
+        if (!this._client.resetProcedural(width, height, frameCount)) {
+            this._progress.setStatus("Editor refused procedural reset");
+            return;
+        }
+        this._canvas.resize(width, height);
+        this._timeline.setFrameCount(frameCount);
+        this._currentFrame = 0;
+        this._timeline.setFrame(0);
+        this._applyFilterValues();
+        this._client.renderPreview(0);
+        this._redraw();
+        this._source.setInfo(`Procedural (${frameCount} frames)`);
+        this._progress.set(0);
+        this._progress.setStatus("Procedural source restored");
+    }
+
+    _fallbackToProcedural() {
+        const { width, height, frameCount } = this._defaults;
+        if (this._client.resetProcedural(width, height, frameCount)) {
+            this._canvas.resize(width, height);
+            this._timeline.setFrameCount(frameCount);
+            this._currentFrame = 0;
+            this._timeline.setFrame(0);
+            this._client.renderPreview(0);
+            this._redraw();
+            this._source.setInfo(`Procedural (${frameCount} frames)`);
+        }
     }
 }

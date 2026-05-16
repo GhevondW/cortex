@@ -12,6 +12,31 @@ export class EditorClient {
         return this._mod._editor_init(width, height, frameCount) === 1;
     }
 
+    // Replace the active source with a freshly-generated procedural one.
+    // Used by the "Reset to procedural" button.
+    resetProcedural(width, height, frameCount) {
+        return this._mod._editor_reset_procedural(width, height, frameCount) === 1;
+    }
+
+    // Replace the active source with a writable, zero-initialised uploaded
+    // one of the given dimensions. After this returns true, call
+    // writeSourceFrame(idx, rgbaBytes) for each frame.
+    resetUploaded(width, height, frameCount) {
+        return this._mod._editor_reset_uploaded(width, height, frameCount) === 1;
+    }
+
+    // Copies a frame's RGBA8 bytes into the WASM heap at the source slot
+    // for `frameIdx`. `pixels` is a Uint8ClampedArray/Uint8Array sized
+    // (width * height * 4). Throws if the heap pointer is null (no upload
+    // is active or idx is out of range).
+    writeSourceFrame(frameIdx, pixels) {
+        const ptr = this._mod._editor_writable_source_pixels(frameIdx);
+        if (!ptr) {
+            throw new Error(`No writable buffer for source frame ${frameIdx}`);
+        }
+        this._mod.HEAPU8.set(pixels, ptr);
+    }
+
     width()       { return this._mod._editor_get_width(); }
     height()      { return this._mod._editor_get_height(); }
     frameCount()  { return this._mod._editor_get_frame_count(); }
