@@ -84,8 +84,8 @@ public:
         Builder SetMemoryResource(MemoryResourceSharedPtr resource) && noexcept;
 
     private:
-        std::size_t stack_size_bytes_ {0};
-        MemoryResourceSharedPtr memory_resource_ {nullptr};
+        std::size_t stack_size_bytes_;
+        MemoryResourceSharedPtr memory_resource_;
     };
 
     Coroutine(const Coroutine&) = delete;

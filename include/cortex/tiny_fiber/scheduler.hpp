@@ -188,6 +188,8 @@ private:
     Config config_;
     bool running_ {false};
     bool stopping_ {false};
+    // Per-scheduler fiber ID counter; starts at 1 so 0 is a sentinel "no fiber".
+    detail::Fiber::Id next_fiber_id_ {1};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;

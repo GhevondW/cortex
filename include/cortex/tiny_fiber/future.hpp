@@ -56,9 +56,13 @@ public:
 
     Future& operator=(Future&& other) noexcept {
         if (this != &other) {
-            // Wait for current fiber if needed
+            // WaitImpl can throw SchedulerStoppingError; swallow it here since
+            // operator= is noexcept and we're abandoning the old state anyway.
             if (state_ && scheduler_ && !state_->retrieved) {
-                WaitImpl();
+                try {
+                    WaitImpl();
+                } catch (...) {
+                }
             }
             state_ = std::move(other.state_);
             scheduler_ = other.scheduler_;
@@ -68,12 +72,11 @@ public:
     }
 
     ~Future() {
-        // Destructor waits for fiber completion
         if (state_ && scheduler_ && !state_->retrieved) {
             try {
                 WaitImpl();
             } catch (...) {
-                // Suppress exceptions in destructor
+                // Suppress exceptions in destructor.
             }
         }
     }
@@ -105,7 +108,6 @@ public:
         WaitImpl();
         state_->retrieved = true;
 
-        // Check for exception (stored in state for safety after fiber cleanup)
         if (state_->exception) {
             std::rethrow_exception(state_->exception);
         }
@@ -129,12 +131,6 @@ public:
     }
 
 private:
-    template <typename U>
-    friend Future<U> Spawn(std::function<U()> func);
-
-    template <typename U>
-    friend Future<U> Spawn(std::function<U()> func, std::size_t stack_size);
-
     template <typename F>
     friend auto Spawn(F&& func) -> Future<std::invoke_result_t<F>>;
 
@@ -151,17 +147,14 @@ private:
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
-            // Fiber already done or cleaned up, exception already in state
             return;
         }
 
-        // Add current fiber as waiter
         auto* current = scheduler_->GetCurrentFiber();
         if (current) {
-            fiber->AddWaiter(current);
+            fiber->AddWaiter(current->GetId());
             scheduler_->SuspendCurrent();
         }
-        // Exception is stored in state by Spawn wrapper, no need to copy here
     }
 
     std::shared_ptr<detail::FutureState<T>> state_;
@@ -186,7 +179,10 @@ public:
     Future& operator=(Future&& other) noexcept {
         if (this != &other) {
             if (state_ && scheduler_ && !state_->retrieved) {
-                WaitImpl();
+                try {
+                    WaitImpl();
+                } catch (...) {
+                }
             }
             state_ = std::move(other.state_);
             scheduler_ = other.scheduler_;
@@ -200,7 +196,6 @@ public:
             try {
                 WaitImpl();
             } catch (...) {
-                // Suppress exceptions in destructor
             }
         }
     }
@@ -217,7 +212,6 @@ public:
         WaitImpl();
         state_->retrieved = true;
 
-        // Check for exception (stored in state for safety after fiber cleanup)
         if (state_->exception) {
             std::rethrow_exception(state_->exception);
         }
@@ -235,12 +229,6 @@ public:
     }
 
 private:
-    template <typename U>
-    friend Future<U> Spawn(std::function<U()> func);
-
-    template <typename U>
-    friend Future<U> Spawn(std::function<U()> func, std::size_t stack_size);
-
     template <typename F>
     friend auto Spawn(F&& func) -> Future<std::invoke_result_t<F>>;
 
@@ -257,16 +245,14 @@ private:
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
-            // Fiber already done or cleaned up, exception already in state
             return;
         }
 
         auto* current = scheduler_->GetCurrentFiber();
         if (current) {
-            fiber->AddWaiter(current);
+            fiber->AddWaiter(current->GetId());
             scheduler_->SuspendCurrent();
         }
-        // Exception is stored in state by Spawn wrapper, no need to copy here
     }
 
     std::shared_ptr<detail::FutureState<void>> state_;
@@ -275,6 +261,9 @@ private:
 
 /**
  * @brief Spawn a new fiber with custom stack size.
+ *
+ * The fiber's exception (if any) is captured in the shared state without
+ * propagating through the scheduler — the awaiter retrieves it via Get/Wait.
  *
  * @param func The function to execute in the fiber.
  * @param stack_size The stack size for the fiber.
@@ -288,31 +277,25 @@ auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> 
     auto state = std::make_shared<detail::FutureState<ResultType>>();
 
     if constexpr (std::is_void_v<ResultType>) {
-        auto fiber_id = scheduler.SpawnFiberInternal(
+        state->fiber_id = scheduler.SpawnFiberInternal(
             [state, f = std::forward<F>(func)]() mutable {
                 try {
                     f();
                 } catch (...) {
-                    // Store exception in state immediately (fiber may be cleaned up later)
                     state->exception = std::current_exception();
-                    throw; // Re-throw so scheduler knows fiber failed
                 }
             },
             stack_size);
-        state->fiber_id = fiber_id;
     } else {
-        auto fiber_id = scheduler.SpawnFiberInternal(
+        state->fiber_id = scheduler.SpawnFiberInternal(
             [state, f = std::forward<F>(func)]() mutable {
                 try {
-                    state->result = f();
+                    state->result.emplace(f());
                 } catch (...) {
-                    // Store exception in state immediately (fiber may be cleaned up later)
                     state->exception = std::current_exception();
-                    throw;
                 }
             },
             stack_size);
-        state->fiber_id = fiber_id;
     }
 
     return Future<ResultType>(std::move(state), &scheduler);

@@ -6,24 +6,14 @@
 
 namespace cortex::tiny_fiber::detail {
 
-std::unique_ptr<Fiber> Fiber::Make(Body body, std::size_t stack_size, MemoryResourceSharedPtr resource) {
-    static Id g_fiber_id = 1;
-    return std::make_unique<Fiber>(PrivateTag {}, g_fiber_id++, std::move(body), stack_size, std::move(resource));
-}
-
-Fiber::Fiber(PrivateTag, Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource)
+Fiber::Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource)
     : BaseCoroutine(stack_size, std::move(resource))
     , id_(id)
     , body_(std::move(body)) {}
 
 void Fiber::Continuation(CoroutineSuspendContext& ctx) {
-    // Store suspend context so Yield/Park can use it
     suspend_ctx_ = &ctx;
-
-    // Execute the user's function
     body_();
-
-    // Clear context when done
     suspend_ctx_ = nullptr;
 }
 
@@ -50,7 +40,7 @@ void Fiber::Wake() {
     state_ = FiberState::Ready;
 }
 
-std::vector<Fiber*> Fiber::Complete() {
+std::vector<Fiber::Id> Fiber::Complete() {
     suspend_ctx_ = nullptr;
     state_ = FiberState::Finished;
     return std::move(waiters_);
@@ -63,9 +53,9 @@ void Fiber::Suspend() {
     suspend_ctx_->Suspend();
 }
 
-void Fiber::AddWaiter(Fiber* waiter) {
-    if (waiter) {
-        waiters_.push_back(waiter);
+void Fiber::AddWaiter(Id waiter_id) {
+    if (waiter_id != 0) {
+        waiters_.push_back(waiter_id);
     }
 }
 
