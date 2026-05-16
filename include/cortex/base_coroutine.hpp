@@ -56,7 +56,7 @@ protected:
      * @param resource The memory resource to use for stack and implementation allocation (default:
      * GetDefaultMemoryResource()).
      */
-    explicit BaseCoroutine(std::size_t stack_size_bytes = 262144,
+    explicit BaseCoroutine(std::size_t stack_size_bytes = Coroutine::kDefaultStackSizeBytes,
                            MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
 
 private:

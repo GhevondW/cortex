@@ -74,7 +74,7 @@ public:
      * @throws std::invalid_argument if the body is empty or stack_size_bytes is 0 or resource is null.
      */
     static Generator Make(Body body,
-                          std::size_t stack_size_bytes = 262144,
+                          std::size_t stack_size_bytes = Coroutine::kDefaultStackSizeBytes,
                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource()) {
         if (!static_cast<bool>(body)) {
             throw std::invalid_argument("generator body is null.");
@@ -99,7 +99,7 @@ public:
     struct Builder {
     public:
         Builder()
-            : stack_size_bytes_(262144)
+            : stack_size_bytes_(Coroutine::kDefaultStackSizeBytes)
             , memory_resource_(GetDefaultMemoryResource()) {}
 
         Generator Build(Body body) && {
@@ -117,8 +117,8 @@ public:
         }
 
     private:
-        std::size_t stack_size_bytes_ {0};
-        MemoryResourceSharedPtr memory_resource_ {nullptr};
+        std::size_t stack_size_bytes_;
+        MemoryResourceSharedPtr memory_resource_;
     };
 
     Generator(const Generator&) = delete;

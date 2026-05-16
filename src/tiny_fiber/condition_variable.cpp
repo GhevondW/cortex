@@ -2,22 +2,11 @@
 #include <cortex/tiny_fiber/errors/scheduler_stopping_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
-#include <cassert>
 #include <stdexcept>
 
 namespace cortex::tiny_fiber {
 
-ConditionVariable::~ConditionVariable() {
-    // In debug mode, this indicates a programming error
-    // We handle it gracefully by clearing waiters
-#ifndef NDEBUG
-    if (!waiters_.empty()) {
-        // ConditionVariable destroyed with waiters - this is a bug but don't crash
-    }
-#endif
-    // Clear waiters to avoid dangling pointers
-    waiters_.clear();
-}
+ConditionVariable::~ConditionVariable() = default;
 
 void ConditionVariable::Wait(Mutex::Guard& guard) {
     if (!guard.mutex_) {
@@ -26,57 +15,57 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
 
     auto& scheduler = Scheduler::Current();
 
-    // Check for stopping
     if (scheduler.IsStopping()) {
         throw SchedulerStoppingError();
     }
 
     auto* current = scheduler.GetCurrentFiber();
-
     if (!current) {
         throw std::logic_error("ConditionVariable::Wait() must be called from within a fiber");
     }
 
-    // Add to wait queue
-    waiters_.push_back(current);
+    waiters_.push_back(current->GetId());
 
-    // Unlock mutex while waiting
-    guard.mutex_->Unlock();
+    // Detach the guard from the mutex before unlocking so that, if any subsequent
+    // step throws, the Guard destructor doesn't try to Unlock an unlocked mutex
+    // during stack unwinding (which would terminate via throw-in-destructor).
+    auto* mutex = guard.mutex_;
+    guard.mutex_ = nullptr;
+    mutex->Unlock();
 
-    // Suspend until notified
     scheduler.SuspendCurrent();
 
-    // Check for stopping after waking up
     if (scheduler.IsStopping()) {
-        // Don't try to re-lock, just propagate the stop signal
         throw SchedulerStoppingError();
     }
 
-    // Re-lock mutex after waking up
-    guard.mutex_->Lock();
+    mutex->Lock();
+    guard.mutex_ = mutex; // Re-attach: guard owns the mutex again.
 }
 
 void ConditionVariable::NotifyOne() {
-    if (waiters_.empty()) {
-        return;
-    }
-
     auto& scheduler = Scheduler::Current();
-    auto* waiter = waiters_.front();
-    waiters_.pop_front();
-    scheduler.Schedule(waiter);
+    // Skip stale entries (fibers that died or were force-scheduled).
+    while (!waiters_.empty()) {
+        auto id = waiters_.front();
+        waiters_.pop_front();
+        auto* waiter = scheduler.GetFiber(id);
+        if (waiter && waiter->IsSuspended()) {
+            scheduler.Schedule(waiter);
+            return;
+        }
+    }
 }
 
 void ConditionVariable::NotifyAll() {
-    if (waiters_.empty()) {
-        return;
-    }
-
     auto& scheduler = Scheduler::Current();
     while (!waiters_.empty()) {
-        auto* waiter = waiters_.front();
+        auto id = waiters_.front();
         waiters_.pop_front();
-        scheduler.Schedule(waiter);
+        auto* waiter = scheduler.GetFiber(id);
+        if (waiter && waiter->IsSuspended()) {
+            scheduler.Schedule(waiter);
+        }
     }
 }
 

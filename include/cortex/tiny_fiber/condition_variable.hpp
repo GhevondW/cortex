@@ -60,7 +60,9 @@ public:
     void NotifyAll();
 
 private:
-    std::deque<detail::Fiber*> waiters_;
+    // Stored by ID, not pointer, so stale entries (from Stop() or fiber death)
+    // can be safely detected and skipped on notify.
+    std::deque<detail::Fiber::Id> waiters_;
 };
 
 } // namespace cortex::tiny_fiber

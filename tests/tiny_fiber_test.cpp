@@ -1409,6 +1409,86 @@ TEST(TinyFiberStoppingTest, CondVarWaitThrowsWhenAlreadyStopping) {
     EXPECT_TRUE(caught);
 }
 
+// Regression: a fiber suspended inside CV::Wait must unwind cleanly when the
+// scheduler stops. The pre-fix path threw SchedulerStoppingError after
+// unlocking the guard's mutex but without detaching the guard, so ~Guard
+// called Unlock() on an unlocked mutex during unwind → terminate.
+TEST(TinyFiberStoppingTest, CondVarWaitInterruptedByStopUnwindsCleanly) {
+    bool caught = false;
+    {
+        auto scheduler = tf::Scheduler::Create([&caught] {
+            tf::Mutex mutex;
+            tf::ConditionVariable cv;
+            try {
+                auto guard = tf::Lock(mutex);
+                cv.Wait(guard);
+            } catch (const tf::SchedulerStoppingError&) {
+                caught = true;
+            }
+        });
+
+        scheduler->Step(); // Fiber locks mutex, suspends inside cv.Wait()
+        scheduler->Stop(); // Wakes the fiber while it's parked
+
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
+        }
+    }
+    EXPECT_TRUE(caught);
+}
+
+// Regression: multiple fibers parked in Mutex::waiters_ must be safely cleaned
+// up after Stop(). The pre-fix path stored raw Fiber* in waiters_ and Unlock
+// dereferenced entries without validating state, so a force-scheduled fiber
+// (whose state had transitioned Suspended -> Ready via Stop) would hit
+// Schedule()->Wake()'s assert(state == Suspended) and, in release, end up in
+// ready_queue_ twice — leading to use-after-free once it was cleaned up.
+TEST(TinyFiberStoppingTest, MutexWaitersSurviveStop) {
+    bool holder_caught = false;
+    {
+        auto scheduler = tf::Scheduler::Create([&] {
+            tf::Mutex mutex;
+
+            auto holder = tf::Spawn([&] {
+                try {
+                    auto guard = tf::Lock(mutex);
+                    while (true)
+                        tf::Yield();
+                } catch (const tf::SchedulerStoppingError&) {
+                    holder_caught = true;
+                }
+            });
+
+            auto waiter1 = tf::Spawn([&] {
+                auto guard = tf::Lock(mutex);
+            });
+
+            auto waiter2 = tf::Spawn([&] {
+                auto guard = tf::Lock(mutex);
+            });
+
+            // Let everyone get into position: holder acquires the mutex,
+            // waiter1 and waiter2 park in mutex.waiters_.
+            tf::Yield();
+            tf::Yield();
+            tf::Yield();
+        });
+
+        for (int i = 0; i < 8 && !scheduler->IsDone(); ++i) {
+            scheduler->Step();
+        }
+        scheduler->Stop();
+        while (!scheduler->IsDone()) {
+            scheduler->Step();
+        }
+    }
+    // The point of this test is that shutdown completes cleanly. The holder
+    // unwinds on the stopping signal and releases the mutex; the woken waiters
+    // either catch stopping or acquire-and-release cleanly. The pre-fix code
+    // would either fire an assertion or trip use-after-free here.
+    EXPECT_TRUE(holder_caught);
+}
+
 // ============================================================================
 // Complex Scenarios - Additional Tests
 // ============================================================================
