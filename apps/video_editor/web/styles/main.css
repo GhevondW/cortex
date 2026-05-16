@@ -1,0 +1,290 @@
+:root {
+    --bg: #16181d;
+    --bg-elevated: #1f2229;
+    --bg-input: #2a2e36;
+    --border: #2e323b;
+    --text: #d8dee9;
+    --text-dim: #8a8f99;
+    --accent: #5fa8d3;
+    --accent-strong: #79b8e0;
+    --accent-bg: #294053;
+    --danger: #d9534f;
+    --good: #8bc34a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+}
+
+.topbar h1 {
+    font-size: 18px;
+    margin: 0;
+    color: var(--text);
+}
+
+.subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+.spinner {
+    width: 22px;
+    height: 22px;
+    border: 3px solid var(--accent-bg);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    /* Animated via JS requestAnimationFrame — no CSS keyframes, so we can
+       visibly see it freeze when the main thread is blocked. */
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+        "preview  controls"
+        "timeline controls"
+        "info     info";
+    gap: 16px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.preview {
+    grid-area: preview;
+    background: black;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+}
+
+.preview canvas {
+    width: 100%;
+    max-width: 640px;
+    height: auto;
+    image-rendering: pixelated;
+    background: #0a0b0d;
+    border-radius: 4px;
+}
+
+.timeline {
+    grid-area: timeline;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.timeline label {
+    color: var(--text-dim);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.timeline input {
+    flex: 1;
+}
+
+.timeline-label {
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    min-width: 80px;
+    text-align: right;
+}
+
+.controls {
+    grid-area: controls;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+fieldset {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+}
+
+legend {
+    padding: 0 8px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0;
+}
+
+.slider-row label {
+    flex: 0 0 96px;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.slider-row input {
+    flex: 1;
+}
+
+input[type="range"] {
+    accent-color: var(--accent);
+    background: transparent;
+}
+
+input[type="range"]:disabled {
+    opacity: 0.45;
+}
+
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+button {
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 80ms ease-out;
+}
+
+button:hover:not(:disabled) {
+    background: #353a44;
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+button.primary {
+    background: var(--accent-bg);
+    border-color: var(--accent);
+    color: var(--accent-strong);
+}
+
+button.primary:hover:not(:disabled) {
+    background: #344e66;
+}
+
+.progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-input);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    transition: width 100ms ease-out;
+}
+
+.progress-label {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+    min-width: 40px;
+    text-align: right;
+}
+
+.status {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.info {
+    grid-area: info;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+.info h2 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--text);
+}
+
+.info ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.info li {
+    margin-bottom: 6px;
+}
+
+.info code {
+    background: var(--bg-input);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--accent-strong);
+    font-size: 12px;
+}
+
+.badge {
+    background: var(--accent-bg);
+    color: var(--accent-strong);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+@media (max-width: 760px) {
+    .layout {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "preview"
+            "timeline"
+            "controls"
+            "info";
+    }
+}

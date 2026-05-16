@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex Video Editor</title>
+    <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+    <header class="topbar">
+        <div id="liveness-spinner" class="spinner" aria-hidden="true"></div>
+        <h1>Cortex Video Editor</h1>
+        <span class="subtitle">A tiny_fiber demo — heavy filtering without freezing the UI.</span>
+    </header>
+
+    <main class="layout">
+        <section class="preview">
+            <canvas id="preview-canvas" width="320" height="240"></canvas>
+        </section>
+
+        <section class="timeline">
+            <label for="timeline-input">Timeline</label>
+            <input id="timeline-input" type="range" min="0" max="0" step="1" value="0">
+            <span id="timeline-label" class="timeline-label">0 / 0</span>
+        </section>
+
+        <section class="controls">
+            <fieldset>
+                <legend>Filters</legend>
+                <div class="slider-row">
+                    <label for="slider-brightness">Brightness</label>
+                    <input id="slider-brightness" type="range" min="-1" max="1" step="0.01" value="0">
+                </div>
+                <div class="slider-row">
+                    <label for="slider-contrast">Contrast</label>
+                    <input id="slider-contrast" type="range" min="0" max="2" step="0.01" value="1">
+                </div>
+                <div class="slider-row">
+                    <label for="slider-saturation">Saturation</label>
+                    <input id="slider-saturation" type="range" min="0" max="2" step="0.01" value="1">
+                </div>
+                <div class="slider-row">
+                    <label for="slider-blur">Blur radius</label>
+                    <input id="slider-blur" type="range" min="0" max="16" step="1" value="0">
+                </div>
+            </fieldset>
+
+            <fieldset>
+                <legend>Apply</legend>
+                <div class="button-row">
+                    <button id="btn-apply-cooperative" class="primary">Apply (cooperative)</button>
+                    <button id="btn-apply-blocking">Apply (blocking)</button>
+                    <button id="btn-cancel">Cancel</button>
+                    <button id="btn-ab">A / B</button>
+                </div>
+                <div class="progress">
+                    <div class="bar-track">
+                        <div id="progress-bar" class="bar-fill"></div>
+                    </div>
+                    <span id="progress-label" class="progress-label">0%</span>
+                </div>
+                <div id="status-label" class="status">Idle</div>
+            </fieldset>
+        </section>
+
+        <section class="info">
+            <h2>How to read this demo</h2>
+            <ul>
+                <li>The <span class="badge">spinner</span> in the top-left animates via <code>requestAnimationFrame</code>. If it freezes, the main thread is blocked.</li>
+                <li><strong>Apply (blocking)</strong> runs the filter chain synchronously. The spinner stops, the timeline goes unresponsive, the progress bar jumps to 100% only after the work is done.</li>
+                <li><strong>Apply (cooperative)</strong> runs the same work via <code>cortex::tiny_fiber</code> &mdash; workers <code>Yield()</code> between frames, the spinner keeps spinning, and the timeline stays draggable.</li>
+                <li><strong>Cancel</strong> calls <code>Scheduler::Stop()</code>; workers catch <code>SchedulerStoppingError</code> and exit cleanly.</li>
+                <li><strong>A / B</strong> toggles between the source frame and the edited output.</li>
+            </ul>
+        </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

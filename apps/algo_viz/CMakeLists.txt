@@ -5,51 +5,10 @@ endif()
 
 message(STATUS "AlgoViz: Configuring visualizers")
 
-# --- Optimization flags based on build type ---
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(ALGOVIZ_OPT_FLAGS "-Os")
-    set(ALGOVIZ_ASSERT_FLAG "-sASSERTIONS=0")
-else()
-    set(ALGOVIZ_OPT_FLAGS "-O0")
-    set(ALGOVIZ_ASSERT_FLAG "-sASSERTIONS=1")
-endif()
+# Build flags are shared across apps; cortex_add_wasm_app_runtime lives in
+# cmake/AppRuntime.cmake (included from the root CMakeLists).
 
-set(ALGOVIZ_COMMON_LINK_FLAGS
-    "-sALLOW_MEMORY_GROWTH=1"
-    "-sEXIT_RUNTIME=0"
-    "-sASYNCIFY_STACK_SIZE=65536"
-    "-sENVIRONMENT=web"
-    "-sINCOMING_MODULE_JS_API=['locateFile','onAbort','onRuntimeInitialized']"
-    "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
-    "${ALGOVIZ_ASSERT_FLAG}"
-    "${ALGOVIZ_OPT_FLAGS}"
-)
-
-function(cortex_add_algoviz_runtime TARGET_NAME OUTPUT_NAME EXPORTED_FUNCTIONS)
-    add_executable(${TARGET_NAME} engine/main.cpp)
-
-    target_include_directories(${TARGET_NAME} PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/engine
-    )
-
-    target_link_libraries(${TARGET_NAME} PRIVATE cortex::cortex)
-
-    set_target_properties(${TARGET_NAME} PROPERTIES
-        SUFFIX ".js"
-        OUTPUT_NAME "${OUTPUT_NAME}"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-    )
-
-    target_link_options(${TARGET_NAME} PRIVATE
-        "-sEXPORTED_FUNCTIONS=${EXPORTED_FUNCTIONS}"
-        ${ALGOVIZ_COMMON_LINK_FLAGS}
-    )
-
-    cortex_apply_warnings(${TARGET_NAME})
-    cortex_apply_sanitizers(${TARGET_NAME})
-endfunction()
-
-cortex_add_algoviz_runtime(
+cortex_add_wasm_app_runtime(
     algoviz_bst
     "algoviz_bst"
     "[\
@@ -69,9 +28,12 @@ cortex_add_algoviz_runtime(
 '_get_node_right',\
 '_get_node_parent'\
 ]"
+    engine/main.cpp
 )
+target_include_directories(algoviz_bst PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/engine)
+target_link_libraries(algoviz_bst PRIVATE cortex::cortex)
 
-cortex_add_algoviz_runtime(
+cortex_add_wasm_app_runtime(
     algoviz_union_find
     "algoviz_union_find"
     "[\
@@ -86,7 +48,10 @@ cortex_add_algoviz_runtime(
 '_uf_union',\
 '_uf_connected'\
 ]"
+    engine/main.cpp
 )
+target_include_directories(algoviz_union_find PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/engine)
+target_link_libraries(algoviz_union_find PRIVATE cortex::cortex)
 
 add_custom_target(algo_viz_assets
     COMMAND ${CMAKE_COMMAND} -E copy_directory
