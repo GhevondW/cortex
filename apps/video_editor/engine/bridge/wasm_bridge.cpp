@@ -139,3 +139,11 @@ CORTEX_API void editor_cancel() {
 }
 
 } // extern "C"
+
+// Emscripten expects an entry point even though all editor lifecycle is
+// driven by JS calls into the exported functions above. Return 0 so the
+// runtime treats startup as successful; -sEXIT_RUNTIME=0 keeps the module
+// alive afterwards.
+int main() {
+    return 0;
+}
