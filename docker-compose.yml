@@ -111,3 +111,27 @@ services:
         cd build/wasm-algoviz/apps/algo_viz &&
         python3 -m http.server 8080
         "
+
+  # 8. Build and Serve Video Editor
+  serve-video-editor:
+      build: .
+      volumes:
+        - .:/workspace
+      ports:
+        - "8080:8080"
+      environment:
+        - BUILD_TYPE=${BUILD_TYPE:-Release}
+      command: >
+        bash -c "
+        source /opt/emsdk/emsdk_env.sh &&
+        rm -rf build/wasm-video-editor &&
+        emcmake cmake -B build/wasm-video-editor -G Ninja -DCMAKE_BUILD_TYPE=$${BUILD_TYPE} -DCORTEX_BUILD_APPS=ON &&
+        cmake --build build/wasm-video-editor --config $${BUILD_TYPE} --target video_editor &&
+        echo '' &&
+        echo '✅ Video Editor built successfully in $${BUILD_TYPE} mode!' &&
+        echo '' &&
+        echo '  → http://localhost:8080' &&
+        echo '' &&
+        cd build/wasm-video-editor/apps/video_editor &&
+        python3 -m http.server 8080
+        "

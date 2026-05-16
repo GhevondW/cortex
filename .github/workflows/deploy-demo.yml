@@ -50,13 +50,23 @@ jobs:
       - name: Build AlgoViz (Optimized)
         run: cmake --build build/wasm-algoviz --config Release --target algo_viz
 
+      - name: Configure CMake for Video Editor (Release)
+        run: |
+          emcmake cmake -B build/wasm-video-editor -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_BUILD_APPS=ON
+
+      - name: Build Video Editor (Optimized)
+        run: cmake --build build/wasm-video-editor --config Release --target video_editor
+
       - name: Generate Doxygen Docs
         run: doxygen Doxyfile
-      
+
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/examples
           mkdir -p deploy/algoviz
+          mkdir -p deploy/video-editor
           mkdir -p deploy/docs
 
           # Copy examples and all generated runtime artifacts
@@ -64,6 +74,9 @@ jobs:
 
           # Copy the built AlgoViz app bundle (static web + compiled runtime)
           cp -R build/wasm-algoviz/apps/algo_viz/. deploy/algoviz/
+
+          # Copy the built Video Editor bundle
+          cp -R build/wasm-video-editor/apps/video_editor/. deploy/video-editor/
 
           # Copy docs
           cp -R doc/html/. deploy/docs/
@@ -80,7 +93,16 @@ jobs:
           test -f deploy/algoviz/algoviz_bst.wasm
           test -f deploy/algoviz/algoviz_union_find.js
           test -f deploy/algoviz/algoviz_union_find.wasm
-          
+
+          # Fail fast if required Video Editor assets are missing
+          test -f deploy/video-editor/index.html
+          test -f deploy/video-editor/src/main.js
+          test -f deploy/video-editor/src/editor_app.js
+          test -f deploy/video-editor/src/editor_client.js
+          test -f deploy/video-editor/styles/main.css
+          test -f deploy/video-editor/video_editor.js
+          test -f deploy/video-editor/video_editor.wasm
+
           # Create a root index.html that links to everything
           cat > deploy/index.html << 'EOF'
           <!DOCTYPE html>
@@ -93,6 +115,7 @@ jobs:
           <body>
               <p>Redirecting to <a href="examples/examples_index.html">Cortex Examples</a>...</p>
               <p><a href="algoviz/index.html">AlgoViz - Visualization Catalog</a></p>
+              <p><a href="video-editor/index.html">Cortex Video Editor</a></p>
           </body>
           </html>
           EOF
