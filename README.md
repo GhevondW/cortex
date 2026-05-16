@@ -1,32 +1,33 @@
 # Cortex
 
-A C++ stackful coroutine library with WebAssembly support, featuring cooperative multitasking primitives.
-
-## Features
-
-- **Stackful Coroutines** - Full coroutine support with suspend/resume
-- **tiny_fiber Module (Native + WASM)** - Cooperative multitasking scheduler with:
-  - `Scheduler` - Fiber management with step-based API for WASM
-  - `Future<T>` - Async result handling
-  - `Mutex` / `ConditionVariable` - Cooperative synchronization (no OS threads!)
-  - `Yield()` - Explicit context switching
-- **WebAssembly Support** - Runs in browsers via Emscripten
-- **Cross-Platform** - Native (Linux/macOS) and WASM from single codebase
-
-## Live Demo
-
-Try the interactive WASM examples in your browser (no installation required):
+**A C++23 stackful coroutine library that keeps the UI responsive — in the browser, via WebAssembly.**
 
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen?style=for-the-badge)](https://GhevondW.github.io/cortex/)
 [![Docs](https://img.shields.io/badge/docs-doxygen-blue?style=for-the-badge)](https://GhevondW.github.io/cortex/docs/)
 
-- **[All Examples](https://GhevondW.github.io/cortex/)** - Browse all demos
-- **[AlgoViz - BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** - Interactive binary search tree algorithm visualizer (New!)
-- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** - Cooperative multitasking demo
-- **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** - Recursive backtracking visualization (Must See!)
-- **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** - See coroutines in action! (Recommended)
-- **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** - Simple suspend/resume demo
-- **[API Docs](https://GhevondW.github.io/cortex/docs/)** - Doxygen-generated documentation
+Heavy C++ work (image filters, recursive search, simulation loops) normally blocks the browser's main thread and freezes the page. Cortex gives you **stackful coroutines + a cooperative fiber scheduler** that the JS event loop can drive **one step at a time**, so the same algorithm finishes a frame, yields, lets the browser repaint, and resumes — no Web Workers, no threads, no rewrites of your hot path.
+
+## Live Demos
+
+Try them in your browser, no installation required.
+
+- **[Video Editor](https://GhevondW.github.io/cortex/video-editor/index.html)** — apply a Gaussian-blur pipeline to every frame; toggle between *blocking* (page freezes) and *cooperative* (UI stays smooth). The "smoking gun" spinner proves it. **New, recommended.**
+- **[AlgoViz — BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** — interactive binary-search-tree algorithms.
+- **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** — recursive backtracking visualised live.
+- **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** — heavy compute vs. cooperative scheduling, side by side.
+- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** — producer / worker pattern with `tiny_fiber`.
+- **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** — minimal suspend / resume.
+- **[All Demos](https://GhevondW.github.io/cortex/)** · **[API Docs](https://GhevondW.github.io/cortex/docs/)**
+
+## What you get
+
+| | |
+|---|---|
+| `Coroutine` / `BaseCoroutine` / `Generator` | Stackful suspend / resume with a `MemoryResource` abstraction for custom allocators. Backed by **Boost.Context** natively and **Emscripten Asyncify** under WASM. |
+| `tiny_fiber::Scheduler` | Cooperative fiber scheduler with a **step-based API** — drive it from `requestAnimationFrame` and the page never freezes. `Run()` for native, `Create()` + `Step()` for WASM. |
+| `tiny_fiber::Future<T>` / `Spawn` / `Yield` | Async result handling plus explicit yield points; deliver exceptions via `Future::Get()`. |
+| `tiny_fiber::Mutex` / `ConditionVariable` | Cooperative synchronisation primitives — no OS threads, robust against `Stop()` mid-wait. |
+| **Cross-platform from one codebase** | Same headers / sources compile to a native static library *and* to a `.js` + `.wasm` bundle. |
 
 ## Quick Example
 
@@ -36,107 +37,65 @@ namespace tf = cortex::tiny_fiber;
 
 int main() {
     tf::Scheduler::Run([] {
-        // Spawn a fiber that returns a value
-        auto future = tf::Spawn([] {
-            tf::Yield();  // Cooperative yield
-            return 42;
-        });
-        
-        // Do other work while fiber runs
-        tf::Yield();
-        
-        // Get result (blocks until fiber completes)
-        int result = future.Get();
+        // Spawn parallel fibers, each yielding cooperatively.
+        auto a = tf::Spawn([] { tf::Yield(); return 6; });
+        auto b = tf::Spawn([] { tf::Yield(); return 7; });
+
+        // Get() blocks the current fiber (not the OS thread) until ready.
+        int result = a.Get() * b.Get();
+        std::printf("Result: %d\n", result);
     });
 }
 ```
 
-For WASM integration with JS event loop:
+### Driving the scheduler from the JS event loop (WASM)
+
 ```cpp
 auto scheduler = tf::Scheduler::Create([]{
-    // Your fiber code
+    for (int i = 0; i < total_frames; ++i) {
+        process_frame(i);
+        tf::Yield();   // let the browser breathe between frames
+    }
 });
 
-// Called from JS via setInterval
-while (!scheduler.IsDone()) {
-    scheduler.Step();  // Run one fiber until yield
-}
+// From JS, called once per requestAnimationFrame:
+//   while (Module._step()) {}
+extern "C" int step() { return scheduler->Step() ? 1 : 0; }
 ```
+
+This is the exact pattern used by the [Video Editor demo](https://GhevondW.github.io/cortex/video-editor/index.html) — the cooperative "apply filter to all frames" path stays responsive while the blocking variant locks up the page.
 
 ## Quick Start
 
-### Prerequisites
+The simplest path is Docker; everything below assumes Docker + Docker Compose are installed.
 
-- Docker
-- Docker Compose
-
-### Using the Helper Script
+### Helper script
 
 ```bash
-./dev.sh test-all        # Run all tests
-./dev.sh test-native     # Run native tests
-./dev.sh test-wasm       # Run WASM tests
-./dev.sh serve           # Serve WASM example in browser
-./dev.sh help            # Show all commands
+./dev.sh test-all         # Run all native + WASM tests
+./dev.sh test-native      # Native tests only
+./dev.sh test-wasm        # WASM tests in Node.js
+./dev.sh serve            # Serve the WASM example bundle  → http://localhost:8080
+./dev.sh algoviz          # Build & serve AlgoViz          → http://localhost:8080
+./dev.sh video-editor     # Build & serve the Video Editor → http://localhost:8080
+./dev.sh format           # clang-format the C++ tree
+./dev.sh shell            # Open a shell in the dev container
+./dev.sh help             # All commands
 ```
 
-### Manual Commands
+### Or use Docker Compose directly
 
-**Run Native Tests:**
 ```bash
-docker compose up --build test-native
+docker compose up --build test-native        # native test run
+docker compose up --build test-wasm          # WASM test run (Node)
+docker compose up serve-example              # http://localhost:8080
+docker compose up --build serve-algoviz      # http://localhost:8080
+docker compose up --build serve-video-editor # http://localhost:8080
 ```
 
-**Run WASM Tests:**
-```bash
-docker compose up --build test-wasm
-```
+## Building locally (no Docker)
 
-### Run Examples
-
-**Online (No Installation Required):**
-
-Try the **[live demo](https://GhevondW.github.io/cortex/)** in your browser!
-
-**Native (Local):**
-```bash
-docker compose up --build build-example-native
-```
-
-**WASM (Local Browser):**
-```bash
-docker compose up serve-example
-# Open http://localhost:8080/examples/examples_index.html (all examples)
-# Or http://localhost:8080/examples/sudoku_demo.html (sudoku solver - must see!)
-# Or http://localhost:8080/examples/particle_demo.html (recommended interactive demo)
-# Or http://localhost:8080/examples/index.html (basic example)
-```
-
-**AlgoViz (Local Browser):**
-```bash
-./dev.sh algoviz
-# Open http://localhost:8080
-```
-
-## Development
-
-For detailed development instructions, see [DEVELOPMENT.md](DEVELOPMENT.md).
-
-### IDE Setup
-
-The project includes configurations for:
-- **VSCode**: `.devcontainer/` for container development, `.vscode/` for tasks and settings
-- **CLion**: Docker toolchain setup instructions in [DEVELOPMENT.md](DEVELOPMENT.md)
-
-Quick start with VSCode:
-1. Install "Remote - Containers" extension
-2. Open project in VSCode
-3. Click "Reopen in Container" when prompted
-4. Start coding with full IntelliSense inside Docker!
-
-## Building
-
-### Native Build
+### Native (Linux / macOS)
 
 ```bash
 cmake -B build/native -DCORTEX_BUILD_TESTS=ON
@@ -144,7 +103,7 @@ cmake --build build/native
 ctest --test-dir build/native
 ```
 
-### WASM Build
+### WebAssembly
 
 ```bash
 source /path/to/emsdk/emsdk_env.sh
@@ -153,24 +112,59 @@ cmake --build build/wasm
 ctest --test-dir build/wasm
 ```
 
-## Testing
+### Build the browser demos
 
-Both native and WASM builds include comprehensive test suites:
+```bash
+# AlgoViz
+emcmake cmake -B build/wasm-algoviz -G Ninja -DCORTEX_BUILD_APPS=ON
+cmake --build build/wasm-algoviz --target algo_viz
 
-- **Native Tests**: Run with GoogleTest on Linux/macOS
-- **WASM Tests**: Run with GoogleTest in Node.js
+# Video Editor
+emcmake cmake -B build/wasm-video-editor -G Ninja -DCORTEX_BUILD_APPS=ON
+cmake --build build/wasm-video-editor --target video_editor
+```
 
-All tests must pass on both platforms before merging changes.
+Serve either bundle via any static HTTP server (`python3 -m http.server 8080`) from its build directory.
+
+### CMake options
+
+| Option | Default | Description |
+|---|---|---|
+| `CORTEX_BUILD_TESTS` | `ON` | Build the library + per-component test binaries (also builds the engine tests under `apps/video_editor`). |
+| `CORTEX_BUILD_EXAMPLES` | `OFF` | Build the standalone examples in `examples/`. |
+| `CORTEX_BUILD_APPS` | `OFF` | Build the full apps (`apps/algo_viz`, `apps/video_editor`). |
+| `CORTEX_USE_SANITIZERS` | `OFF` | Enable ASan + UBSan (and `BOOST_USE_ASAN` for Boost.Context). |
+
+## Project layout
+
+```
+include/cortex/             public headers (Coroutine, Generator, tiny_fiber/*)
+src/                        library implementation + per-platform PIMPL (Boost / Emscripten)
+tests/                      GoogleTest binaries for every library component
+examples/                   small WASM demos (one .cpp each + an HTML driver)
+apps/
+  algo_viz/                 interactive algorithm visualizer (BST, Union-Find)
+  video_editor/             video-filter demo with cooperative vs blocking comparison
+    engine/                 layered engine library: filters, pipeline, runners (testable natively)
+    web/                    static HTML + modular JS (canvas, timeline, controls, …)
+cmake/                      build helpers, including the shared cortex_add_wasm_app_runtime()
+```
 
 ## Requirements
 
-### Docker (Recommended)
-- Docker
-- Docker Compose
+**With Docker** (recommended): only Docker and Docker Compose.
 
-### Local Development
-- CMake 3.25+
-- C++23 compiler (Clang 19+ or GCC 13+)
-- Ninja build system
-- Emscripten SDK (for WASM)
-- Node.js 18+ (for WASM tests)
+**Without Docker:**
+- CMake 3.28+
+- C++23 compiler — Clang 19+ or GCC 13+
+- Ninja
+- Emscripten SDK 3.x (for WASM)
+- Node.js 18+ (to run WASM tests)
+
+## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the longer walkthrough, IDE setup (VSCode dev containers, CLion Docker toolchain), and the iterative-edit workflow.
+
+## License
+
+[MIT](LICENSE)
