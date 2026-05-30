@@ -54,6 +54,15 @@ public:
     // matching output buffer. Used by the live-preview path.
     void RenderPreview(int frame_idx);
 
+    // Cooperative single-frame render: filters frame_idx through the current
+    // parameters via tiny_fiber, split into horizontal row-bands that yield, so
+    // a heavy filter never blocks the main thread. Drive with StepCooperative()
+    // until CooperativeRenderDone() returns true; the finished frame lands in
+    // Output(frame_idx), byte-identical to RenderPreview(frame_idx).
+    void BeginCooperativeRender(int frame_idx);
+    bool StepCooperative();
+    [[nodiscard]] bool CooperativeRenderDone() const noexcept;
+
     // Bulk apply across all frames. Cooperative uses tiny_fiber and yields to
     // JS between frames; blocking runs to completion synchronously.
     void StartCooperativeApply(IProgressListener& listener);

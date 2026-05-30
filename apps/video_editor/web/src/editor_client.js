@@ -1,7 +1,6 @@
 // Thin object-oriented wrapper around the Module._editor_* C ABI. Other JS
 // modules talk to this class, never directly to the Emscripten Module. Keeps
-// the "this is the boundary" surface clear and makes it trivial to mock in
-// future tests.
+// the "this is the boundary" surface clear and makes it trivial to mock.
 
 export class EditorClient {
     constructor(module) {
@@ -13,22 +12,19 @@ export class EditorClient {
     }
 
     // Replace the active source with a freshly-generated procedural one.
-    // Used by the "Reset to procedural" button.
     resetProcedural(width, height, frameCount) {
         return this._mod._editor_reset_procedural(width, height, frameCount) === 1;
     }
 
-    // Replace the active source with a writable, zero-initialised uploaded
-    // one of the given dimensions. After this returns true, call
-    // writeSourceFrame(idx, rgbaBytes) for each frame.
+    // Replace the active source with a writable, zero-initialised uploaded one.
+    // For the live editor this is called with frameCount === 1: a single
+    // ping-pong slot that each displayed video frame is written into.
     resetUploaded(width, height, frameCount) {
         return this._mod._editor_reset_uploaded(width, height, frameCount) === 1;
     }
 
-    // Copies a frame's RGBA8 bytes into the WASM heap at the source slot
-    // for `frameIdx`. `pixels` is a Uint8ClampedArray/Uint8Array sized
-    // (width * height * 4). Throws if the heap pointer is null (no upload
-    // is active or idx is out of range).
+    // Copy a frame's RGBA8 bytes into the WASM heap at the source slot for
+    // `frameIdx`. `pixels` is a Uint8ClampedArray/Uint8Array of (w*h*4) bytes.
     writeSourceFrame(frameIdx, pixels) {
         const ptr = this._mod._editor_writable_source_pixels(frameIdx);
         if (!ptr) {
@@ -46,26 +42,30 @@ export class EditorClient {
     setSaturation(v)  { this._mod._editor_set_saturation(v); }
     setBlurRadius(r)  { this._mod._editor_set_blur_radius(r); }
 
+    // Run the filter chain synchronously on one frame (source[idx] -> output[idx]).
     renderPreview(frameIdx) {
         this._mod._editor_render_preview(frameIdx);
     }
 
-    startApplyCooperative() { this._mod._editor_start_apply_cooperative(); }
-    runApplyBlocking()      { this._mod._editor_apply_blocking(); }
-    step()                  { return this._mod._editor_step() === 1; }
-    cancel()                { this._mod._editor_cancel(); }
-    progress()              { return this._mod._editor_get_progress(); }
+    // --- Cooperative single-frame render (Phase 2). Present only if the WASM
+    // build exports the functions; supportsCooperative() guards every caller. ---
+    supportsCooperative() {
+        return typeof this._mod._editor_begin_cooperative_render === "function"
+            && typeof this._mod._editor_step_cooperative === "function"
+            && typeof this._mod._editor_cooperative_done === "function";
+    }
+    beginCooperativeRender(frameIdx) { this._mod._editor_begin_cooperative_render(frameIdx); }
+    stepCooperative()                { return this._mod._editor_step_cooperative() === 1; }
+    cooperativeDone()                { return this._mod._editor_cooperative_done() === 1; }
 
-    // Returns a Uint8ClampedArray view into the WASM heap holding the
-    // requested frame's RGBA pixels. The view is invalidated whenever the
-    // heap grows; callers should not retain it across yields.
+    // Returns a Uint8ClampedArray view into the WASM heap holding the requested
+    // frame's RGBA pixels. The view is invalidated whenever the heap grows;
+    // callers must not retain it across calls that may allocate.
     sourceFrame(frameIdx) {
-        const ptr = this._mod._editor_get_source_frame(frameIdx);
-        return this._frameView(ptr);
+        return this._frameView(this._mod._editor_get_source_frame(frameIdx));
     }
     outputFrame(frameIdx) {
-        const ptr = this._mod._editor_get_output_frame(frameIdx);
-        return this._frameView(ptr);
+        return this._frameView(this._mod._editor_get_output_frame(frameIdx));
     }
 
     _frameView(ptr) {

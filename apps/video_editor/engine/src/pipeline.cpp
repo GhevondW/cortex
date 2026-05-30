@@ -39,4 +39,11 @@ void Pipeline::ProcessFrame(int idx) {
     chain_.Apply(source_.At(idx), outputs_[static_cast<std::size_t>(idx)]);
 }
 
+void Pipeline::WriteOutput(int idx, const FrameBuffer& frame) {
+    if (idx < 0 || idx >= static_cast<int>(outputs_.size())) {
+        throw std::out_of_range("Pipeline::WriteOutput: index out of range");
+    }
+    outputs_[static_cast<std::size_t>(idx)].CopyFrom(frame);
+}
+
 } // namespace cortex::video_editor

@@ -10,7 +10,7 @@
     <header class="topbar">
         <div id="liveness-spinner" class="spinner" aria-hidden="true"></div>
         <h1>Cortex Video Editor</h1>
-        <span class="subtitle">A tiny_fiber demo — heavy filtering without freezing the UI. Loads with a procedurally-generated "video"; use <strong>Upload video</strong> to swap in your own clip.</span>
+        <span class="subtitle">Open a video from your computer and edit it <strong>live while it plays</strong> — every frame is filtered in C++/WASM. The spinner proves the main thread stays free.</span>
     </header>
 
     <main class="layout">
@@ -19,8 +19,8 @@
         </section>
 
         <section class="timeline">
-            <label for="timeline-input">Timeline</label>
-            <input id="timeline-input" type="range" min="0" max="0" step="1" value="0">
+            <button id="btn-play" class="primary">► Play</button>
+            <input id="timeline-input" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek">
             <span id="timeline-label" class="timeline-label">0 / 0</span>
         </section>
 
@@ -28,15 +28,15 @@
             <fieldset>
                 <legend>Source</legend>
                 <div class="button-row">
-                    <label for="upload-input" class="upload-label primary">Upload video…</label>
-                    <input id="upload-input" type="file" accept="video/*" hidden>
-                    <button id="btn-source-reset">Reset to procedural</button>
+                    <label for="open-input" class="upload-label primary">Open video…</label>
+                    <input id="open-input" type="file" accept="video/*" hidden>
+                    <button id="btn-use-sample">Use sample clip</button>
                 </div>
-                <div id="source-info" class="status">Procedural (180 frames)</div>
+                <div id="source-info" class="status">Sample clip — procedural</div>
             </fieldset>
 
             <fieldset>
-                <legend>Filters</legend>
+                <legend>Filters (live)</legend>
                 <div class="slider-row">
                     <label for="slider-brightness">Brightness</label>
                     <input id="slider-brightness" type="range" min="-1" max="1" step="0.01" value="0">
@@ -56,13 +56,11 @@
             </fieldset>
 
             <fieldset>
-                <legend>Apply</legend>
-                <div class="button-row">
-                    <button id="btn-apply-cooperative" class="primary">Apply (cooperative)</button>
-                    <button id="btn-apply-blocking">Apply (blocking)</button>
-                    <button id="btn-cancel">Cancel</button>
-                    <button id="btn-ab">A / B</button>
-                </div>
+                <legend>Engine</legend>
+                <label class="check-row">
+                    <input id="chk-cooperative" type="checkbox">
+                    <span>Cortex cooperative engine <em>(keeps the UI smooth under heavy blur)</em></span>
+                </label>
                 <div class="progress">
                     <div class="bar-track">
                         <div id="progress-bar" class="bar-fill"></div>
@@ -74,14 +72,13 @@
         </section>
 
         <section class="info">
-            <h2>How to read this demo</h2>
+            <h2>How this works</h2>
             <ul>
-                <li>The default source is a 180-frame procedurally-generated "video" &mdash; a colorful animated gradient with three orbiting discs. Click <strong>Upload video</strong> to swap in any file your browser can decode; frames are downscaled to 320×240 and capped at 120 to keep WASM memory bounded. Use the <strong>timeline</strong> to scrub through whichever source is active.</li>
-                <li>The <span class="badge">spinner</span> in the top-left animates via <code>requestAnimationFrame</code>. If it freezes, the main thread is blocked.</li>
-                <li><strong>Apply (blocking)</strong> runs the filter chain synchronously. The spinner stops, the timeline goes unresponsive, the progress bar jumps to 100% only after the work is done.</li>
-                <li><strong>Apply (cooperative)</strong> runs the same work via <code>cortex::tiny_fiber</code> &mdash; workers <code>Yield()</code> between frames, the spinner keeps spinning, and the timeline stays draggable.</li>
-                <li><strong>Cancel</strong> calls <code>Scheduler::Stop()</code>; workers catch <code>SchedulerStoppingError</code> and exit cleanly.</li>
-                <li><strong>A / B</strong> toggles between the source frame and the edited output.</li>
+                <li>Click <strong>Open video…</strong> to load any clip your browser can decode (MP4/H.264, WebM, …). It <strong>plays</strong>, and every displayed frame is downscaled, sent to the Cortex C++ engine compiled to WebAssembly, filtered, and drawn back to the canvas — <strong>in real time</strong>. Nothing is uploaded anywhere; it all runs locally.</li>
+                <li>Drag <strong>Brightness / Contrast / Saturation / Blur</strong> <em>while the video plays</em> — the picture changes instantly.</li>
+                <li>The <span class="badge">spinner</span> top-left is animated by <code>requestAnimationFrame</code>. As long as it keeps spinning, the main thread is free.</li>
+                <li>Turn on <strong>Cortex cooperative engine</strong> and crank <strong>Blur</strong>: the heavy per-frame filtering is split into row-bands that <code>Yield()</code> via <code>cortex::tiny_fiber</code>, so even an expensive filter never freezes the page — the video just processes as fast as the engine can.</li>
+                <li><strong>Use sample clip</strong> returns to a built-in procedurally-generated animation, so the editor is usable with no file at all.</li>
             </ul>
         </section>
     </main>

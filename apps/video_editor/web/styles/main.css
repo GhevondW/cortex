@@ -110,6 +110,31 @@ html, body {
     flex: 1;
 }
 
+.timeline #btn-play {
+    flex: 0 0 auto;
+    min-width: 84px;
+}
+
+.check-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    user-select: none;
+}
+
+.check-row input {
+    margin-top: 2px;
+}
+
+.check-row em {
+    color: var(--text-dim);
+    font-style: normal;
+}
+
 .timeline-label {
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;

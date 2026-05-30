@@ -38,6 +38,11 @@ public:
         ProcessFrame(idx);
     }
 
+    // Overwrite output frame idx with an externally-computed frame. Used by the
+    // cooperative live renderer, which filters the frame off the foreground path
+    // (in row-bands via tiny_fiber) and then publishes the finished result here.
+    void WriteOutput(int idx, const FrameBuffer& frame);
+
 private:
     const IFrameSource& source_;
     const FilterChain& chain_;
