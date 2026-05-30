@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cortex/detail/forced_unwind.hpp>
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
 #include <cassert>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
@@ -50,7 +52,8 @@ public:
 
     Future(Future&& other) noexcept
         : state_(std::move(other.state_))
-        , scheduler_(other.scheduler_) {
+        , scheduler_(other.scheduler_)
+        , sched_alive_(std::move(other.sched_alive_)) {
         other.scheduler_ = nullptr;
     }
 
@@ -66,6 +69,7 @@ public:
             }
             state_ = std::move(other.state_);
             scheduler_ = other.scheduler_;
+            sched_alive_ = std::move(other.sched_alive_);
             other.scheduler_ = nullptr;
         }
         return *this;
@@ -123,7 +127,7 @@ public:
      * @brief Check if the fiber has completed.
      */
     [[nodiscard]] bool IsReady() const noexcept {
-        if (!state_ || !scheduler_) {
+        if (!state_ || !scheduler_ || sched_alive_.expired()) {
             return true;
         }
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
@@ -137,13 +141,18 @@ private:
     template <typename F>
     friend auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>>;
 
-    Future(std::shared_ptr<detail::FutureState<T>> state, Scheduler* scheduler)
+    Future(std::shared_ptr<detail::FutureState<T>> state, Scheduler* scheduler, std::weak_ptr<void> alive)
         : state_(std::move(state))
-        , scheduler_(scheduler) {}
+        , scheduler_(scheduler)
+        , sched_alive_(std::move(alive)) {}
 
     void WaitImpl() {
         assert(state_);
-        assert(scheduler_);
+        // A Future may outlive its scheduler. If the scheduler is gone there is
+        // nothing to wait on, and touching it would be a use-after-free.
+        if (!scheduler_ || sched_alive_.expired()) {
+            return;
+        }
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
@@ -159,6 +168,7 @@ private:
 
     std::shared_ptr<detail::FutureState<T>> state_;
     Scheduler* scheduler_ {nullptr};
+    std::weak_ptr<void> sched_alive_;
 };
 
 /**
@@ -172,7 +182,8 @@ public:
 
     Future(Future&& other) noexcept
         : state_(std::move(other.state_))
-        , scheduler_(other.scheduler_) {
+        , scheduler_(other.scheduler_)
+        , sched_alive_(std::move(other.sched_alive_)) {
         other.scheduler_ = nullptr;
     }
 
@@ -186,6 +197,7 @@ public:
             }
             state_ = std::move(other.state_);
             scheduler_ = other.scheduler_;
+            sched_alive_ = std::move(other.sched_alive_);
             other.scheduler_ = nullptr;
         }
         return *this;
@@ -221,7 +233,7 @@ public:
      * @brief Check if the fiber has completed.
      */
     [[nodiscard]] bool IsReady() const noexcept {
-        if (!state_ || !scheduler_) {
+        if (!state_ || !scheduler_ || sched_alive_.expired()) {
             return true;
         }
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
@@ -235,13 +247,18 @@ private:
     template <typename F>
     friend auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>>;
 
-    Future(std::shared_ptr<detail::FutureState<void>> state, Scheduler* scheduler)
+    Future(std::shared_ptr<detail::FutureState<void>> state, Scheduler* scheduler, std::weak_ptr<void> alive)
         : state_(std::move(state))
-        , scheduler_(scheduler) {}
+        , scheduler_(scheduler)
+        , sched_alive_(std::move(alive)) {}
 
     void WaitImpl() {
         assert(state_);
-        assert(scheduler_);
+        // A Future may outlive its scheduler. If the scheduler is gone there is
+        // nothing to wait on, and touching it would be a use-after-free.
+        if (!scheduler_ || sched_alive_.expired()) {
+            return;
+        }
 
         auto* fiber = scheduler_->GetFiber(state_->fiber_id);
         if (!fiber || fiber->IsDone()) {
@@ -257,6 +274,7 @@ private:
 
     std::shared_ptr<detail::FutureState<void>> state_;
     Scheduler* scheduler_ {nullptr};
+    std::weak_ptr<void> sched_alive_;
 };
 
 /**
@@ -281,6 +299,10 @@ auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> 
             [state, f = std::forward<F>(func)]() mutable {
                 try {
                     f();
+                } catch (const cortex::detail::ForcedUnwind&) {
+                    // Internal unwind sentinel — must reach the coroutine
+                    // boundary, never be captured as the fiber's result.
+                    throw;
                 } catch (...) {
                     state->exception = std::current_exception();
                 }
@@ -291,6 +313,10 @@ auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> 
             [state, f = std::forward<F>(func)]() mutable {
                 try {
                     state->result.emplace(f());
+                } catch (const cortex::detail::ForcedUnwind&) {
+                    // Internal unwind sentinel — must reach the coroutine
+                    // boundary, never be captured as the fiber's result.
+                    throw;
                 } catch (...) {
                     state->exception = std::current_exception();
                 }
@@ -298,7 +324,7 @@ auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> 
             stack_size);
     }
 
-    return Future<ResultType>(std::move(state), &scheduler);
+    return Future<ResultType>(std::move(state), &scheduler, scheduler.AliveTokenInternal());
 }
 
 /**

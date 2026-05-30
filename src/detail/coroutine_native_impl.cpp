@@ -5,7 +5,7 @@
 
 #include "cortex/coroutine_suspend_context.hpp"
 #include "cortex/errors/resume_on_completed_coroutine_error.hpp"
-#include "forced_unwind.hpp"
+#include <cortex/detail/forced_unwind.hpp>
 
 namespace cortex::detail {
 
