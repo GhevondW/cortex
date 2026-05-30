@@ -11,7 +11,7 @@ Heavy C++ work (image filters, recursive search, simulation loops) normally bloc
 
 Try them in your browser, no installation required.
 
-- **[Video Editor](https://GhevondW.github.io/cortex/video-editor/index.html)** — apply a Gaussian-blur pipeline to every frame; toggle between *blocking* (page freezes) and *cooperative* (UI stays smooth). The "smoking gun" spinner proves it. **New, recommended.**
+- **[Video Editor](https://GhevondW.github.io/cortex/video-editor/index.html)** — open a video from your computer and **edit it live while it plays**: brightness, contrast, saturation and blur applied to every displayed frame in C++/WASM, in real time. Flip on the **Cortex cooperative engine** and crank the blur — the page never freezes (the "smoking gun" spinner keeps spinning). **New, recommended.**
 - **[AlgoViz — BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** — interactive binary-search-tree algorithms.
 - **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** — recursive backtracking visualised live.
 - **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** — heavy compute vs. cooperative scheduling, side by side.
@@ -63,7 +63,7 @@ auto scheduler = tf::Scheduler::Create([]{
 extern "C" int step() { return scheduler->Step() ? 1 : 0; }
 ```
 
-This is the exact pattern used by the [Video Editor demo](https://GhevondW.github.io/cortex/video-editor/index.html) — the cooperative "apply filter to all frames" path stays responsive while the blocking variant locks up the page.
+This is the exact pattern used by the [Video Editor demo](https://GhevondW.github.io/cortex/video-editor/index.html): each displayed video frame is filtered in horizontal row-bands that `Yield()` via `tiny_fiber`, so even a heavy blur never freezes the page while the clip plays.
 
 ## Quick Start
 
@@ -144,9 +144,9 @@ tests/                      GoogleTest binaries for every library component
 examples/                   small WASM demos (one .cpp each + an HTML driver)
 apps/
   algo_viz/                 interactive algorithm visualizer (BST, Union-Find)
-  video_editor/             video-filter demo with cooperative vs blocking comparison
-    engine/                 layered engine library: filters, pipeline, runners (testable natively)
-    web/                    static HTML + modular JS (canvas, timeline, controls, …)
+  video_editor/             real-time video editor — open a local file, filter every frame live in WASM
+    engine/                 layered engine library: filters, pipeline, runners, cooperative renderer (testable natively)
+    web/                    static HTML + modular JS (frame providers, playback loop, canvas, controls, …)
 cmake/                      build helpers, including the shared cortex_add_wasm_app_runtime()
 ```
 
