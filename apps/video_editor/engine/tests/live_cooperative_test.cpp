@@ -82,13 +82,13 @@ TEST(LiveCooperative, MatchesSyncAcrossParamsAndBandSizes) {
     const FrameBuffer src = MakeNoise(w, h, 0xC0FFEEu);
 
     const LiveFilterParams cases[] = {
-        {},                                  // empty chain → copy
-        {0.25f, 1.0f, 1.0f, 0},              // brightness only
-        {0.0f, 1.4f, 1.0f, 0},              // contrast only
-        {0.0f, 1.0f, 0.6f, 0},              // saturation only
-        {0.0f, 1.0f, 1.0f, 5},              // blur only
-        {-0.3f, 1.6f, 0.4f, 7},             // everything
-        {0.1f, 0.8f, 1.5f, 3},              // everything, different signs
+        {}, // empty chain → copy
+        {0.25f, 1.0f, 1.0f, 0}, // brightness only
+        {0.0f, 1.4f, 1.0f, 0}, // contrast only
+        {0.0f, 1.0f, 0.6f, 0}, // saturation only
+        {0.0f, 1.0f, 1.0f, 5}, // blur only
+        {-0.3f, 1.6f, 0.4f, 7}, // everything
+        {0.1f, 0.8f, 1.5f, 3}, // everything, different signs
     };
 
     for (const auto& p : cases) {
@@ -108,12 +108,14 @@ TEST(LiveCooperative, ReBeginReusesRenderer) {
     LiveCooperativeRenderer r(8);
 
     r.Begin(src, LiveFilterParams {0.5f, 1.0f, 1.0f, 0});
-    while (r.Step()) {}
+    while (r.Step()) {
+    }
     const FrameBuffer first = r.Output();
     ExpectByteIdentical(first, RunSync(src, LiveFilterParams {0.5f, 1.0f, 1.0f, 0}));
 
     r.Begin(src, LiveFilterParams {0.0f, 1.0f, 1.0f, 4});
-    while (r.Step()) {}
+    while (r.Step()) {
+    }
     ExpectByteIdentical(r.Output(), RunSync(src, LiveFilterParams {0.0f, 1.0f, 1.0f, 4}));
 }
 

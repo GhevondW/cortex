@@ -67,8 +67,8 @@ void BandedPerPixel(const FrameBuffer& in, FrameBuffer& out, int band_rows, Op o
 
 // Horizontal blur pass, banded by output rows. Each output row reads only its
 // own input row, so banding is exact.
-void BlurHorizontalBanded(const FrameBuffer& in, FrameBuffer& out, const std::vector<float>& kernel, int radius,
-                          int band_rows) {
+void BlurHorizontalBanded(
+    const FrameBuffer& in, FrameBuffer& out, const std::vector<float>& kernel, int radius, int band_rows) {
     const int w = in.Width();
     const int h = in.Height();
     const auto* src = in.Data();
@@ -81,9 +81,8 @@ void BlurHorizontalBanded(const FrameBuffer& in, FrameBuffer& out, const std::ve
                 float r = 0.0f, g = 0.0f, b = 0.0f;
                 for (int k = -radius; k <= radius; ++k) {
                     const int sx = std::clamp(x + k, 0, w - 1);
-                    const std::size_t off = (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) +
-                                             static_cast<std::size_t>(sx)) *
-                        4u;
+                    const std::size_t off =
+                        (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(sx)) * 4u;
                     const float weight = kernel[static_cast<std::size_t>(k + radius)];
                     r += weight * static_cast<float>(src[off + 0]);
                     g += weight * static_cast<float>(src[off + 1]);
@@ -103,8 +102,8 @@ void BlurHorizontalBanded(const FrameBuffer& in, FrameBuffer& out, const std::ve
 
 // Vertical blur pass, banded by output rows. Reads the fully-materialized
 // horizontal-pass buffer, so banding output rows is exact.
-void BlurVerticalBanded(const FrameBuffer& in, FrameBuffer& out, const std::vector<float>& kernel, int radius,
-                        int band_rows) {
+void BlurVerticalBanded(
+    const FrameBuffer& in, FrameBuffer& out, const std::vector<float>& kernel, int radius, int band_rows) {
     const int w = in.Width();
     const int h = in.Height();
     const auto* src = in.Data();
@@ -117,9 +116,8 @@ void BlurVerticalBanded(const FrameBuffer& in, FrameBuffer& out, const std::vect
                 float r = 0.0f, g = 0.0f, b = 0.0f;
                 for (int k = -radius; k <= radius; ++k) {
                     const int sy = std::clamp(y + k, 0, h - 1);
-                    const std::size_t off = (static_cast<std::size_t>(sy) * static_cast<std::size_t>(w) +
-                                             static_cast<std::size_t>(x)) *
-                        4u;
+                    const std::size_t off =
+                        (static_cast<std::size_t>(sy) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)) * 4u;
                     const float weight = kernel[static_cast<std::size_t>(k + radius)];
                     r += weight * static_cast<float>(src[off + 0]);
                     g += weight * static_cast<float>(src[off + 1]);

@@ -3,11 +3,11 @@
 #include <video_editor/blocking_runner.hpp>
 #include <video_editor/cooperative_runner.hpp>
 #include <video_editor/filter_chain.hpp>
-#include <video_editor/live_cooperative.hpp>
 #include <video_editor/filters/brightness.hpp>
 #include <video_editor/filters/contrast.hpp>
 #include <video_editor/filters/gaussian_blur.hpp>
 #include <video_editor/filters/saturation.hpp>
+#include <video_editor/live_cooperative.hpp>
 #include <video_editor/pipeline.hpp>
 #include <video_editor/procedural_source.hpp>
 #include <video_editor/uploaded_source.hpp>
