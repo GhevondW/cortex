@@ -3,6 +3,7 @@
 #include <video_editor/blocking_runner.hpp>
 #include <video_editor/cooperative_runner.hpp>
 #include <video_editor/filter_chain.hpp>
+#include <video_editor/live_cooperative.hpp>
 #include <video_editor/filters/brightness.hpp>
 #include <video_editor/filters/contrast.hpp>
 #include <video_editor/filters/gaussian_blur.hpp>
@@ -84,6 +85,30 @@ public:
         pipeline_->RenderPreview(idx);
     }
 
+    void BeginCooperativeRender(int idx) {
+        coop_renderer_ = std::make_unique<LiveCooperativeRenderer>();
+        coop_idx_ = idx;
+        const LiveFilterParams params {brightness_, contrast_, saturation_, blur_radius_};
+        coop_renderer_->Begin(source_->At(idx), params);
+    }
+
+    bool StepCooperative() {
+        if (!coop_renderer_) {
+            return false;
+        }
+        const bool more = coop_renderer_->Step();
+        if (!more) {
+            // Publish the finished frame so Output(idx) / the bridge see it.
+            pipeline_->WriteOutput(coop_idx_, coop_renderer_->Output());
+            coop_renderer_.reset();
+        }
+        return more;
+    }
+
+    bool CooperativeRenderDone() const noexcept {
+        return !coop_renderer_;
+    }
+
     void StartCooperativeApply(IProgressListener& listener) {
         EnsureChain();
         runner_ = std::make_unique<CooperativeRunner>();
@@ -148,6 +173,9 @@ private:
             runner_->Cancel();
             runner_.reset();
         }
+        // A live cooperative render writes into the pipeline output, so drop it
+        // too before the pipeline is swapped out from under it.
+        coop_renderer_.reset();
     }
 
     std::unique_ptr<IFrameSource> source_;
@@ -155,6 +183,8 @@ private:
     FilterChain chain_;
     std::unique_ptr<Pipeline> pipeline_;
     std::unique_ptr<IRunner> runner_;
+    std::unique_ptr<LiveCooperativeRenderer> coop_renderer_;
+    int coop_idx_ {0};
 
     float brightness_ {0.0f};
     float contrast_ {1.0f};
@@ -211,6 +241,15 @@ void Editor::SetBlurRadius(int r) {
 }
 void Editor::RenderPreview(int idx) {
     impl_->RenderPreview(idx);
+}
+void Editor::BeginCooperativeRender(int frame_idx) {
+    impl_->BeginCooperativeRender(frame_idx);
+}
+bool Editor::StepCooperative() {
+    return impl_->StepCooperative();
+}
+bool Editor::CooperativeRenderDone() const noexcept {
+    return impl_->CooperativeRenderDone();
 }
 void Editor::StartCooperativeApply(IProgressListener& l) {
     impl_->StartCooperativeApply(l);

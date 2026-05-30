@@ -13,6 +13,7 @@ add_library(video_editor_engine STATIC
     engine/src/pipeline.cpp
     engine/src/blocking_runner.cpp
     engine/src/cooperative_runner.cpp
+    engine/src/live_cooperative.cpp
     engine/src/editor.cpp
 )
 
@@ -46,6 +47,9 @@ if(EMSCRIPTEN)
 '_editor_set_saturation',\
 '_editor_set_blur_radius',\
 '_editor_render_preview',\
+'_editor_begin_cooperative_render',\
+'_editor_step_cooperative',\
+'_editor_cooperative_done',\
 '_editor_start_apply_cooperative',\
 '_editor_apply_blocking',\
 '_editor_step',\
@@ -81,6 +85,7 @@ if(CORTEX_BUILD_TESTS AND NOT EMSCRIPTEN)
         engine/tests/runners_test.cpp
         engine/tests/uploaded_source_test.cpp
         engine/tests/live_single_frame_test.cpp
+        engine/tests/live_cooperative_test.cpp
     )
     target_link_libraries(video_editor_engine_test PRIVATE
         video_editor_engine
