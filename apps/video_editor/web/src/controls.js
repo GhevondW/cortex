@@ -1,6 +1,10 @@
-// FilterControls — four range sliders. Emits 'change' with {key, value}.
-// ApplyControls — three buttons + AB toggle. Emits 'apply-cooperative',
-//   'apply-blocking', 'cancel', 'toggle-ab' events.
+// Controls for the live editor.
+//
+//   FilterControls — four range sliders. Emits 'change' with {key, value}.
+//   EngineControls — the "Cortex cooperative engine" checkbox. Emits
+//                    'toggle-cooperative' with a boolean.
+//   SourceControls — "Open video…" file input + "Use sample clip" button.
+//                    Emits 'open-selected' (detail: File) and 'use-sample'.
 
 export class FilterControls extends EventTarget {
     constructor(sliders) {
@@ -32,79 +36,51 @@ export class FilterControls extends EventTarget {
     }
 }
 
-export class ApplyControls extends EventTarget {
-    constructor(buttons) {
+export class EngineControls extends EventTarget {
+    constructor(checkboxEl) {
         super();
-        // buttons: { cooperative, blocking, cancel, ab }
-        this._btn = buttons;
-        this._running = false;
-        this._uploading = false;
-        buttons.cooperative.addEventListener("click", () =>
-            this.dispatchEvent(new Event("apply-cooperative")));
-        buttons.blocking.addEventListener("click", () =>
-            this.dispatchEvent(new Event("apply-blocking")));
-        buttons.cancel.addEventListener("click", () =>
-            this.dispatchEvent(new Event("cancel")));
-        buttons.ab.addEventListener("click", () =>
-            this.dispatchEvent(new Event("toggle-ab")));
-        this._refresh();
+        this._chk = checkboxEl;
+        if (this._chk) {
+            this._chk.addEventListener("change", () => {
+                this.dispatchEvent(new CustomEvent("toggle-cooperative", { detail: this._chk.checked }));
+            });
+        }
     }
 
-    setRunning(running) {
-        this._running = running;
-        this._refresh();
-    }
-
-    setUploading(uploading) {
-        this._uploading = uploading;
-        this._refresh();
-    }
-
-    _refresh() {
-        const busy = this._running || this._uploading;
-        this._btn.cooperative.disabled = busy;
-        this._btn.blocking.disabled = busy;
-        this._btn.cancel.disabled = !busy;
-    }
+    get cooperative() { return !!(this._chk && this._chk.checked); }
+    set(on) { if (this._chk) this._chk.checked = !!on; }
 }
 
-// SourceControls — wraps the file input + reset-to-procedural button.
-// Emits 'upload-selected' (detail: File) when the user picks a video file
-// and 'reset-procedural' when the reset button is clicked.
 export class SourceControls extends EventTarget {
-    constructor({ upload, reset, info }) {
+    constructor({ open, sample, info }) {
         super();
-        this._inputs = { upload, reset };
+        this._inputs = { open, sample };
         this._info = info;
-        // The file input is visually hidden; the label is what users click.
-        // Disabling the input alone leaves the label looking active, so we
-        // also toggle a CSS class on the associated label.
-        this._uploadLabel = upload.id
-            ? document.querySelector(`label[for="${upload.id}"]`)
+        // The file input is visually hidden; users click its label. Disabling
+        // the input alone leaves the label looking active, so toggle a class too.
+        this._openLabel = open.id
+            ? document.querySelector(`label[for="${open.id}"]`)
             : null;
 
-        upload.addEventListener("change", (e) => {
+        open.addEventListener("change", (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
-            this.dispatchEvent(new CustomEvent("upload-selected", { detail: file }));
+            this.dispatchEvent(new CustomEvent("open-selected", { detail: file }));
             // Reset value so picking the same file twice still fires.
             e.target.value = "";
         });
-        reset.addEventListener("click", () =>
-            this.dispatchEvent(new Event("reset-procedural")));
+        sample.addEventListener("click", () => this.dispatchEvent(new Event("use-sample")));
     }
 
     setEnabled(enabled) {
-        this._inputs.upload.disabled = !enabled;
-        this._inputs.reset.disabled = !enabled;
-        if (this._uploadLabel) {
-            this._uploadLabel.classList.toggle("disabled", !enabled);
+        this._inputs.open.disabled = !enabled;
+        this._inputs.sample.disabled = !enabled;
+        if (this._openLabel) {
+            this._openLabel.classList.toggle("disabled", !enabled);
         }
     }
 
     setInfo(text) {
-        if (this._info) {
-            this._info.textContent = text;
-        }
+        if (this._info) this._info.textContent = text;
     }
 }

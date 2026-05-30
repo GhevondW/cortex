@@ -80,6 +80,7 @@ if(CORTEX_BUILD_TESTS AND NOT EMSCRIPTEN)
         engine/tests/pipeline_test.cpp
         engine/tests/runners_test.cpp
         engine/tests/uploaded_source_test.cpp
+        engine/tests/live_single_frame_test.cpp
     )
     target_link_libraries(video_editor_engine_test PRIVATE
         video_editor_engine

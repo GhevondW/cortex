@@ -1,88 +1,68 @@
-// Controller class. Subscribes to UI events, drives the EditorClient, owns
-// the canvas-refresh and scheduler-step rAF loops. Holds the small amount
-// of mutable state (current frame, AB-mode flag, run state) the demo needs.
+// Controller for the live editor. Owns the active FrameProvider, drives the
+// Playback loop, and keeps filter/engine state. It wires UI events to provider
+// + client calls; it holds no pixel data of its own.
+
+import { VideoProvider, ProceduralProvider } from "./frame_provider.js";
 
 export class EditorApp {
-    constructor({ client, canvas, timeline, filters, apply, progress, source, uploader }) {
+    constructor({ client, canvas, timeline, filters, engine, source, progress, playback }) {
         this._client = client;
         this._canvas = canvas;
         this._timeline = timeline;
         this._filters = filters;
-        this._apply = apply;
-        this._progress = progress;
+        this._engine = engine;
         this._source = source;
-        this._uploader = uploader;
+        this._progress = progress;
+        this._playback = playback;
 
-        this._currentFrame = 0;
-        this._showOutput = true;
-        this._running = false;
-        this._uploading = false;
-        this._stepRafId = 0;
-        this._defaults = null;
+        this._provider = null;
+        this._sampleOpts = null;
+        this._working = { cap: 640 };
+        this._busy = false; // true while opening a file
     }
 
     init(width, height, frameCount) {
         if (!this._client.init(width, height, frameCount)) {
             throw new Error("editor_init returned false");
         }
-        this._defaults = { width, height, frameCount };
+        this._sampleOpts = { width, height, frameCount, fps: 24 };
         this._canvas.resize(width, height);
-        this._timeline.setFrameCount(frameCount);
-        this._installBridgeCallbacks();
-        this._wireEvents();
-        // Initial preview at frame 0.
         this._applyFilterValues();
-        this._client.renderPreview(0);
-        this._redraw();
-        this._progress.setStatus("Ready");
-        if (this._source) {
-            this._source.setInfo(`Procedural (${frameCount} frames)`);
-        }
+        this._wireEvents();
+
+        // Start on the animated procedural sample so the page is alive on load.
+        this._provider = new ProceduralProvider(this._sampleOpts);
+        this._provider.open();
+        this._playback.setProvider(this._provider);
+        this._playback.start();
+        this._provider.play();
+        this._timeline.setPlaying(true);
+        this._source.setInfo(`Sample clip — procedural (${frameCount} frames)`);
+        this._progress.setStatus("Ready — playing sample. Open a video to edit your own.");
     }
 
     _wireEvents() {
-        this._timeline.addEventListener("seek", (e) => {
-            this._currentFrame = e.detail;
-            // Skip live re-render while a cooperative run is in progress —
-            // its rAF loop will pick up the new frame anyway, and we don't
-            // want to fight it for the filter chain.
-            if (!this._running) {
-                this._client.renderPreview(this._currentFrame);
-            }
-            this._redraw();
-        });
-
         this._filters.addEventListener("change", () => {
             this._applyFilterValues();
-            if (!this._running) {
-                this._client.renderPreview(this._currentFrame);
-                this._redraw();
-            }
+            this._playback.markDirty();
         });
 
-        this._apply.addEventListener("apply-cooperative", () => this._startCooperative());
-        this._apply.addEventListener("apply-blocking", () => this._runBlocking());
-        this._apply.addEventListener("cancel", () => {
-            if (this._uploading && this._uploader) {
-                this._uploader.cancel();
-            } else {
-                this._client.cancel();
-            }
-        });
-        this._apply.addEventListener("toggle-ab", () => {
-            this._showOutput = !this._showOutput;
-            this._redraw();
-            this._progress.setStatus(this._showOutput ? "Showing: edited" : "Showing: source");
-        });
+        this._engine.addEventListener("toggle-cooperative", (e) => this._setCooperative(e.detail));
 
-        if (this._source) {
-            this._source.addEventListener("upload-selected", (e) => {
-                this._loadUploadedVideo(e.detail);
-            });
-            this._source.addEventListener("reset-procedural", () => {
-                this._resetToProcedural();
-            });
-        }
+        this._timeline.addEventListener("seek", (e) => {
+            if (this._provider) this._provider.seekFraction(e.detail);
+            this._playback.markDirty();
+        });
+        this._timeline.addEventListener("toggle-play", () => this._togglePlay());
+
+        this._source.addEventListener("open-selected", (e) => this._openVideo(e.detail));
+        this._source.addEventListener("use-sample", () => this._useSample());
+
+        // Keep the play/pause label honest with the real provider state.
+        this._playback.setOnPosition((pos) => {
+            this._timeline.setPosition(pos);
+            if (this._provider) this._timeline.setPlaying(this._provider.playing);
+        });
     }
 
     _applyFilterValues() {
@@ -93,171 +73,96 @@ export class EditorApp {
         this._client.setBlurRadius(v.blur);
     }
 
-    _installBridgeCallbacks() {
-        window.onApplyProgress = (pct) => {
-            this._progress.set(pct);
-        };
-        window.onApplyComplete = () => {
-            this._running = false;
-            this._apply.setRunning(false);
-            this._progress.set(1);
-            this._progress.setStatus("Apply complete");
-            this._client.renderPreview(this._currentFrame);
-            this._redraw();
-        };
-        window.onApplyCancelled = () => {
-            this._running = false;
-            this._apply.setRunning(false);
-            this._progress.setStatus("Cancelled");
-        };
-    }
-
-    _startCooperative() {
-        if (this._running) return;
-        this._applyFilterValues();
-        this._progress.set(0);
-        this._progress.setStatus("Applying (cooperative)…");
-        this._running = true;
-        this._apply.setRunning(true);
-        this._client.startApplyCooperative();
-        this._driveSteps();
-    }
-
-    _runBlocking() {
-        if (this._running) return;
-        this._applyFilterValues();
-        this._progress.set(0);
-        this._progress.setStatus("Applying (blocking)…");
-        this._running = true;
-        this._apply.setRunning(true);
-        // Synchronous call — the UI will be frozen until it returns. That's
-        // the whole point of this code path; the cooperative button is the
-        // foil. Defer one tick so the status label has a chance to paint.
-        window.setTimeout(() => {
-            this._client.runApplyBlocking();
-            // onApplyComplete will reset state from inside the bridge.
-        }, 16);
-    }
-
-    _driveSteps() {
-        const tick = () => {
-            if (!this._running) return;
-            const more = this._client.step();
-            // Refresh the displayed frame as workers finish frames.
-            this._client.renderPreview(this._currentFrame);
-            this._redraw();
-            if (more) {
-                this._stepRafId = window.requestAnimationFrame(tick);
-            }
-        };
-        this._stepRafId = window.requestAnimationFrame(tick);
-    }
-
-    _redraw() {
-        const pixels = this._showOutput
-            ? this._client.outputFrame(this._currentFrame)
-            : this._client.sourceFrame(this._currentFrame);
-        this._canvas.draw(pixels, this._client.width(), this._client.height());
-    }
-
-    async _loadUploadedVideo(file) {
-        if (this._uploading) return;
-        if (this._running) {
-            // Stop any apply pass before mutating the source out from under it.
-            this._client.cancel();
+    _setCooperative(on) {
+        if (on && !this._client.supportsCooperative()) {
+            this._engine.set(false);
+            this._playback.setCooperative(false);
+            this._progress.setStatus("Cooperative engine isn't available in this build.");
+            return;
         }
-        this._uploading = true;
-        this._apply.setUploading(true);
+        this._playback.setCooperative(on);
+        this._progress.setStatus(on
+            ? "Cooperative engine on — heavy filters won't freeze the page."
+            : "Cooperative engine off (synchronous).");
+    }
+
+    _togglePlay() {
+        if (!this._provider) return;
+        if (this._provider.playing) {
+            this._provider.pause();
+            this._timeline.setPlaying(false);
+        } else {
+            this._provider.play();
+            this._timeline.setPlaying(true);
+        }
+    }
+
+    async _openVideo(file) {
+        if (this._busy) return;
+        this._busy = true;
         this._filters.setEnabled(false);
         this._source.setEnabled(false);
         this._progress.set(0);
-        this._progress.setStatus("Loading video metadata…");
+        this._progress.setStatus(`Opening "${file.name}"…`);
 
+        const provider = new VideoProvider(file, { cap: this._working.cap });
         let plan;
         try {
-            plan = await this._uploader.prepare(file);
+            plan = await provider.open();
         } catch (err) {
-            this._finishUpload(`Upload failed: ${err.message}`);
+            provider.dispose();
+            this._progress.setStatus(err.message || "Could not open this video.");
+            this._finishOpen();
             return;
         }
 
-        if (!this._client.resetUploaded(plan.width, plan.height, plan.frameCount)) {
-            this._finishUpload("Editor refused upload reset");
+        if (!this._client.resetUploaded(plan.width, plan.height, 1)) {
+            provider.dispose();
+            this._progress.setStatus("Engine refused the uploaded source.");
+            this._finishOpen();
             return;
         }
 
+        this._swapProvider(provider);
         this._canvas.resize(plan.width, plan.height);
-        this._timeline.setFrameCount(plan.frameCount);
-        this._currentFrame = 0;
-        this._timeline.setFrame(0);
-
-        const onProgress = (e) => {
-            const { current, total } = e.detail;
-            this._progress.set(current / total);
-            this._progress.setStatus(`Decoding ${current} / ${total} frames…`);
-        };
-        this._uploader.addEventListener("progress", onProgress);
-
-        try {
-            await this._uploader.extract((idx, data) => {
-                this._client.writeSourceFrame(idx, data);
-            });
-        } catch (err) {
-            this._uploader.removeEventListener("progress", onProgress);
-            const msg = err.message === "cancelled"
-                ? "Upload cancelled — restoring procedural source"
-                : `Upload failed: ${err.message}`;
-            this._fallbackToProcedural();
-            this._finishUpload(msg);
-            return;
-        }
-
-        this._uploader.removeEventListener("progress", onProgress);
         this._applyFilterValues();
-        this._client.renderPreview(0);
-        this._redraw();
-        this._source.setInfo(`Uploaded video — ${plan.frameCount} frames @ ${plan.width}×${plan.height}`);
+        provider.play();
+        this._timeline.setPlaying(true);
+        this._source.setInfo(`Opened "${file.name}" — ${plan.width}×${plan.height}`);
         this._progress.set(1);
-        this._finishUpload(`Loaded ${plan.frameCount} frames`);
+        this._progress.setStatus("Editing live — move the sliders while it plays.");
+        this._finishOpen();
     }
 
-    _finishUpload(statusText) {
-        this._uploading = false;
-        this._apply.setUploading(false);
+    _useSample() {
+        if (this._busy) return;
+        const { width, height, frameCount } = this._sampleOpts;
+        if (!this._client.resetProcedural(width, height, frameCount)) {
+            this._progress.setStatus("Engine refused the procedural reset.");
+            return;
+        }
+        const provider = new ProceduralProvider(this._sampleOpts);
+        provider.open();
+        this._swapProvider(provider);
+        this._canvas.resize(width, height);
+        this._applyFilterValues();
+        provider.play();
+        this._timeline.setPlaying(true);
+        this._source.setInfo(`Sample clip — procedural (${frameCount} frames)`);
+        this._progress.setStatus("Playing sample.");
+    }
+
+    _swapProvider(next) {
+        const prev = this._provider;
+        this._provider = next;
+        this._playback.setProvider(next);
+        this._playback.start();
+        if (prev && prev !== next) prev.dispose();
+    }
+
+    _finishOpen() {
+        this._busy = false;
         this._filters.setEnabled(true);
         this._source.setEnabled(true);
-        this._progress.setStatus(statusText);
-    }
-
-    _resetToProcedural() {
-        if (this._uploading || this._running) return;
-        const { width, height, frameCount } = this._defaults;
-        if (!this._client.resetProcedural(width, height, frameCount)) {
-            this._progress.setStatus("Editor refused procedural reset");
-            return;
-        }
-        this._canvas.resize(width, height);
-        this._timeline.setFrameCount(frameCount);
-        this._currentFrame = 0;
-        this._timeline.setFrame(0);
-        this._applyFilterValues();
-        this._client.renderPreview(0);
-        this._redraw();
-        this._source.setInfo(`Procedural (${frameCount} frames)`);
-        this._progress.set(0);
-        this._progress.setStatus("Procedural source restored");
-    }
-
-    _fallbackToProcedural() {
-        const { width, height, frameCount } = this._defaults;
-        if (this._client.resetProcedural(width, height, frameCount)) {
-            this._canvas.resize(width, height);
-            this._timeline.setFrameCount(frameCount);
-            this._currentFrame = 0;
-            this._timeline.setFrame(0);
-            this._client.renderPreview(0);
-            this._redraw();
-            this._source.setInfo(`Procedural (${frameCount} frames)`);
-        }
     }
 }
