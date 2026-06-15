@@ -124,6 +124,11 @@ export class VideoProvider extends EventTarget {
         return !!this._video && "requestVideoFrameCallback" in this._video;
     }
     requestVideoFrame(cb) { return this._video.requestVideoFrameCallback(cb); }
+    cancelVideoFrame(handle) {
+        if (this._video && "cancelVideoFrameCallback" in this._video) {
+            this._video.cancelVideoFrameCallback(handle);
+        }
+    }
 
     dispose() {
         if (this._video) {
@@ -209,5 +214,6 @@ export class ProceduralProvider extends EventTarget {
 
     get hasVideoFrameCallback() { return false; }
     requestVideoFrame() {}
+    cancelVideoFrame() {}
     dispose() {}
 }

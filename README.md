@@ -1,35 +1,34 @@
 # Cortex
 
-**A C++23 stackful coroutine library that keeps the UI responsive — in the browser, via WebAssembly.**
+**C++23 stackful coroutines that keep the browser responsive.**
 
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen?style=for-the-badge)](https://GhevondW.github.io/cortex/)
 [![Docs](https://img.shields.io/badge/docs-doxygen-blue?style=for-the-badge)](https://GhevondW.github.io/cortex/docs/)
 
-Heavy C++ work (image filters, recursive search, simulation loops) normally blocks the browser's main thread and freezes the page. Cortex gives you **stackful coroutines + a cooperative fiber scheduler** that the JS event loop can drive **one step at a time**, so the same algorithm finishes a frame, yields, lets the browser repaint, and resumes — no Web Workers, no threads, no rewrites of your hot path.
+Heavy C++ work — image filters, recursive search, simulation loops — normally blocks the browser's main thread and freezes the page. Cortex runs it as **stackful coroutines on a cooperative fiber scheduler** that the JS event loop drives **one step at a time**: the algorithm does a slice of work, yields, lets the browser repaint, and resumes. No Web Workers, no threads, no rewrite of your hot path.
 
-## Live Demos
+## Live demos
 
-Try them in your browser, no installation required.
+No install — open in a browser:
 
-- **[Video Editor](https://GhevondW.github.io/cortex/video-editor/index.html)** — open a video from your computer and **edit it live while it plays**: brightness, contrast, saturation and blur applied to every displayed frame in C++/WASM, in real time. Flip on the **Cortex cooperative engine** and crank the blur — the page never freezes (the "smoking gun" spinner keeps spinning). **New, recommended.**
-- **[AlgoViz — BST Visualizer](https://GhevondW.github.io/cortex/algoviz/)** — interactive binary-search-tree algorithms.
-- **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** — recursive backtracking visualised live.
+- **[Video Editor](https://GhevondW.github.io/cortex/video-editor/index.html)** — open a local video and edit it **while it plays**: brightness, contrast, saturation and blur applied to every frame in C++/WASM. Turn on the Cortex cooperative engine, crank the blur, and the page never freezes.
+- **[AlgoViz](https://GhevondW.github.io/cortex/algoviz/)** — interactive binary-search-tree and union-find algorithms.
+- **[Sudoku Solver](https://GhevondW.github.io/cortex/examples/sudoku_demo.html)** — recursive backtracking, visualised live.
 - **[Particle Simulation](https://GhevondW.github.io/cortex/examples/particle_demo.html)** — heavy compute vs. cooperative scheduling, side by side.
-- **[Fiber Workflow](https://GhevondW.github.io/cortex/examples/fiber_demo.html)** — producer / worker pattern with `tiny_fiber`.
-- **[Basic Example](https://GhevondW.github.io/cortex/examples/index.html)** — minimal suspend / resume.
-- **[All Demos](https://GhevondW.github.io/cortex/)** · **[API Docs](https://GhevondW.github.io/cortex/docs/)**
+- **[All demos](https://GhevondW.github.io/cortex/)** · **[API docs](https://GhevondW.github.io/cortex/docs/)**
 
 ## What you get
 
-| | |
+| API | Purpose |
 |---|---|
-| `Coroutine` / `BaseCoroutine` / `Generator` | Stackful suspend / resume with a `MemoryResource` abstraction for custom allocators. Backed by **Boost.Context** natively and **Emscripten Asyncify** under WASM. |
-| `tiny_fiber::Scheduler` | Cooperative fiber scheduler with a **step-based API** — drive it from `requestAnimationFrame` and the page never freezes. `Run()` for native, `Create()` + `Step()` for WASM. |
-| `tiny_fiber::Future<T>` / `Spawn` / `Yield` | Async result handling plus explicit yield points; deliver exceptions via `Future::Get()`. |
-| `tiny_fiber::Mutex` / `ConditionVariable` | Cooperative synchronisation primitives — no OS threads, robust against `Stop()` mid-wait. |
-| **Cross-platform from one codebase** | Same headers / sources compile to a native static library *and* to a `.js` + `.wasm` bundle. |
+| `Coroutine` / `BaseCoroutine` / `Generator` | Stackful suspend/resume with a `MemoryResource` allocator hook. Boost.Context natively, Emscripten Asyncify under WASM. |
+| `tiny_fiber::Scheduler` | Cooperative fiber scheduler with a step-based API: `Run()` natively, `Create()` + `Step()` to drive from `requestAnimationFrame`. |
+| `tiny_fiber::Future<T>` / `Spawn` / `Yield` | Async results and explicit yield points; exceptions delivered via `Future::Get()`. |
+| `tiny_fiber::Mutex` / `ConditionVariable` | Cooperative sync primitives — no OS threads, safe across `Stop()`. |
 
-## Quick Example
+The same headers and sources compile to a native static library **and** a `.js` + `.wasm` bundle.
+
+## Example
 
 ```cpp
 #include <cortex/tiny_fiber/tiny_fiber.hpp>
@@ -48,7 +47,7 @@ int main() {
 }
 ```
 
-### Driving the scheduler from the JS event loop (WASM)
+**Driving it from JS (WASM)** — create the scheduler once, then step it from `requestAnimationFrame`:
 
 ```cpp
 auto scheduler = tf::Scheduler::Create([]{
@@ -63,107 +62,20 @@ auto scheduler = tf::Scheduler::Create([]{
 extern "C" int step() { return scheduler->Step() ? 1 : 0; }
 ```
 
-This is the exact pattern used by the [Video Editor demo](https://GhevondW.github.io/cortex/video-editor/index.html): each displayed video frame is filtered in horizontal row-bands that `Yield()` via `tiny_fiber`, so even a heavy blur never freezes the page while the clip plays.
+This is exactly how the Video Editor filters each frame in yielding row-bands, so even a heavy blur never freezes the page.
 
-## Quick Start
+## Quick start
 
-The simplest path is Docker; everything below assumes Docker + Docker Compose are installed.
-
-### Helper script
+Docker is the only requirement:
 
 ```bash
-./dev.sh test-all         # Run all native + WASM tests
-./dev.sh test-native      # Native tests only
-./dev.sh test-wasm        # WASM tests in Node.js
-./dev.sh serve            # Serve the WASM example bundle  → http://localhost:8080
-./dev.sh algoviz          # Build & serve AlgoViz          → http://localhost:8080
-./dev.sh video-editor     # Build & serve the Video Editor → http://localhost:8080
-./dev.sh format           # clang-format the C++ tree
-./dev.sh shell            # Open a shell in the dev container
-./dev.sh help             # All commands
+./dev.sh test-all       # native + WASM tests
+./dev.sh video-editor   # build & serve the Video Editor → http://localhost:8080
+./dev.sh serve          # serve the example bundle      → http://localhost:8080
+./dev.sh help           # all commands
 ```
 
-### Or use Docker Compose directly
-
-```bash
-docker compose up --build test-native        # native test run
-docker compose up --build test-wasm          # WASM test run (Node)
-docker compose up serve-example              # http://localhost:8080
-docker compose up --build serve-algoviz      # http://localhost:8080
-docker compose up --build serve-video-editor # http://localhost:8080
-```
-
-## Building locally (no Docker)
-
-### Native (Linux / macOS)
-
-```bash
-cmake -B build/native -DCORTEX_BUILD_TESTS=ON
-cmake --build build/native
-ctest --test-dir build/native
-```
-
-### WebAssembly
-
-```bash
-source /path/to/emsdk/emsdk_env.sh
-emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_TESTS=ON
-cmake --build build/wasm
-ctest --test-dir build/wasm
-```
-
-### Build the browser demos
-
-```bash
-# AlgoViz
-emcmake cmake -B build/wasm-algoviz -G Ninja -DCORTEX_BUILD_APPS=ON
-cmake --build build/wasm-algoviz --target algo_viz
-
-# Video Editor
-emcmake cmake -B build/wasm-video-editor -G Ninja -DCORTEX_BUILD_APPS=ON
-cmake --build build/wasm-video-editor --target video_editor
-```
-
-Serve either bundle via any static HTTP server (`python3 -m http.server 8080`) from its build directory.
-
-### CMake options
-
-| Option | Default | Description |
-|---|---|---|
-| `CORTEX_BUILD_TESTS` | `ON` | Build the library + per-component test binaries (also builds the engine tests under `apps/video_editor`). |
-| `CORTEX_BUILD_EXAMPLES` | `OFF` | Build the standalone examples in `examples/`. |
-| `CORTEX_BUILD_APPS` | `OFF` | Build the full apps (`apps/algo_viz`, `apps/video_editor`). |
-| `CORTEX_USE_SANITIZERS` | `OFF` | Enable ASan + UBSan (and `BOOST_USE_ASAN` for Boost.Context). |
-
-## Project layout
-
-```
-include/cortex/             public headers (Coroutine, Generator, tiny_fiber/*)
-src/                        library implementation + per-platform PIMPL (Boost / Emscripten)
-tests/                      GoogleTest binaries for every library component
-examples/                   small WASM demos (one .cpp each + an HTML driver)
-apps/
-  algo_viz/                 interactive algorithm visualizer (BST, Union-Find)
-  video_editor/             real-time video editor — open a local file, filter every frame live in WASM
-    engine/                 layered engine library: filters, pipeline, runners, cooperative renderer (testable natively)
-    web/                    static HTML + modular JS (frame providers, playback loop, canvas, controls, …)
-cmake/                      build helpers, including the shared cortex_add_wasm_app_runtime()
-```
-
-## Requirements
-
-**With Docker** (recommended): only Docker and Docker Compose.
-
-**Without Docker:**
-- CMake 3.28+
-- C++23 compiler — Clang 19+ or GCC 13+
-- Ninja
-- Emscripten SDK 3.x (for WASM)
-- Node.js 18+ (to run WASM tests)
-
-## Development
-
-See [DEVELOPMENT.md](DEVELOPMENT.md) for the longer walkthrough, IDE setup (VSCode dev containers, CLion Docker toolchain), and the iterative-edit workflow.
+Building without Docker, the full CMake option list, and IDE setup live in **[DEVELOPMENT.md](DEVELOPMENT.md)**.
 
 ## License
 

@@ -63,6 +63,12 @@ if(EMSCRIPTEN)
     )
     target_link_libraries(video_editor_runtime PRIVATE video_editor_engine)
 
+    # The per-pixel filter loops (brightness/contrast/saturation + separable blur)
+    # vectorize well — enable WASM SIMD for the engine (PUBLIC, so the runtime that
+    # links it inherits it too) and at link.
+    target_compile_options(video_editor_engine PUBLIC -msimd128)
+    target_link_options(video_editor_runtime PRIVATE -msimd128)
+
     add_custom_target(video_editor_assets
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/web

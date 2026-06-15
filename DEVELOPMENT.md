@@ -252,9 +252,28 @@ python3 -m http.server 8080
 
 ## CMake Options
 
-- `CORTEX_BUILD_TESTS` - Build unit tests (default: ON)
-- `CORTEX_BUILD_EXAMPLES` - Build example applications (default: OFF)
+- `CORTEX_BUILD_TESTS` - Build the library + per-component test binaries, including the native `apps/video_editor` engine tests (default: ON)
+- `CORTEX_BUILD_EXAMPLES` - Build the standalone WASM demos in `examples/` (default: OFF)
+- `CORTEX_BUILD_APPS` - Build the full apps: `apps/algo_viz` and `apps/video_editor` (default: OFF)
 - `CORTEX_USE_SANITIZERS` - Enable Address and Undefined Behavior sanitizers (default: OFF). Works for both Native and WASM builds.
+
+## Building the Browser Demos
+
+The demos are WASM apps; build them with Emscripten and `CORTEX_BUILD_APPS=ON`.
+
+```bash
+# AlgoViz
+emcmake cmake -B build/wasm-algoviz -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORTEX_BUILD_APPS=ON
+cmake --build build/wasm-algoviz --config Release --target algo_viz
+
+# Video Editor
+emcmake cmake -B build/wasm-video-editor -G Ninja -DCMAKE_BUILD_TYPE=Release -DCORTEX_BUILD_APPS=ON
+cmake --build build/wasm-video-editor --config Release --target video_editor
+```
+
+Serve either bundle with any static HTTP server (`python3 -m http.server 8080`) from its build directory, or use the helper script (`./dev.sh algoviz`, `./dev.sh video-editor`), which builds and serves in one step.
+
+Release WASM app builds use `-O3 -msimd128`, tuned for the video editor's per-pixel filter math (see `cmake/AppRuntime.cmake`). The cooperative renderer keeps the page responsive by filtering each frame in row-bands and yielding between them via `tiny_fiber`.
 
 ## Platform Detection
 
