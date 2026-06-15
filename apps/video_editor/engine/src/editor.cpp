@@ -86,27 +86,33 @@ public:
     }
 
     void BeginCooperativeRender(int idx) {
-        coop_renderer_ = std::make_unique<LiveCooperativeRenderer>();
+        // Reuse the renderer (and its frame buffers) across frames; the editor
+        // begins a fresh cooperative render every displayed frame.
+        if (!coop_renderer_) {
+            coop_renderer_ = std::make_unique<LiveCooperativeRenderer>();
+        }
         coop_idx_ = idx;
+        coop_done_ = false;
         const LiveFilterParams params {brightness_, contrast_, saturation_, blur_radius_};
         coop_renderer_->Begin(source_->At(idx), params);
     }
 
     bool StepCooperative() {
-        if (!coop_renderer_) {
+        if (!coop_renderer_ || coop_done_) {
             return false;
         }
         const bool more = coop_renderer_->Step();
         if (!more) {
             // Publish the finished frame so Output(idx) / the bridge see it.
+            // Keep the renderer alive so the next frame's Begin reuses its buffers.
             pipeline_->WriteOutput(coop_idx_, coop_renderer_->Output());
-            coop_renderer_.reset();
+            coop_done_ = true;
         }
         return more;
     }
 
     bool CooperativeRenderDone() const noexcept {
-        return !coop_renderer_;
+        return coop_done_;
     }
 
     void StartCooperativeApply(IProgressListener& listener) {
@@ -176,6 +182,7 @@ private:
         // A live cooperative render writes into the pipeline output, so drop it
         // too before the pipeline is swapped out from under it.
         coop_renderer_.reset();
+        coop_done_ = true;
     }
 
     std::unique_ptr<IFrameSource> source_;
@@ -185,6 +192,7 @@ private:
     std::unique_ptr<IRunner> runner_;
     std::unique_ptr<LiveCooperativeRenderer> coop_renderer_;
     int coop_idx_ {0};
+    bool coop_done_ {true};
 
     float brightness_ {0.0f};
     float contrast_ {1.0f};

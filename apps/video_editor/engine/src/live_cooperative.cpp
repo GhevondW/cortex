@@ -155,16 +155,26 @@ void LiveCooperativeRenderer::Begin(const FrameBuffer& source, const LiveFilterP
     // Drop any in-flight render (tears the old scheduler down cleanly).
     scheduler_.reset();
 
-    auto state = std::make_shared<State>();
-    state->band_rows = band_rows_;
-    state->params = params;
-    state->work_a = source; // copy of the source frame
-    state->work_b = FrameBuffer(source.Width(), source.Height());
-    state->scratch = FrameBuffer(source.Width(), source.Height());
-    state->output = FrameBuffer(source.Width(), source.Height());
-    state_ = state;
+    const int w = source.Width();
+    const int h = source.Height();
+
+    // Reuse the frame buffers across renders; only (re)allocate when dimensions
+    // change. The editor begins a fresh cooperative render every displayed frame,
+    // so this keeps the real-time path allocation-free in steady state instead of
+    // allocating four full-frame buffers per frame.
+    if (!state_ || state_->work_a.Width() != w || state_->work_a.Height() != h) {
+        state_ = std::make_shared<State>();
+        state_->work_a = FrameBuffer(w, h);
+        state_->work_b = FrameBuffer(w, h);
+        state_->scratch = FrameBuffer(w, h);
+        state_->output = FrameBuffer(w, h);
+    }
+    state_->band_rows = band_rows_;
+    state_->params = params;
+    state_->work_a.CopyFrom(source);
     done_ = false;
 
+    auto state = state_;
     scheduler_ = tf::Scheduler::Create([state] {
         State& s = *state;
         FrameBuffer* cur = &s.work_a;

@@ -12,8 +12,11 @@ if(NOT EMSCRIPTEN)
     return()
 endif()
 
+# Release apps are compute-bound (e.g. the video editor's per-pixel filter math),
+# so optimize for speed (-O3), not size (-Os). This also drives Binaryen's
+# whole-module optimization of the Asyncify-instrumented code at link time.
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(_CORTEX_APP_OPT_FLAGS "-Os")
+    set(_CORTEX_APP_OPT_FLAGS "-O3")
     set(_CORTEX_APP_ASSERT_FLAG "-sASSERTIONS=0")
 else()
     set(_CORTEX_APP_OPT_FLAGS "-O0")

@@ -29,7 +29,11 @@ struct LiveFilterParams {
 // chain (verified in live_cooperative_test.cpp).
 class LiveCooperativeRenderer final {
 public:
-    explicit LiveCooperativeRenderer(int band_rows = 16);
+    // band_rows controls how many output rows are filtered between yields. Bigger
+    // bands mean fewer (cheaper-in-aggregate) fiber swaps per frame; the JS driver
+    // bounds per-tick work with its own time budget, so this is purely a swap-cost
+    // knob, not the responsiveness limit.
+    explicit LiveCooperativeRenderer(int band_rows = 32);
     ~LiveCooperativeRenderer();
 
     LiveCooperativeRenderer(const LiveCooperativeRenderer&) = delete;
