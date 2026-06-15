@@ -21,6 +21,8 @@ export class Playback {
         this._running = false;
         this._dirty = true;       // force the first paint
         this._rafId = 0;
+        this._vfcHandle = 0;      // pending requestVideoFrameCallback handle
+        this._vfcProvider = null; // provider that owns the pending rVFC
 
         // Phase 2 (cooperative engine) hooks — inert until enabled.
         this._cooperative = false;
@@ -33,6 +35,15 @@ export class Playback {
         this._provider = provider;
         this._dirty = true;
         this._coopActive = false;
+        // Re-kick scheduling. A pending requestVideoFrameCallback is bound to the
+        // previous provider's <video>, which the caller is about to dispose — it
+        // would never fire and the loop would stall (this is why opening a second
+        // video used to hang until a page reload). Cancel it and schedule a fresh
+        // tick against the new provider.
+        if (this._running) {
+            this._cancelPending();
+            this._schedule();
+        }
     }
 
     setOnPosition(fn) { this._onPosition = fn || (() => {}); }
@@ -53,20 +64,33 @@ export class Playback {
 
     stop() {
         this._running = false;
-        if (this._rafId) {
-            cancelAnimationFrame(this._rafId);
-            this._rafId = 0;
-        }
+        this._cancelPending();
     }
 
     _schedule() {
         if (!this._running) return;
         const p = this._provider;
         if (p && p.hasVideoFrameCallback && p.playing) {
-            p.requestVideoFrame(() => this._tick());
+            this._vfcProvider = p;
+            this._vfcHandle = p.requestVideoFrame(() => { this._vfcHandle = 0; this._tick(); });
         } else {
-            this._rafId = requestAnimationFrame(() => this._tick());
+            this._rafId = requestAnimationFrame(() => { this._rafId = 0; this._tick(); });
         }
+    }
+
+    // Cancel whichever next-tick callback is currently pending (rAF or rVFC). The
+    // rVFC handle is cancelled on the provider that owns it, since it is tied to
+    // that provider's <video>.
+    _cancelPending() {
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = 0;
+        }
+        if (this._vfcHandle && this._vfcProvider) {
+            this._vfcProvider.cancelVideoFrame(this._vfcHandle);
+        }
+        this._vfcHandle = 0;
+        this._vfcProvider = null;
     }
 
     _tick() {
@@ -110,7 +134,12 @@ export class Playback {
             this._coopStallTicks = 0;
         }
 
-        const budgetMs = 8;
+        // Per-tick compute budget. ~12 ms uses most of a 60 fps frame while leaving
+        // headroom for the browser to paint and stay responsive. A bigger budget
+        // lets each frame's filtering finish in fewer ticks, keeping the cooperative
+        // path closer to the synchronous one on heavy blur (it is inherently a bit
+        // slower — it deliberately yields so the page never freezes).
+        const budgetMs = 12;
         const start = performance.now();
         let done = client.cooperativeDone();
         while (!done && performance.now() - start < budgetMs) {

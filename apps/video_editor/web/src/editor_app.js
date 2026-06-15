@@ -106,32 +106,31 @@ export class EditorApp {
         this._progress.setStatus(`Opening "${file.name}"…`);
 
         const provider = new VideoProvider(file, { cap: this._working.cap });
-        let plan;
         try {
-            plan = await provider.open();
+            const plan = await provider.open();
+
+            if (!this._client.resetUploaded(plan.width, plan.height, 1)) {
+                provider.dispose();
+                this._progress.setStatus("Engine refused the uploaded source.");
+                return;
+            }
+
+            this._swapProvider(provider);
+            this._canvas.resize(plan.width, plan.height);
+            this._applyFilterValues();
+            provider.play();
+            this._timeline.setPlaying(true);
+            this._source.setInfo(`Opened "${file.name}" — ${plan.width}×${plan.height}`);
+            this._progress.set(1);
+            this._progress.setStatus("Editing live — move the sliders while it plays.");
         } catch (err) {
             provider.dispose();
             this._progress.setStatus(err.message || "Could not open this video.");
+        } finally {
+            // Always re-enable the UI and clear _busy, even if opening threw, so the
+            // editor can never get wedged with its controls disabled.
             this._finishOpen();
-            return;
         }
-
-        if (!this._client.resetUploaded(plan.width, plan.height, 1)) {
-            provider.dispose();
-            this._progress.setStatus("Engine refused the uploaded source.");
-            this._finishOpen();
-            return;
-        }
-
-        this._swapProvider(provider);
-        this._canvas.resize(plan.width, plan.height);
-        this._applyFilterValues();
-        provider.play();
-        this._timeline.setPlaying(true);
-        this._source.setInfo(`Opened "${file.name}" — ${plan.width}×${plan.height}`);
-        this._progress.set(1);
-        this._progress.setStatus("Editing live — move the sliders while it plays.");
-        this._finishOpen();
     }
 
     _useSample() {
