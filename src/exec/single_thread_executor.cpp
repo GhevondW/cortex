@@ -1,5 +1,6 @@
 #include "cortex/exec/single_thread_executor.hpp"
 
+#include <exception>
 #include <iostream>
 #include <utility> // for std::move, std::swap
 
@@ -58,8 +59,10 @@ void SingleThreadExecutor::Worker() {
 
             try {
                 task(*this);
+            } catch (const std::exception& exc) {
+                std::cerr << "SingleThreadExecutor error : " << exc.what() << std::endl;
             } catch (...) {
-                std::cerr << "task error\n";
+                std::cerr << "SingleThreadExecutor unknown error\n";
             }
         }
     }

@@ -24,7 +24,7 @@ public:
 TEST(CortexExecExecutorApiTest, BasicTest) {
     auto executor = InlineExecutor::Make();
     int data = 0;
-    executor->Post([&data, &executor](auto& self) {
+    executor->Post([&data](auto& self) {
         ++data;
         self.Post([&data](auto&) {
             ++data;
