@@ -32,6 +32,9 @@ doc/
 !apps/algo_viz/web/src/main.js
 !apps/algo_viz/web/src/js/*.js
 
+# Keep VideoEditor frontend source JS files in git
+!apps/video_editor/web/src/*.js
+
 # CMake
 CMakeCache.txt
 CMakeFiles/

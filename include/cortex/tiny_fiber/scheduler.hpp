@@ -146,6 +146,13 @@ public:
 
     /// @cond INTERNAL
     detail::Fiber::Id SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size);
+
+    // Liveness token. A Future holds this weakly so its destructor / Wait / Get
+    // can detect that the scheduler has been destroyed and skip dereferencing a
+    // dangling pointer (a Future may legally outlive its scheduler).
+    [[nodiscard]] std::weak_ptr<void> AliveTokenInternal() const noexcept {
+        return alive_token_;
+    }
     /// @endcond
 
 private:
@@ -188,10 +195,15 @@ private:
     Config config_;
     bool running_ {false};
     bool stopping_ {false};
+    // Per-scheduler fiber ID counter; starts at 1 so 0 is a sentinel "no fiber".
+    detail::Fiber::Id next_fiber_id_ {1};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;
     std::vector<detail::Fiber::Id> pending_cleanup_;
+    // Owned liveness token; weak copies in Futures expire when this scheduler is
+    // destroyed. Declared last so it outlives the other members during teardown.
+    std::shared_ptr<void> alive_token_ {std::make_shared<char>()};
 };
 
 // Template implementations

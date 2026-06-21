@@ -79,9 +79,12 @@ public:
 private:
     friend class ConditionVariable;
 
+    // Waiters are stored by ID rather than pointer so a fiber that died (or was
+    // force-scheduled by Scheduler::Stop()) while still listed here is detected
+    // and skipped on the next Unlock — avoiding use-after-free of a stale Fiber*.
     bool locked_ {false};
     detail::Fiber* owner_ {nullptr};
-    std::deque<detail::Fiber*> waiters_;
+    std::deque<detail::Fiber::Id> waiters_;
 };
 
 /**

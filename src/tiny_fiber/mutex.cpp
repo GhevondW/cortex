@@ -2,54 +2,35 @@
 #include <cortex/tiny_fiber/mutex.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
-#include <cassert>
 #include <stdexcept>
 
 namespace cortex::tiny_fiber {
 
-Mutex::~Mutex() {
-    // In debug mode, warn if mutex is destroyed while locked or has waiters
-    // This indicates a programming error but we handle it gracefully
-#ifndef NDEBUG
-    if (locked_) {
-        // Mutex destroyed while locked - this is a bug but don't crash
-    }
-    if (!waiters_.empty()) {
-        // Mutex destroyed with waiters - this is a bug but don't crash
-    }
-#endif
-    waiters_.clear();
-    locked_ = false;
-    owner_ = nullptr;
-}
+Mutex::~Mutex() = default;
 
 void Mutex::Lock() {
     auto& scheduler = Scheduler::Current();
 
-    // Check for stopping first
     if (scheduler.IsStopping()) {
         throw SchedulerStoppingError();
     }
 
     auto* current = scheduler.GetCurrentFiber();
-
     if (!current) {
         throw std::logic_error("Mutex::Lock() must be called from within a fiber");
     }
 
-    // Check for recursive lock (same fiber trying to lock twice)
     if (locked_ && owner_ == current) {
         throw std::logic_error("Mutex::Lock() recursive lock detected");
     }
 
     while (locked_) {
-        // Check for stopping while waiting
         if (scheduler.IsStopping()) {
+            // We may have a stale entry in waiters_ from a previous iteration.
+            // Unlock() validates entries on pop, so we leave it for cleanup there.
             throw SchedulerStoppingError();
         }
-        // Add to wait queue
-        waiters_.push_back(current);
-        // Suspend until mutex is available
+        waiters_.push_back(current->GetId());
         scheduler.SuspendCurrent();
     }
 
@@ -78,8 +59,7 @@ void Mutex::Unlock() {
     auto& scheduler = Scheduler::Current();
     auto* current = scheduler.GetCurrentFiber();
 
-    // During scheduler destruction/forced unwinding, current may be nullptr
-    // In that case, skip the owner check as we're cleaning up
+    // During scheduler destruction current may be nullptr; skip the owner check.
     if (current != nullptr && owner_ != current) {
         throw std::logic_error("Mutex::Unlock() called by non-owner fiber");
     }
@@ -87,11 +67,20 @@ void Mutex::Unlock() {
     locked_ = false;
     owner_ = nullptr;
 
-    // Wake up one waiter if any (skip during cleanup when current is nullptr)
-    if (current != nullptr && !waiters_.empty()) {
-        auto* waiter = waiters_.front();
+    if (current == nullptr) {
+        return;
+    }
+
+    // Pop until we find a still-Suspended waiter. Entries can be stale if the
+    // fiber was force-scheduled by Stop() or has already completed.
+    while (!waiters_.empty()) {
+        auto id = waiters_.front();
         waiters_.pop_front();
-        scheduler.Schedule(waiter);
+        auto* waiter = scheduler.GetFiber(id);
+        if (waiter && waiter->IsSuspended()) {
+            scheduler.Schedule(waiter);
+            return;
+        }
     }
 }
 

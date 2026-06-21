@@ -50,13 +50,23 @@ jobs:
       - name: Build AlgoViz (Optimized)
         run: cmake --build build/wasm-algoviz --config Release --target algo_viz
 
+      - name: Configure CMake for Video Editor (Release)
+        run: |
+          emcmake cmake -B build/wasm-video-editor -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORTEX_BUILD_APPS=ON
+
+      - name: Build Video Editor (Optimized)
+        run: cmake --build build/wasm-video-editor --config Release --target video_editor
+
       - name: Generate Doxygen Docs
         run: doxygen Doxyfile
-      
+
       - name: Prepare deployment directory
         run: |
           mkdir -p deploy/examples
           mkdir -p deploy/algoviz
+          mkdir -p deploy/video-editor
           mkdir -p deploy/docs
 
           # Copy examples and all generated runtime artifacts
@@ -65,22 +75,54 @@ jobs:
           # Copy the built AlgoViz app bundle (static web + compiled runtime)
           cp -R build/wasm-algoviz/apps/algo_viz/. deploy/algoviz/
 
+          # Copy the built Video Editor bundle
+          cp -R build/wasm-video-editor/apps/video_editor/. deploy/video-editor/
+
           # Copy docs
           cp -R doc/html/. deploy/docs/
 
-          # Fail fast if required AlgoViz assets are missing
-          test -f deploy/algoviz/index.html
-          test -f deploy/algoviz/bst.html
-          test -f deploy/algoviz/union_find.html
-          test -f deploy/algoviz/src/main.js
-          test -f deploy/algoviz/src/js/theme.js
-          test -f deploy/algoviz/src/js/union_find.js
-          test -f deploy/algoviz/src/styles/main.css
-          test -f deploy/algoviz/algoviz_bst.js
-          test -f deploy/algoviz/algoviz_bst.wasm
-          test -f deploy/algoviz/algoviz_union_find.js
-          test -f deploy/algoviz/algoviz_union_find.wasm
-          
+          # Diagnostics — show what got built and what landed in deploy/
+          echo "=== build/wasm-video-editor/apps/video_editor/ ==="
+          ls -la build/wasm-video-editor/apps/video_editor/ || true
+          echo "=== deploy/video-editor/ (top level) ==="
+          ls -la deploy/video-editor/ || true
+          echo "=== deploy/video-editor/src/ ==="
+          ls -la deploy/video-editor/src/ || true
+          echo "=== deploy/video-editor/styles/ ==="
+          ls -la deploy/video-editor/styles/ || true
+
+          # Verify required assets. Loop so we surface every missing file
+          # instead of stopping silently on the first failing `test -f`.
+          missing=0
+          for f in \
+              deploy/algoviz/index.html \
+              deploy/algoviz/bst.html \
+              deploy/algoviz/union_find.html \
+              deploy/algoviz/src/main.js \
+              deploy/algoviz/src/js/theme.js \
+              deploy/algoviz/src/js/union_find.js \
+              deploy/algoviz/src/styles/main.css \
+              deploy/algoviz/algoviz_bst.js \
+              deploy/algoviz/algoviz_bst.wasm \
+              deploy/algoviz/algoviz_union_find.js \
+              deploy/algoviz/algoviz_union_find.wasm \
+              deploy/video-editor/index.html \
+              deploy/video-editor/src/main.js \
+              deploy/video-editor/src/editor_app.js \
+              deploy/video-editor/src/editor_client.js \
+              deploy/video-editor/styles/main.css \
+              deploy/video-editor/video_editor.js \
+              deploy/video-editor/video_editor.wasm
+          do
+              if [ ! -f "$f" ]; then
+                  echo "MISSING: $f"
+                  missing=1
+              fi
+          done
+          if [ "$missing" -ne 0 ]; then
+              exit 1
+          fi
+
           # Create a root index.html that links to everything
           cat > deploy/index.html << 'EOF'
           <!DOCTYPE html>
@@ -93,6 +135,7 @@ jobs:
           <body>
               <p>Redirecting to <a href="examples/examples_index.html">Cortex Examples</a>...</p>
               <p><a href="algoviz/index.html">AlgoViz - Visualization Catalog</a></p>
+              <p><a href="video-editor/index.html">Cortex Video Editor</a></p>
           </body>
           </html>
           EOF

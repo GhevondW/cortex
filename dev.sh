@@ -25,6 +25,7 @@ print_usage() {
     echo "  example-wasm      Build and run WASM example"
     echo "  serve             Serve WASM example in browser"
     echo "  algoviz           Build and serve AlgoViz BST Visualizer"
+    echo "  video-editor      Build and serve Video Editor demo"
     echo "  clean             Clean all build artifacts"
     echo "  format            Format all C++ code"
     echo "  shell             Open shell in development container"
@@ -77,6 +78,15 @@ case "${1:-help}" in
         echo ""
         echo -e "${YELLOW}Tip: To build in Debug mode, run: BUILD_TYPE=Debug ./dev.sh algoviz${NC}"
         docker compose up --build serve-algoviz
+        ;;
+    video-editor)
+        echo -e "${GREEN}Building and serving Video Editor demo...${NC}"
+        echo -e "${YELLOW}Building in Release mode (optimized)${NC}"
+        echo ""
+        echo -e "  ${GREEN}→ http://localhost:8080${NC} ${YELLOW}(Cortex Video Editor)${NC}"
+        echo ""
+        echo -e "${YELLOW}Tip: To build in Debug mode, run: BUILD_TYPE=Debug ./dev.sh video-editor${NC}"
+        docker compose up --build serve-video-editor
         ;;
     clean)
         echo -e "${YELLOW}Cleaning build artifacts...${NC}"

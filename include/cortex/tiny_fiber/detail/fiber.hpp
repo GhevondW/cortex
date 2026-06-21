@@ -5,15 +5,15 @@
 #include <cortex/memory_resource.hpp>
 
 #include <cstdint>
-#include <exception>
-#include <memory>
 #include <vector>
 
 #include <function2/function2.hpp>
 
-namespace cortex::tiny_fiber::detail {
-
+namespace cortex::tiny_fiber {
 class Scheduler;
+} // namespace cortex::tiny_fiber
+
+namespace cortex::tiny_fiber::detail {
 
 // Internal fiber states
 enum class FiberState : std::uint8_t {
@@ -27,18 +27,13 @@ enum class FiberState : std::uint8_t {
 // Inherits from BaseCoroutine to get proper coroutine lifecycle management.
 // The user's function is stored and called from Continuation().
 class Fiber final : public BaseCoroutine {
-private:
-    struct PrivateTag {};
-
 public:
     using Id = std::uint64_t;
     using Body = fu2::unique_function<void()>;
 
-    // Create a new fiber with the given body, stack size, and memory resource.
-    static std::unique_ptr<Fiber> Make(Body body, std::size_t stack_size, MemoryResourceSharedPtr resource);
-
-    // Constructor is public but requires PrivateTag (only Make can call it)
-    Fiber(PrivateTag, Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource);
+    // Construction goes through Scheduler::SpawnFiberInternal so the scheduler can
+    // assign unique IDs. The constructor takes the ID directly.
+    Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource);
 
     ~Fiber() override = default;
 
@@ -55,18 +50,6 @@ public:
         return state_ == FiberState::Suspended;
     }
 
-    [[nodiscard]] bool HasException() const noexcept {
-        return exception_ != nullptr;
-    }
-
-    [[nodiscard]] std::exception_ptr GetException() const noexcept {
-        return exception_;
-    }
-
-    void SetException(std::exception_ptr ex) noexcept {
-        exception_ = std::move(ex);
-    }
-
     // Run this fiber (Ready -> Running, resumes coroutine execution)
     void Run();
 
@@ -79,11 +62,12 @@ public:
     // Wake a parked fiber (Suspended -> Ready)
     void Wake();
 
-    // Mark fiber as finished and return its waiters (Running -> Finished)
-    std::vector<Fiber*> Complete();
+    // Mark fiber as finished and return the IDs of fibers waiting on it.
+    // IDs (not pointers) so callers can validate liveness via Scheduler::GetFiber.
+    std::vector<Id> Complete();
 
-    // Add a fiber that is waiting for this fiber to finish
-    void AddWaiter(Fiber* waiter);
+    // Add the ID of a fiber that is waiting for this fiber to finish.
+    void AddWaiter(Id waiter_id);
 
 private:
     void Continuation(CoroutineSuspendContext& ctx) override;
@@ -96,8 +80,7 @@ private:
     FiberState state_ {FiberState::Ready};
     Body body_;
     CoroutineSuspendContext* suspend_ctx_ {nullptr};
-    std::exception_ptr exception_ {nullptr};
-    std::vector<Fiber*> waiters_;
+    std::vector<Id> waiters_;
 };
 
 } // namespace cortex::tiny_fiber::detail
