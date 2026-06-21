@@ -14,7 +14,7 @@ protected:
     Executor() = default;
 
 public:
-    using Task = fu2::unique_function<void()>;
+    using Task = fu2::unique_function<void(Executor&)>;
 
     template <typename T, typename... Args>
     static std::shared_ptr<T> Make(Args&&... args) {
@@ -41,7 +41,7 @@ public:
         return std::static_pointer_cast<T>(Self());
     }
 
-    virtual void Post(Task task) = 0;
+    virtual bool Post(Task task) = 0;
 };
 
 } // namespace cortex::exec

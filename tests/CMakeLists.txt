@@ -18,6 +18,11 @@ target_link_libraries(cortex_exec_executor_api_test PRIVATE cortex::cortex GTest
 cortex_apply_warnings(cortex_exec_executor_api_test)
 cortex_apply_sanitizers(cortex_exec_executor_api_test)
 
+add_executable(cortex_exec_single_thread_executor_test single_thread_executor_test.cpp)
+target_link_libraries(cortex_exec_single_thread_executor_test PRIVATE cortex::cortex GTest::gtest_main)
+cortex_apply_warnings(cortex_exec_single_thread_executor_test)
+cortex_apply_sanitizers(cortex_exec_single_thread_executor_test)
+
 add_executable(cortex_generator_test generator_test.cpp)
 target_link_libraries(cortex_generator_test PRIVATE cortex::cortex GTest::gtest_main)
 cortex_apply_warnings(cortex_generator_test)

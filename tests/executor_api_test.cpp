@@ -13,8 +13,9 @@ public:
         return cortex::exec::Executor::Make<InlineExecutor>();
     }
 
-    void Post(Task task) override {
-        task();
+    bool Post(Task task) override {
+        task(*this);
+        return true;
     }
 };
 
@@ -23,15 +24,14 @@ public:
 TEST(CortexExecExecutorApiTest, BasicTest) {
     auto executor = InlineExecutor::Make();
     int data = 0;
-    executor->Post([&data, &executor] {
+    executor->Post([&data, &executor](auto& self) {
         ++data;
-        auto self = executor->SelfAs<InlineExecutor>();
-        self->Post([&data] {
+        self.Post([&data](auto&) {
             ++data;
         });
     });
 
-    executor->Post([&data] {
+    executor->Post([&data](auto&) {
         ++data;
     });
 
