@@ -17,6 +17,10 @@ set(CORTEX_TINY_FIBER_SRC
 
 # async sources (native only — requires OS threads)
 if(NOT EMSCRIPTEN)
+    set(CORTEX_EXEC_SRC
+        exec/single_thread_executor.cpp
+    )
+
     set(CORTEX_ASYNC_SRC
         async/runtime.cpp
         async/executor.cpp
@@ -39,6 +43,7 @@ target_sources(cortex
         memory_resource.cpp
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
+        ${CORTEX_EXEC_SRC}
         ${CORTEX_ASYNC_SRC}
 )
 
