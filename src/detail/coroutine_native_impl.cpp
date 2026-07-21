@@ -65,6 +65,7 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 
                  for (;;) {
                      assert(static_cast<bool>(body_));
+                     body_started_ = true;
                      try {
                          body_(suspend_context);
                      } catch (const ForcedUnwind&) {
@@ -76,7 +77,13 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 
                      is_done_ = true;
 
-                     if (!reusable_ || is_unwinding_) {
+                     if (!reusable_) {
+                         // Release the body's captures at completion, matching
+                         // the pre-trampoline body lifetime.
+                         body_ = cortex::CoroutineBody {};
+                         break;
+                     }
+                     if (is_unwinding_) {
                          break;
                      }
 
@@ -95,10 +102,12 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 }
 
 CoroutineImpl::~CoroutineImpl() {
-    // A live context (mid-body, parked, or never started) must be resumed
-    // with the unwinding flag set so the trampoline exits and the stack is
-    // released. A finished one-shot leaves fiber_ empty.
-    if (fiber_) {
+    // A started context (mid-body or parked) must be resumed with the
+    // unwinding flag set so the trampoline exits and the stack is released.
+    // A never-started context must NOT be resumed — that would execute the
+    // body during destruction; boost's ~fiber() unwinds it without entering
+    // the entry function. A finished one-shot leaves fiber_ empty.
+    if (fiber_ && started_) {
         is_unwinding_ = true;
         fiber_ = std::move(fiber_).resume();
     }
@@ -140,24 +149,32 @@ void CoroutineImpl::Resume() {
 
 void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
     body_ = std::move(body);
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::Rebind() {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::AbortBody() {
     assert(reusable_);
-    if (is_done_ || !started_) {
+    if (is_done_ || !body_started_) {
         return;
     }
     abort_body_ = true;

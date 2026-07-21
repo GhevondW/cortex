@@ -49,7 +49,13 @@ private:
     bool is_unwinding_ {false};
     bool abort_body_ {false};
     bool reusable_ {false};
+    // The context entered its entry function at least once (destructor must
+    // not resume a never-started context — that would run the body).
     bool started_ {false};
+    // The CURRENT body began executing. Distinct from started_: a parked
+    // coroutine that was rebound has started_ == true but body_started_ ==
+    // false until the next Resume.
+    bool body_started_ {false};
     std::size_t stack_size_bytes_;
     cortex::CoroutineBody body_;
     std::exception_ptr exception_ptr_ {nullptr};
