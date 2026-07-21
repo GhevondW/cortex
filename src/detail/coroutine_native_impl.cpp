@@ -1,6 +1,7 @@
 #include "detail/coroutine_native_impl.hpp"
 
 #include <cassert>
+#include <stdexcept>
 #include <utility>
 
 #include "cortex/coroutine_suspend_context.hpp"
@@ -20,7 +21,7 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
 
     void Suspend() override {
         _sink = std::move(_sink).resume();
-        if (_impl->IsUnwinding()) {
+        if (_impl->IsUnwinding() || _impl->ShouldAbortBody()) {
             throw ForcedUnwind {};
         }
     }
@@ -51,24 +52,42 @@ struct MemoryResourceStackAllocator {
 
 CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
                              std::size_t stack_size,
-                             const MemoryResourceSharedPtr& resource)
-    : stack_size_bytes_(stack_size)
+                             const MemoryResourceSharedPtr& resource,
+                             bool reusable)
+    : reusable_(reusable)
+    , stack_size_bytes_(stack_size)
+    , body_(std::move(body))
     , fiber_(std::allocator_arg,
              MemoryResourceStackAllocator {resource, stack_size},
-             [this, body = std::move(body)](boost::context::fiber&& sink) mutable {
-                 assert(static_cast<bool>(body));
+             [this](boost::context::fiber&& sink) {
+                 started_ = true;
                  FiberSuspendContext suspend_context(sink, this);
 
-                 try {
-                     body(suspend_context);
-                 } catch (const ForcedUnwind&) {
-                     // Unwinding in progress
-                 } catch (...) {
-                     assert(!static_cast<bool>(exception_ptr_));
-                     exception_ptr_ = std::current_exception();
-                 }
+                 for (;;) {
+                     assert(static_cast<bool>(body_));
+                     try {
+                         body_(suspend_context);
+                     } catch (const ForcedUnwind&) {
+                         // Unwinding in progress or the body is being aborted
+                     } catch (...) {
+                         assert(!static_cast<bool>(exception_ptr_));
+                         exception_ptr_ = std::current_exception();
+                     }
 
-                 is_done_ = true;
+                     is_done_ = true;
+
+                     if (!reusable_ || is_unwinding_) {
+                         break;
+                     }
+
+                     // Park: give control back and wait for Rebind() +
+                     // Resume(), or teardown.
+                     sink = std::move(sink).resume();
+
+                     if (is_unwinding_) {
+                         break;
+                     }
+                 }
 
                  return std::move(sink);
              }) {
@@ -76,7 +95,10 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 }
 
 CoroutineImpl::~CoroutineImpl() {
-    if (!is_done_ && fiber_) {
+    // A live context (mid-body, parked, or never started) must be resumed
+    // with the unwinding flag set so the trampoline exits and the stack is
+    // released. A finished one-shot leaves fiber_ empty.
+    if (fiber_) {
         is_unwinding_ = true;
         fiber_ = std::move(fiber_).resume();
     }
@@ -98,6 +120,10 @@ bool CoroutineImpl::IsUnwinding() const noexcept {
     return is_unwinding_;
 }
 
+bool CoroutineImpl::ShouldAbortBody() const noexcept {
+    return abort_body_;
+}
+
 void CoroutineImpl::Resume() {
     if (IsDone()) {
         throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
@@ -110,6 +136,33 @@ void CoroutineImpl::Resume() {
         exception_ptr_ = nullptr;
         std::rethrow_exception(ex);
     }
+}
+
+void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
+    assert(reusable_);
+    if (started_ && !is_done_) {
+        throw std::logic_error("Rebind on a coroutine whose body has not finished.");
+    }
+    body_ = std::move(body);
+    is_done_ = false;
+}
+
+void CoroutineImpl::Rebind() {
+    assert(reusable_);
+    if (started_ && !is_done_) {
+        throw std::logic_error("Rebind on a coroutine whose body has not finished.");
+    }
+    is_done_ = false;
+}
+
+void CoroutineImpl::AbortBody() {
+    assert(reusable_);
+    if (is_done_ || !started_) {
+        return;
+    }
+    abort_body_ = true;
+    fiber_ = std::move(fiber_).resume();
+    abort_body_ = false;
 }
 
 } // namespace cortex::detail
