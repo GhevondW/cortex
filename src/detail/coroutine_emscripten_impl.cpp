@@ -57,7 +57,7 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
 
         emscripten_fiber_swap(current_f, back_f);
 
-        if (impl_->IsUnwinding()) {
+        if (impl_->IsUnwinding() || impl_->ShouldAbortBody()) {
             throw ForcedUnwind {};
         }
     }
@@ -70,8 +70,10 @@ private:
 
 CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
                              std::size_t stack_size,
-                             const MemoryResourceSharedPtr& resource)
+                             const MemoryResourceSharedPtr& resource,
+                             bool reusable)
     : body_(std::move(body))
+    , reusable_(reusable)
     , stack_size_bytes_(stack_size)
     , resource_(resource) {
     if (emscripten_has_asyncify() != 1) {
@@ -93,12 +95,15 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 }
 
 CoroutineImpl::~CoroutineImpl() {
-    if (!is_done_) {
+    // A started context (mid-body or parked) must be unwound so the
+    // trampoline exits. A never-started context must NOT be swapped in —
+    // that would execute the body during destruction; the fiber never ran,
+    // so freeing the stacks below is all the cleanup it needs. A finished
+    // one-shot is already dead.
+    const bool context_alive = started_ && (reusable_ || !is_done_);
+    if (context_alive) {
         is_unwinding_ = true;
-        try {
-            Resume();
-        } catch (...) {
-        }
+        SwapIn();
     }
 
     if (c_stack_) resource_->Deallocate(c_stack_, stack_size_bytes_, kStackAlignment);
@@ -108,18 +113,41 @@ CoroutineImpl::~CoroutineImpl() {
 void CoroutineImpl::FiberEntry(void* arg) {
     auto* self = static_cast<CoroutineImpl*>(arg);
     assert(self);
+    self->started_ = true;
 
     FiberSuspendContext suspend_context(self);
 
-    try {
-        self->body_(suspend_context);
-    } catch (const ForcedUnwind&) {
-        // Unwinding in progress
-    } catch (...) {
-        self->exception_ptr_ = std::current_exception();
-    }
+    for (;;) {
+        self->body_started_ = true;
+        try {
+            self->body_(suspend_context);
+        } catch (const ForcedUnwind&) {
+            // Unwinding in progress or the body is being aborted
+        } catch (...) {
+            self->exception_ptr_ = std::current_exception();
+        }
 
-    self->is_done_ = true;
+        self->is_done_ = true;
+
+        if (!self->reusable_) {
+            // Release the body's captures at completion, matching the
+            // pre-trampoline body lifetime.
+            self->body_ = cortex::CoroutineBody {};
+            break;
+        }
+        if (self->is_unwinding_) {
+            break;
+        }
+
+        // Park: swap back and wait for Rebind() + Resume(), or teardown.
+        emscripten_fiber_t* park_back_f = self->back_fiber_;
+        running_fiber = park_back_f;
+        emscripten_fiber_swap(&self->fiber_, park_back_f);
+
+        if (self->is_unwinding_) {
+            break;
+        }
+    }
 
     // Exit fiber back to the context that resumed us
     emscripten_fiber_t* back_f = self->back_fiber_;
@@ -143,6 +171,10 @@ bool CoroutineImpl::IsUnwinding() const noexcept {
     return is_unwinding_;
 }
 
+bool CoroutineImpl::ShouldAbortBody() const noexcept {
+    return abort_body_;
+}
+
 emscripten_fiber_t* CoroutineImpl::GetBackFiber() const noexcept {
     return back_fiber_;
 }
@@ -151,11 +183,7 @@ void CoroutineImpl::SetBackFiber(emscripten_fiber_t* fiber) noexcept {
     back_fiber_ = fiber;
 }
 
-void CoroutineImpl::Resume() {
-    if (IsDone()) {
-        throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
-    }
-
+void CoroutineImpl::SwapIn() {
     emscripten_fiber_t* back_f = running_fiber;
     if (!back_f) {
         // Capture current JS call stack into main fiber context if not already in a fiber
@@ -168,14 +196,55 @@ void CoroutineImpl::Resume() {
 
     emscripten_fiber_swap(back_f, &fiber_);
 
-    // Upon return back to Resume(), the running fiber is what it was before
+    // Upon return back here, the running fiber is what it was before
     running_fiber = back_f;
+}
+
+void CoroutineImpl::Resume() {
+    if (IsDone()) {
+        throw ResumeOnDoneCoroutineError {"Resume on finished coroutine."};
+    }
+
+    SwapIn();
 
     if (exception_ptr_) {
         auto ex = exception_ptr_;
         exception_ptr_ = nullptr;
         std::rethrow_exception(ex);
     }
+}
+
+void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
+    assert(reusable_);
+    if (body_started_ && !is_done_) {
+        throw std::logic_error("Rebind on a coroutine whose body has not finished.");
+    }
+    body_ = std::move(body);
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
+    exception_ptr_ = nullptr;
+    body_started_ = false;
+    is_done_ = false;
+}
+
+void CoroutineImpl::Rebind() {
+    assert(reusable_);
+    if (body_started_ && !is_done_) {
+        throw std::logic_error("Rebind on a coroutine whose body has not finished.");
+    }
+    exception_ptr_ = nullptr;
+    body_started_ = false;
+    is_done_ = false;
+}
+
+void CoroutineImpl::AbortBody() {
+    assert(reusable_);
+    if (is_done_ || !body_started_) {
+        return;
+    }
+    abort_body_ = true;
+    SwapIn();
+    abort_body_ = false;
 }
 
 } // namespace cortex::detail
