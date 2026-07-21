@@ -219,7 +219,9 @@ void CoroutineImpl::Resume() {
 }
 
 void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
-    assert(reusable_);
+    if (!reusable_) {
+        throw std::logic_error("Rebind on a non-reusable coroutine.");
+    }
     if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
@@ -232,7 +234,9 @@ void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
 }
 
 void CoroutineImpl::Rebind() {
-    assert(reusable_);
+    if (!reusable_) {
+        throw std::logic_error("Rebind on a non-reusable coroutine.");
+    }
     if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }

@@ -30,6 +30,13 @@ public:
      */
     virtual ~BaseCoroutine() = 0;
 
+    // The Continuation body captures `this`; the object must never be
+    // copied or moved.
+    BaseCoroutine(const BaseCoroutine&) = delete;
+    BaseCoroutine(BaseCoroutine&&) = delete;
+    BaseCoroutine& operator=(const BaseCoroutine&) = delete;
+    BaseCoroutine& operator=(BaseCoroutine&&) = delete;
+
     /**
      * @brief Checks if the coroutine has finished its execution.
      * @return true if execution is complete, false otherwise.
@@ -77,6 +84,9 @@ protected:
      * The next Resume() runs Continuation() again on the same stack and
      * context. Only valid for reusable coroutines whose Continuation()
      * finished (or never started).
+     *
+     * @throws std::logic_error if the coroutine was not constructed as
+     * reusable, or if Continuation() started but has not finished.
      */
     void ResetCoroutineForReuse();
 

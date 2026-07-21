@@ -1,5 +1,6 @@
 #include <cortex/base_coroutine.hpp>
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <vector>
 
 namespace cortex {
@@ -115,6 +116,65 @@ TEST(BaseCoroutineReuseTest, ContinuationRunsAgainAfterReset) {
     coroutine.Resume();
     EXPECT_TRUE(coroutine.IsDone());
     EXPECT_EQ(coroutine.runs, 2);
+}
+
+namespace {
+
+class SuspendingReusable : public cortex::BaseCoroutine {
+public:
+    SuspendingReusable()
+        : BaseCoroutine(cortex::Coroutine::kDefaultStackSizeBytes,
+                        cortex::GetDefaultMemoryResource(),
+                        /*reusable=*/true) {}
+
+    int runs = 0;
+
+    void Reset() {
+        ResetCoroutineForReuse();
+    }
+
+private:
+    void Continuation(cortex::CoroutineSuspendContext& ctx) override {
+        ctx.Suspend();
+        ++runs;
+    }
+};
+
+class OneShotForReset : public cortex::BaseCoroutine {
+public:
+    void Reset() {
+        ResetCoroutineForReuse();
+    }
+
+private:
+    void Continuation(cortex::CoroutineSuspendContext&) override {}
+};
+
+} // namespace
+
+TEST(BaseCoroutineReuseTest, ResetWhileSuspendedThrows) {
+    SuspendingReusable coroutine;
+    coroutine.Resume(); // parks inside Continuation
+    EXPECT_FALSE(coroutine.IsDone());
+    EXPECT_THROW(coroutine.Reset(), std::logic_error);
+
+    coroutine.Resume(); // finish the body
+    EXPECT_TRUE(coroutine.IsDone());
+    EXPECT_EQ(coroutine.runs, 1);
+
+    coroutine.Reset();
+    coroutine.Resume(); // the rebound body parks at Suspend() again
+    EXPECT_FALSE(coroutine.IsDone());
+    coroutine.Resume();
+    EXPECT_TRUE(coroutine.IsDone());
+    EXPECT_EQ(coroutine.runs, 2);
+}
+
+TEST(BaseCoroutineReuseTest, ResetOnNonReusableThrows) {
+    OneShotForReset coroutine;
+    coroutine.Resume();
+    EXPECT_TRUE(coroutine.IsDone());
+    EXPECT_THROW(coroutine.Reset(), std::logic_error);
 }
 
 } // namespace cortex
