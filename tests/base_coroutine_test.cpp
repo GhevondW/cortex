@@ -79,4 +79,42 @@ TEST(BaseCoroutineTest, ExceptionHandling) {
 }
 
 } // namespace
+
+namespace {
+
+class ReusableCounter : public cortex::BaseCoroutine {
+public:
+    ReusableCounter()
+        : BaseCoroutine(cortex::Coroutine::kDefaultStackSizeBytes,
+                        cortex::GetDefaultMemoryResource(),
+                        /*reusable=*/true) {}
+
+    int runs = 0;
+
+    void Reset() {
+        ResetCoroutineForReuse();
+    }
+
+private:
+    void Continuation(cortex::CoroutineSuspendContext&) override {
+        ++runs;
+    }
+};
+
+} // namespace
+
+TEST(BaseCoroutineReuseTest, ContinuationRunsAgainAfterReset) {
+    ReusableCounter coroutine;
+    EXPECT_EQ(coroutine.GetStackSize(), cortex::Coroutine::kDefaultStackSizeBytes);
+    coroutine.Resume();
+    EXPECT_TRUE(coroutine.IsDone());
+    EXPECT_EQ(coroutine.runs, 1);
+
+    coroutine.Reset();
+    EXPECT_FALSE(coroutine.IsDone());
+    coroutine.Resume();
+    EXPECT_TRUE(coroutine.IsDone());
+    EXPECT_EQ(coroutine.runs, 2);
+}
+
 } // namespace cortex

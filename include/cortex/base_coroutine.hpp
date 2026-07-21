@@ -39,6 +39,14 @@ public:
     }
 
     /**
+     * @brief Gets the allocated stack size of the underlying coroutine.
+     * @return The stack size in bytes.
+     */
+    [[nodiscard]] std::size_t GetStackSize() const noexcept {
+        return coroutine_.GetStackSize();
+    }
+
+    /**
      * @brief Resumes the execution of the coroutine.
      *
      * If the coroutine was suspended, it continues from the suspension point.
@@ -55,9 +63,22 @@ protected:
      * @param stack_size_bytes The size of the stack to allocate for the coroutine (default: 256KB).
      * @param resource The memory resource to use for stack and implementation allocation (default:
      * GetDefaultMemoryResource()).
+     * @param reusable When true, the coroutine parks after Continuation()
+     * finishes instead of destroying its context; ResetCoroutineForReuse()
+     * re-arms it for another run on the same stack.
      */
     explicit BaseCoroutine(std::size_t stack_size_bytes = Coroutine::kDefaultStackSizeBytes,
-                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource());
+                           MemoryResourceSharedPtr resource = GetDefaultMemoryResource(),
+                           bool reusable = false);
+
+    /**
+     * @brief Re-arms a finished reusable coroutine.
+     *
+     * The next Resume() runs Continuation() again on the same stack and
+     * context. Only valid for reusable coroutines whose Continuation()
+     * finished (or never started).
+     */
+    void ResetCoroutineForReuse();
 
 private:
     /**
