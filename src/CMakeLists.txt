@@ -42,6 +42,7 @@ target_sources(cortex
         coroutine.cpp
         memory_resource.cpp
         pooled_memory_resource.cpp
+        coroutine_pool.cpp
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
         ${CORTEX_EXEC_SRC}

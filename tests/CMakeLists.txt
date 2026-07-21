@@ -40,6 +40,11 @@ target_link_libraries(cortex_fiber_teardown_test PRIVATE cortex::cortex GTest::g
 cortex_apply_warnings(cortex_fiber_teardown_test)
 cortex_apply_sanitizers(cortex_fiber_teardown_test)
 
+add_executable(cortex_coroutine_pool_test coroutine_pool_test.cpp)
+target_link_libraries(cortex_coroutine_pool_test PRIVATE cortex::cortex GTest::gtest_main)
+cortex_apply_warnings(cortex_coroutine_pool_test)
+cortex_apply_sanitizers(cortex_coroutine_pool_test)
+
 if(EMSCRIPTEN)
     # Configure all executables for WASM
     set_target_properties(cortex_coroutine_test PROPERTIES SUFFIX ".js")
@@ -50,6 +55,7 @@ if(EMSCRIPTEN)
     set_target_properties(cortex_generator_test PROPERTIES SUFFIX ".js")
     set_target_properties(cortex_tiny_fiber_test PROPERTIES SUFFIX ".js")
     set_target_properties(cortex_fiber_teardown_test PROPERTIES SUFFIX ".js")
+    set_target_properties(cortex_coroutine_pool_test PROPERTIES SUFFIX ".js")
 
     add_test(NAME cortex_wasm_coroutine_test COMMAND node cortex_coroutine_test.js)
     add_test(NAME cortex_wasm_memory_resource_test COMMAND node cortex_memory_resource_test.js)
@@ -59,6 +65,7 @@ if(EMSCRIPTEN)
     add_test(NAME cortex_wasm_generator_test COMMAND node cortex_generator_test.js)
     add_test(NAME cortex_wasm_tiny_fiber_test COMMAND node cortex_tiny_fiber_test.js)
     add_test(NAME cortex_wasm_fiber_teardown_test COMMAND node cortex_fiber_teardown_test.js)
+    add_test(NAME cortex_wasm_coroutine_pool_test COMMAND node cortex_coroutine_pool_test.js)
 
     set(WASM_TEST_LINK_OPTIONS
         "-sEXIT_RUNTIME=1"
@@ -77,6 +84,7 @@ if(EMSCRIPTEN)
     target_link_options(cortex_generator_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
     target_link_options(cortex_tiny_fiber_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
     target_link_options(cortex_fiber_teardown_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
+    target_link_options(cortex_coroutine_pool_test PRIVATE ${WASM_TEST_LINK_OPTIONS})
 
 else()
     include(GoogleTest)
@@ -88,6 +96,7 @@ else()
     gtest_discover_tests(cortex_generator_test)
     gtest_discover_tests(cortex_tiny_fiber_test)
     gtest_discover_tests(cortex_fiber_teardown_test)
+    gtest_discover_tests(cortex_coroutine_pool_test)
 
     # SingleThreadExecutor relies on OS threads, so its source is native-only
     # (see src/CMakeLists.txt). Keep its test native-only too, otherwise the
