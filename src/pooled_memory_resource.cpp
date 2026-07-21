@@ -29,6 +29,14 @@ constexpr bool IsPoolableAlignment(std::size_t alignment) noexcept {
     return alignment <= alignof(std::max_align_t);
 }
 
+// Every poolable upstream allocation and deallocation uses this one
+// alignment. A cached block loses its original request's alignment, and an
+// upstream free with a different alignment than its allocation is undefined
+// (ASan reports it as a new-delete-type-mismatch), so the pool normalizes:
+// over-aligning a ≤16-byte request is always valid, and the upstream then
+// sees matching (bytes, alignment) pairs on both sides.
+constexpr std::size_t kPoolAlignment = alignof(std::max_align_t);
+
 void UnpoisonBlock([[maybe_unused]] void* block, [[maybe_unused]] std::size_t bytes) noexcept {
 #if defined(CORTEX_POOL_HAS_ASAN)
     __asan_unpoison_memory_region(block, bytes);
@@ -46,7 +54,7 @@ PooledMemoryResource::PooledMemoryResource(Config config)
 PooledMemoryResource::~PooledMemoryResource() {
     for (auto& [size, blocks] : free_lists_) {
         for (void* block : blocks) {
-            config_.upstream->Deallocate(block, size);
+            config_.upstream->Deallocate(block, size, kPoolAlignment);
         }
     }
 }
@@ -61,14 +69,19 @@ void* PooledMemoryResource::DoAllocate(std::size_t bytes, std::size_t alignment)
             UnpoisonBlock(block, bytes);
             return block;
         }
+        return config_.upstream->Allocate(bytes, kPoolAlignment);
     }
     return config_.upstream->Allocate(bytes, alignment);
 }
 
 void PooledMemoryResource::DoDeallocate(void* p, std::size_t bytes, std::size_t alignment) {
-    if (IsPoolableAlignment(alignment) && cached_bytes_ + bytes <= config_.max_cached_bytes) {
-        free_lists_[bytes].push_back(p);
-        cached_bytes_ += bytes;
+    if (IsPoolableAlignment(alignment)) {
+        if (cached_bytes_ + bytes <= config_.max_cached_bytes) {
+            free_lists_[bytes].push_back(p);
+            cached_bytes_ += bytes;
+            return;
+        }
+        config_.upstream->Deallocate(p, bytes, kPoolAlignment);
         return;
     }
     config_.upstream->Deallocate(p, bytes, alignment);
