@@ -296,10 +296,43 @@ TEST(CoroutinePoolTest, DoubleRebindBeforeResumeIsAllowedOnWarmCoroutine) {
     EXPECT_TRUE(second_ran);
 }
 
+TEST(CoroutinePoolTest, ReleaseDropsBodyCapturesImmediately) {
+    cortex::LocalCoroutinePool pool;
+    auto token = std::make_shared<int>(42);
+    std::weak_ptr<int> observer = token;
+    {
+        auto coroutine = pool.Acquire([token = std::move(token)](cortex::CoroutineSuspendContext&) {
+            (void)*token;
+        });
+        coroutine.Resume();
+        EXPECT_FALSE(observer.expired());
+    } // Release drops the captures before any further Acquire
+    EXPECT_TRUE(observer.expired());
+}
+
+TEST(CoroutinePoolTest, MoveAssignReleasesPreviousCoroutine) {
+    cortex::LocalCoroutinePool pool;
+    auto a = pool.Acquire([](cortex::CoroutineSuspendContext&) {});
+    a.Resume();
+    auto b = pool.Acquire([](cortex::CoroutineSuspendContext&) {});
+    EXPECT_EQ(pool.GetParkedCount(), 0u);
+
+    a = std::move(b); // releases a's coroutine back to the pool
+    EXPECT_EQ(pool.GetParkedCount(), 1u);
+
+    a.Resume();
+    EXPECT_TRUE(a.IsDone());
+    a.Release();
+    EXPECT_EQ(pool.GetParkedCount(), 2u);
+    a.Release(); // double release: no-op
+    EXPECT_EQ(pool.GetParkedCount(), 2u);
+}
+
 #ifndef CORTEX_EMSCRIPTEN
 TEST(CoroutinePoolTest, ThreadSafePoolParallelAcquireRelease) {
     cortex::CoroutinePool pool({.max_parked = 8});
     std::atomic<int> completed {0};
+    std::atomic<int> expected {0};
 
     constexpr int kThreads = 4;
     constexpr int kIterationsPerThread = 250;
@@ -307,13 +340,20 @@ TEST(CoroutinePoolTest, ThreadSafePoolParallelAcquireRelease) {
     std::vector<std::thread> threads;
     threads.reserve(kThreads);
     for (int t = 0; t < kThreads; ++t) {
-        threads.emplace_back([&pool, &completed] {
+        threads.emplace_back([&pool, &completed, &expected] {
             for (int i = 0; i < kIterationsPerThread; ++i) {
+                if (i % 16 == 0) {
+                    pool.Reserve(4);
+                }
                 auto coroutine = pool.Acquire([&completed](cortex::CoroutineSuspendContext& ctx) {
                     ctx.Suspend();
                     completed.fetch_add(1, std::memory_order_relaxed);
                 });
                 coroutine.Resume();
+                if (i % 3 == 0) {
+                    continue; // drop mid-body: concurrent AbortBody + park
+                }
+                expected.fetch_add(1, std::memory_order_relaxed);
                 coroutine.Resume();
             }
         });
@@ -321,6 +361,6 @@ TEST(CoroutinePoolTest, ThreadSafePoolParallelAcquireRelease) {
     for (auto& thread : threads) {
         thread.join();
     }
-    EXPECT_EQ(completed.load(), kThreads * kIterationsPerThread);
+    EXPECT_EQ(completed.load(), expected.load());
 }
 #endif

@@ -1,5 +1,6 @@
 #include <cortex/config.hpp>
 #include <cortex/coroutine_pool.hpp>
+#include <cortex/detail/null_mutex.hpp>
 
 #include <cassert>
 #include <mutex>
@@ -146,12 +147,15 @@ void BasicCoroutinePool<ThreadSafe>::Reserve(std::size_t count) {
         // before the trampoline ever runs, so reserving costs no switches.
         auto* impl = state_->core.CreateImpl([](CoroutineSuspendContext&) {});
         bool parked = false;
-        {
+        try {
             std::scoped_lock lock(state_->mutex);
             if (!state_->core.closed && state_->core.parked.size() < count) {
                 state_->core.parked.push_back(impl);
                 parked = true;
             }
+        } catch (...) {
+            state_->core.DestroyImpl(impl);
+            throw;
         }
         if (!parked) {
             state_->core.DestroyImpl(impl);
@@ -239,12 +243,15 @@ void BasicPooledCoroutine<ThreadSafe>::Release() {
     impl->Rebind([](CoroutineSuspendContext&) {});
 
     bool park = false;
-    {
+    try {
         std::scoped_lock lock(state_->mutex);
         if (!state_->core.closed && state_->core.parked.size() < state_->core.config.max_parked) {
             state_->core.parked.push_back(impl);
             park = true;
         }
+    } catch (...) {
+        // Allocation failure growing the free list: destroying the coroutine
+        // beats terminating out of a noexcept destructor.
     }
     if (!park) {
         state_->core.DestroyImpl(impl);

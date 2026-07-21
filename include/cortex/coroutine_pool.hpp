@@ -5,7 +5,6 @@
 
 #include <cortex/coroutine.hpp>
 #include <cortex/coroutine_body.hpp>
-#include <cortex/detail/null_mutex.hpp>
 #include <cortex/memory_resource.hpp>
 
 /**
@@ -51,6 +50,9 @@ class BasicCoroutinePool;
  *
  * Destruction (or Release()) returns the coroutine to its pool. The handle
  * itself is not thread-safe; the pool is (in the ThreadSafe instantiation).
+ * After Release() or being moved from, a handle is empty: only Release() (a
+ * no-op) and destruction are valid; any other call is undefined behavior
+ * (assert-guarded in debug builds).
  */
 template <bool ThreadSafe>
 class BasicPooledCoroutine final {
@@ -94,6 +96,7 @@ public:
      * the coroutine stack run, and a body with no suspend points executes to
      * completion during the unwind. If the pool is gone or full, the
      * coroutine is destroyed instead. No-op on an empty handle.
+     * The released body's captures are dropped here (see BasicCoroutinePool).
      */
     void Release();
 
@@ -146,7 +149,8 @@ public:
     /**
      * @brief Pops a parked coroutine rebound to body, or creates a fresh one.
      *
-     * Never blocks and never runs the body; call Resume() on the handle.
+     * Never waits for a coroutine to be released and never runs the body;
+     * call Resume() on the handle.
      *
      * @throws std::invalid_argument if the body is null.
      */
@@ -157,6 +161,9 @@ public:
      *
      * Reserved coroutines are created unstarted (no context switches); the
      * count is capped by CoroutinePoolConfig::max_parked.
+     *
+     * @note Under concurrent Acquires the pool may be drained while Reserve
+     * refills; the parked count never overshoots count or max_parked.
      */
     void Reserve(std::size_t count);
 
