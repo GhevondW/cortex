@@ -100,6 +100,8 @@ CoroutineImpl::~CoroutineImpl() {
     // that would execute the body during destruction; the fiber never ran,
     // so freeing the stacks below is all the cleanup it needs. A finished
     // one-shot is already dead.
+    // Any exception the unwinding body stored in exception_ptr_ is
+    // intentionally dropped, matching the old try/catch behavior.
     const bool context_alive = started_ && (reusable_ || !is_done_);
     if (context_alive) {
         is_unwinding_ = true;
@@ -118,12 +120,14 @@ void CoroutineImpl::FiberEntry(void* arg) {
     FiberSuspendContext suspend_context(self);
 
     for (;;) {
+        assert(static_cast<bool>(self->body_));
         self->body_started_ = true;
         try {
             self->body_(suspend_context);
         } catch (const ForcedUnwind&) {
             // Unwinding in progress or the body is being aborted
         } catch (...) {
+            assert(!static_cast<bool>(self->exception_ptr_));
             self->exception_ptr_ = std::current_exception();
         }
 
@@ -232,6 +236,8 @@ void CoroutineImpl::Rebind() {
     if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
     exception_ptr_ = nullptr;
     body_started_ = false;
     is_done_ = false;
