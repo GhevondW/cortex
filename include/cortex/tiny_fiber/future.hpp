@@ -290,9 +290,13 @@ private:
 template <typename F>
 auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>> {
     using ResultType = std::invoke_result_t<F>;
+    using StateAllocator = MemoryResourceAllocator<detail::FutureState<ResultType>>;
 
     auto& scheduler = Scheduler::Current();
-    auto state = std::make_shared<detail::FutureState<ResultType>>();
+    // Allocate the shared state from the scheduler's (pooled) resource. The
+    // allocator keeps the resource alive, so a Future may still legally
+    // outlive its scheduler.
+    auto state = std::allocate_shared<detail::FutureState<ResultType>>(StateAllocator(scheduler.GetMemoryResource()));
 
     if constexpr (std::is_void_v<ResultType>) {
         state->fiber_id = scheduler.SpawnFiberInternal(

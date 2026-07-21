@@ -4,7 +4,9 @@
 #include <cortex/coroutine_suspend_context.hpp>
 #include <cortex/memory_resource.hpp>
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include <function2/function2.hpp>
@@ -29,7 +31,10 @@ enum class FiberState : std::uint8_t {
 class Fiber final : public BaseCoroutine {
 public:
     using Id = std::uint64_t;
-    using Body = fu2::unique_function<void()>;
+    // 64 bytes of inline storage: the Spawn() wrapper captures a shared_ptr
+    // (16 bytes) plus the user functor, so the fu2 default of 16 bytes would
+    // heap-allocate for every non-empty user lambda.
+    using Body = fu2::function_base<true, false, fu2::capacity_fixed<64>, true, false, void()>;
 
     // Construction goes through Scheduler::SpawnFiberInternal so the scheduler can
     // assign unique IDs. The constructor takes the ID directly.
@@ -62,12 +67,24 @@ public:
     // Wake a parked fiber (Suspended -> Ready)
     void Wake();
 
-    // Mark fiber as finished and return the IDs of fibers waiting on it.
-    // IDs (not pointers) so callers can validate liveness via Scheduler::GetFiber.
-    std::vector<Id> Complete();
+    // Mark fiber as finished. The recorded waiters stay readable via
+    // ForEachWaiter until the fiber is destroyed.
+    void Complete();
 
     // Add the ID of a fiber that is waiting for this fiber to finish.
     void AddWaiter(Id waiter_id);
+
+    // Visit the IDs of fibers waiting on this one. IDs (not pointers) so
+    // callers can validate liveness via Scheduler::GetFiber.
+    template <typename F>
+    void ForEachWaiter(F&& func) const {
+        for (std::uint8_t i = 0; i < inline_waiter_count_; ++i) {
+            func(inline_waiters_[i]);
+        }
+        for (Id id : overflow_waiters_) {
+            func(id);
+        }
+    }
 
 private:
     void Continuation(CoroutineSuspendContext& ctx) override;
@@ -80,7 +97,25 @@ private:
     FiberState state_ {FiberState::Ready};
     Body body_;
     CoroutineSuspendContext* suspend_ctx_ {nullptr};
-    std::vector<Id> waiters_;
+    // Waiter IDs. Almost always 0 or 1 (a Future's Get/Wait), so the first
+    // few live inline to avoid a heap allocation per join.
+    std::array<Id, 2> inline_waiters_ {};
+    std::uint8_t inline_waiter_count_ {0};
+    std::vector<Id> overflow_waiters_;
 };
+
+// Deleter for fibers placement-constructed in MemoryResource storage. Holds
+// the resource raw: the Scheduler destroys its fibers before releasing its
+// memory resource.
+struct FiberDeleter {
+    MemoryResource* resource;
+
+    void operator()(Fiber* fiber) const {
+        fiber->~Fiber();
+        resource->Deallocate(fiber, sizeof(Fiber), alignof(Fiber));
+    }
+};
+
+using FiberPtr = std::unique_ptr<Fiber, FiberDeleter>;
 
 } // namespace cortex::tiny_fiber::detail

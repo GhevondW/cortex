@@ -12,7 +12,7 @@ namespace cortex::detail {
 
 class CoroutineImpl final {
 public:
-    CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource);
+    CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, const MemoryResourceSharedPtr& resource);
     ~CoroutineImpl();
 
     [[nodiscard]] std::size_t GetStackSize() const noexcept;

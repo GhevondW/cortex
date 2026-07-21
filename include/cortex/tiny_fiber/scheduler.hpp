@@ -1,11 +1,13 @@
 #pragma once
 
 #include <cortex/memory_resource.hpp>
+#include <cortex/pooled_memory_resource.hpp>
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 
+#include <cstdint>
 #include <deque>
 #include <memory>
-#include <unordered_map>
+#include <vector>
 
 /**
  * @file scheduler.hpp
@@ -33,7 +35,10 @@ public:
      */
     struct Config {
         std::size_t default_stack_size = cortex::Coroutine::kDefaultStackSizeBytes;
-        MemoryResourceSharedPtr memory_resource = GetDefaultMemoryResource();
+        // Each scheduler gets its own stack pool by default: fiber stacks are
+        // recycled instead of hitting the system allocator on every Spawn.
+        // Safe because a scheduler and its fibers live on a single thread.
+        MemoryResourceSharedPtr memory_resource = MakePooledMemoryResource();
     };
 
     /**
@@ -192,14 +197,27 @@ private:
     void ProcessPendingCleanup();
 
 private:
+    // Fiber IDs encode a slot index in the low bits and a per-scheduler
+    // sequence number in the high bits. Lookup is a bounds-checked index plus
+    // an ID comparison, so stale IDs from recycled slots resolve to nullptr —
+    // the same liveness guarantee a map lookup gave, without the hashing.
+    static constexpr std::uint64_t kSlotIndexBits = 20;
+    static constexpr std::uint64_t kSlotIndexMask = (std::uint64_t {1} << kSlotIndexBits) - 1;
+
+    struct FiberSlot {
+        detail::Fiber::Id id {0}; // 0 = vacant
+        detail::FiberPtr fiber {nullptr, detail::FiberDeleter {nullptr}};
+    };
+
     Config config_;
     bool running_ {false};
     bool stopping_ {false};
-    // Per-scheduler fiber ID counter; starts at 1 so 0 is a sentinel "no fiber".
-    detail::Fiber::Id next_fiber_id_ {1};
+    // Sequence counter; starts at 1 so no fiber ID is ever the sentinel 0.
+    std::uint64_t next_sequence_ {1};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
-    std::unordered_map<detail::Fiber::Id, std::unique_ptr<detail::Fiber>> fibers_;
+    std::vector<FiberSlot> fiber_slots_;
+    std::vector<std::uint32_t> vacant_slots_;
     std::vector<detail::Fiber::Id> pending_cleanup_;
     // Owned liveness token; weak copies in Futures expire when this scheduler is
     // destroyed. Declared last so it outlives the other members during teardown.

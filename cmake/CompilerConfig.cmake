@@ -20,6 +20,22 @@ function(cortex_apply_warnings TARGET_NAME)
     )
 endfunction()
 
+# Link-time optimization (IPO) — lets the compiler inline across the
+# library/application boundary, which matters for the small hot functions
+# on the coroutine switch path.
+function(cortex_apply_lto TARGET_NAME)
+    if(CORTEX_ENABLE_LTO)
+        include(CheckIPOSupported)
+        check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+        if(ipo_supported)
+            message(STATUS "[${TARGET_NAME}] Enabling LTO")
+            set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        else()
+            message(WARNING "[${TARGET_NAME}] LTO requested but not supported: ${ipo_error}")
+        endif()
+    endif()
+endfunction()
+
 # Sanitizers (ASan, UBSan)
 function(cortex_apply_sanitizers TARGET_NAME)
     if(CORTEX_USE_SANITIZERS)

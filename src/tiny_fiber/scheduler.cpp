@@ -1,6 +1,7 @@
 #include <cortex/tiny_fiber/scheduler.hpp>
 
 #include <cassert>
+#include <new>
 #include <stdexcept>
 #include <utility>
 
@@ -19,7 +20,10 @@ Scheduler& Scheduler::Current() {
 }
 
 Scheduler::Scheduler(Config config)
-    : config_(std::move(config)) {}
+    : config_(std::move(config)) {
+    fiber_slots_.reserve(16);
+    vacant_slots_.reserve(16);
+}
 
 Scheduler::~Scheduler() {
     if (!stopping_) {
@@ -46,8 +50,8 @@ Scheduler::~Scheduler() {
     }
 
     running_ = false;
-    // Clearing fibers_ triggers forced unwinding for any that didn't exit.
-    fibers_.clear();
+    // Clearing the slots triggers forced unwinding for any that didn't exit.
+    fiber_slots_.clear();
     g_current_scheduler = nullptr;
 }
 
@@ -62,16 +66,21 @@ void Scheduler::Stop() {
     // fiber may still be referenced by stale entries in someone's waiter queue;
     // unlock/notify code paths skip stale entries, and Step() validates waiter
     // IDs on Complete(), so this is safe.
-    for (auto& [id, fiber] : fibers_) {
-        if (fiber && fiber->IsSuspended()) {
-            Schedule(fiber.get());
+    for (auto& slot : fiber_slots_) {
+        if (slot.fiber && slot.fiber->IsSuspended()) {
+            Schedule(slot.fiber.get());
         }
     }
 }
 
 void Scheduler::ProcessPendingCleanup() {
     for (auto id : pending_cleanup_) {
-        fibers_.erase(id);
+        const auto index = static_cast<std::size_t>(id & kSlotIndexMask);
+        if (index < fiber_slots_.size() && fiber_slots_[index].id == id) {
+            fiber_slots_[index].fiber.reset();
+            fiber_slots_[index].id = 0;
+            vacant_slots_.push_back(static_cast<std::uint32_t>(index));
+        }
     }
     pending_cleanup_.clear();
 }
@@ -104,15 +113,15 @@ bool Scheduler::Step() {
     }
 
     if (current_fiber_->IsDone()) {
-        // Complete() returns waiter IDs; resolve each via the fiber map and
-        // skip any that are gone or already runnable.
-        auto waiter_ids = current_fiber_->Complete();
-        for (auto id : waiter_ids) {
+        // Resolve each recorded waiter via the fiber map and skip any that
+        // are gone or already runnable.
+        current_fiber_->Complete();
+        current_fiber_->ForEachWaiter([this](detail::Fiber::Id id) {
             auto* waiter = GetFiber(id);
             if (waiter && waiter->IsSuspended()) {
                 Schedule(waiter);
             }
-        }
+        });
 
         pending_cleanup_.push_back(current_fiber_->GetId());
     }
@@ -138,20 +147,45 @@ void Scheduler::RunLoop() {
 }
 
 detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size) {
-    const auto id = next_fiber_id_++;
-    auto fiber = std::make_unique<detail::Fiber>(id, std::move(func), stack_size, config_.memory_resource);
-    auto* fiber_raw_ptr = fiber.get();
+    std::uint32_t index = 0;
+    if (!vacant_slots_.empty()) {
+        index = vacant_slots_.back();
+        vacant_slots_.pop_back();
+    } else {
+        if (fiber_slots_.size() > kSlotIndexMask) {
+            throw std::length_error("Too many live fibers in one scheduler");
+        }
+        index = static_cast<std::uint32_t>(fiber_slots_.size());
+        fiber_slots_.emplace_back();
+    }
 
-    fibers_.emplace(id, std::move(fiber));
+    const auto id = (next_sequence_++ << kSlotIndexBits) | index;
+
+    // Place the fiber object itself in MemoryResource storage so that with
+    // the default pooled resource a spawn performs no system allocations.
+    const auto& resource = config_.memory_resource;
+    void* memory = resource->Allocate(sizeof(detail::Fiber), alignof(detail::Fiber));
+
+    detail::Fiber* fiber_raw_ptr = nullptr;
+    try {
+        fiber_raw_ptr = new (memory) detail::Fiber(id, std::move(func), stack_size, resource);
+    } catch (...) {
+        resource->Deallocate(memory, sizeof(detail::Fiber), alignof(detail::Fiber));
+        vacant_slots_.push_back(index);
+        throw;
+    }
+
+    fiber_slots_[index].id = id;
+    fiber_slots_[index].fiber = detail::FiberPtr(fiber_raw_ptr, detail::FiberDeleter {resource.get()});
     ready_queue_.push_back(fiber_raw_ptr);
 
     return id;
 }
 
 detail::Fiber* Scheduler::GetFiber(detail::Fiber::Id id) {
-    auto it = fibers_.find(id);
-    if (it != fibers_.end()) {
-        return it->second.get();
+    const auto index = static_cast<std::size_t>(id & kSlotIndexMask);
+    if (index < fiber_slots_.size() && fiber_slots_[index].id == id) {
+        return fiber_slots_[index].fiber.get();
     }
     return nullptr;
 }
