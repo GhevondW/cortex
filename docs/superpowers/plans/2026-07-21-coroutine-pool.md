@@ -147,7 +147,13 @@ private:
     bool is_unwinding_ {false};
     bool abort_body_ {false};
     bool reusable_ {false};
+    // The context entered its entry function at least once (destructor must
+    // not resume a never-started context — that would run the body).
     bool started_ {false};
+    // The CURRENT body began executing. Distinct from started_: a parked
+    // coroutine that was rebound has started_ == true but body_started_ ==
+    // false until the next Resume.
+    bool body_started_ {false};
     std::size_t stack_size_bytes_;
     cortex::CoroutineBody body_;
     std::exception_ptr exception_ptr_ {nullptr};
@@ -227,6 +233,7 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 
                  for (;;) {
                      assert(static_cast<bool>(body_));
+                     body_started_ = true;
                      try {
                          body_(suspend_context);
                      } catch (const ForcedUnwind&) {
@@ -238,7 +245,13 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 
                      is_done_ = true;
 
-                     if (!reusable_ || is_unwinding_) {
+                     if (!reusable_) {
+                         // Release the body's captures at completion, matching
+                         // the pre-trampoline body lifetime.
+                         body_ = cortex::CoroutineBody {};
+                         break;
+                     }
+                     if (is_unwinding_) {
                          break;
                      }
 
@@ -257,10 +270,12 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 }
 
 CoroutineImpl::~CoroutineImpl() {
-    // A live context (mid-body, parked, or never started) must be resumed
-    // with the unwinding flag set so the trampoline exits and the stack is
-    // released. A finished one-shot leaves fiber_ empty.
-    if (fiber_) {
+    // A started context (mid-body or parked) must be resumed with the
+    // unwinding flag set so the trampoline exits and the stack is released.
+    // A never-started context must NOT be resumed — that would execute the
+    // body during destruction; boost's ~fiber() unwinds it without entering
+    // the entry function. A finished one-shot leaves fiber_ empty.
+    if (fiber_ && started_) {
         is_unwinding_ = true;
         fiber_ = std::move(fiber_).resume();
     }
@@ -302,24 +317,30 @@ void CoroutineImpl::Resume() {
 
 void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
     body_ = std::move(body);
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::Rebind() {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::AbortBody() {
     assert(reusable_);
-    if (is_done_ || !started_) {
+    if (is_done_ || !body_started_) {
         return;
     }
     abort_body_ = true;
@@ -405,7 +426,13 @@ private:
     bool is_unwinding_ {false};
     bool abort_body_ {false};
     bool reusable_ {false};
+    // The context entered its entry function at least once (destructor must
+    // not resume a never-started context — that would run the body).
     bool started_ {false};
+    // The CURRENT body began executing. Distinct from started_: a parked
+    // coroutine that was rebound has started_ == true but body_started_ ==
+    // false until the next Resume.
+    bool body_started_ {false};
     std::size_t stack_size_bytes_;
     std::exception_ptr exception_ptr_ {nullptr};
     MemoryResourceSharedPtr resource_;
@@ -516,9 +543,12 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 }
 
 CoroutineImpl::~CoroutineImpl() {
-    // The context is dead only for a finished one-shot. Reusable coroutines
-    // stay alive (parked, mid-body, or never started) until unwound here.
-    const bool context_alive = reusable_ || !is_done_;
+    // A started context (mid-body or parked) must be unwound so the
+    // trampoline exits. A never-started context must NOT be swapped in —
+    // that would execute the body during destruction; the fiber never ran,
+    // so freeing the stacks below is all the cleanup it needs. A finished
+    // one-shot is already dead.
+    const bool context_alive = started_ && (reusable_ || !is_done_);
     if (context_alive) {
         is_unwinding_ = true;
         SwapIn();
@@ -536,6 +566,7 @@ void CoroutineImpl::FiberEntry(void* arg) {
     FiberSuspendContext suspend_context(self);
 
     for (;;) {
+        self->body_started_ = true;
         try {
             self->body_(suspend_context);
         } catch (const ForcedUnwind&) {
@@ -546,7 +577,13 @@ void CoroutineImpl::FiberEntry(void* arg) {
 
         self->is_done_ = true;
 
-        if (!self->reusable_ || self->is_unwinding_) {
+        if (!self->reusable_) {
+            // Release the body's captures at completion, matching the
+            // pre-trampoline body lifetime.
+            self->body_ = cortex::CoroutineBody {};
+            break;
+        }
+        if (self->is_unwinding_) {
             break;
         }
 
@@ -627,24 +664,30 @@ void CoroutineImpl::Resume() {
 
 void CoroutineImpl::Rebind(cortex::CoroutineBody body) {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
     body_ = std::move(body);
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::Rebind() {
     assert(reusable_);
-    if (started_ && !is_done_) {
+    if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    exception_ptr_ = nullptr;
+    body_started_ = false;
     is_done_ = false;
 }
 
 void CoroutineImpl::AbortBody() {
     assert(reusable_);
-    if (is_done_ || !started_) {
+    if (is_done_ || !body_started_) {
         return;
     }
     abort_body_ = true;
@@ -927,6 +970,62 @@ TEST(CoroutinePoolTest, GetStackSizeReportsConfiguredSize) {
     cortex::LocalCoroutinePool pool({.stack_size_bytes = 128 * 1024});
     auto coroutine = pool.Acquire([](cortex::CoroutineSuspendContext&) {});
     EXPECT_EQ(coroutine.GetStackSize(), 128u * 1024u);
+}
+
+TEST(CoroutinePoolTest, DestroyingNeverResumedCoroutineDoesNotRunBody) {
+    bool ran = false;
+    {
+        cortex::LocalCoroutinePool pool;
+        auto coroutine = pool.Acquire([&ran](cortex::CoroutineSuspendContext& ctx) {
+            ran = true;
+            ctx.Suspend();
+        });
+    } // released without Resume, then pool destroyed
+    EXPECT_FALSE(ran);
+}
+
+TEST(CoroutinePoolTest, WarmReleaseWithoutResumeDoesNotRunBody) {
+    cortex::LocalCoroutinePool pool;
+    {
+        auto warm = pool.Acquire([](cortex::CoroutineSuspendContext&) {});
+        warm.Resume();
+    } // parks a started coroutine
+
+    bool ran = false;
+    {
+        auto coroutine = pool.Acquire([&ran](cortex::CoroutineSuspendContext&) {
+            ran = true;
+        });
+    } // released without Resume: must NOT run the body
+    EXPECT_FALSE(ran);
+
+    // The parked coroutine is still usable afterwards.
+    bool reused_ran = false;
+    auto coroutine = pool.Acquire([&reused_ran](cortex::CoroutineSuspendContext&) {
+        reused_ran = true;
+    });
+    coroutine.Resume();
+    EXPECT_TRUE(reused_ran);
+}
+
+TEST(CoroutinePoolTest, DoubleRebindBeforeResumeIsAllowedOnWarmCoroutine) {
+    cortex::LocalCoroutinePool pool;
+    {
+        auto warm = pool.Acquire([](cortex::CoroutineSuspendContext&) {});
+        warm.Resume();
+    } // the next Acquire pops a warm (already started) coroutine
+
+    bool first_ran = false;
+    bool second_ran = false;
+    auto coroutine = pool.Acquire([&first_ran](cortex::CoroutineSuspendContext&) {
+        first_ran = true;
+    });
+    coroutine.Rebind([&second_ran](cortex::CoroutineSuspendContext&) {
+        second_ran = true;
+    });
+    coroutine.Resume();
+    EXPECT_FALSE(first_ran);
+    EXPECT_TRUE(second_ran);
 }
 
 #ifndef CORTEX_EMSCRIPTEN
