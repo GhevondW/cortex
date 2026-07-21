@@ -333,6 +333,8 @@ void CoroutineImpl::Rebind() {
     if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
     exception_ptr_ = nullptr;
     body_started_ = false;
     is_done_ = false;
@@ -566,12 +568,14 @@ void CoroutineImpl::FiberEntry(void* arg) {
     FiberSuspendContext suspend_context(self);
 
     for (;;) {
+        assert(static_cast<bool>(self->body_));
         self->body_started_ = true;
         try {
             self->body_(suspend_context);
         } catch (const ForcedUnwind&) {
             // Unwinding in progress or the body is being aborted
         } catch (...) {
+            assert(!static_cast<bool>(self->exception_ptr_));
             self->exception_ptr_ = std::current_exception();
         }
 
@@ -680,6 +684,8 @@ void CoroutineImpl::Rebind() {
     if (body_started_ && !is_done_) {
         throw std::logic_error("Rebind on a coroutine whose body has not finished.");
     }
+    // Discard any leftover exception from an aborted body: its outcome is
+    // dropped by definition and must not leak into the next run.
     exception_ptr_ = nullptr;
     body_started_ = false;
     is_done_ = false;
@@ -1207,10 +1213,14 @@ private:
  * Acquire() pops a parked coroutine and rebinds it to the new body — no
  * stack allocation and no context setup — falling back to creating a fresh
  * reusable coroutine when the free list is empty. Released coroutines park
- * with their context intact, up to CoroutinePoolConfig::max_parked.
+ * with their context intact, up to CoroutinePoolConfig::max_parked. A
+ * released body's captures are dropped at Release() time (the pool re-arms
+ * the coroutine with an inert body), so the free list never pins user state.
  *
  * @tparam ThreadSafe true guards the free list with std::mutex; false uses a
- * no-op mutex and must only be used from a single thread.
+ * no-op mutex and must only be used from a single thread. The ThreadSafe
+ * instantiation targets native multithreaded use; WASM builds are
+ * single-threaded today.
  */
 template <bool ThreadSafe>
 class BasicCoroutinePool final {
@@ -1506,6 +1516,10 @@ void BasicPooledCoroutine<ThreadSafe>::Release() {
     // Unwind a started-but-unfinished body before parking. Runs outside the
     // pool lock: destructors on the coroutine stack may re-enter the pool.
     impl->AbortBody();
+
+    // Re-arm with an inert body so the released body's captures are dropped
+    // now instead of staying pinned in the free list until the next Acquire.
+    impl->Rebind([](CoroutineSuspendContext&) {});
 
     bool park = false;
     {
