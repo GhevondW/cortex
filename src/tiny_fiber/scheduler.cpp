@@ -50,7 +50,9 @@ Scheduler::~Scheduler() {
     }
 
     running_ = false;
-    // Clearing the slots triggers forced unwinding for any that didn't exit.
+    // Destroying parked fibers unwinds their parked trampolines; clearing the
+    // slots then triggers forced unwinding for any fiber that didn't exit.
+    free_fibers_.clear();
     fiber_slots_.clear();
     g_current_scheduler = nullptr;
 }
@@ -77,7 +79,13 @@ void Scheduler::ProcessPendingCleanup() {
     for (auto id : pending_cleanup_) {
         const auto index = static_cast<std::size_t>(id & kSlotIndexMask);
         if (index < fiber_slots_.size() && fiber_slots_[index].id == id) {
-            fiber_slots_[index].fiber.reset();
+            auto& fiber = fiber_slots_[index].fiber;
+            const bool park = !stopping_ && free_fibers_.size() < config_.max_pooled_fibers &&
+                              fiber->GetStackSize() == config_.default_stack_size;
+            if (park) {
+                free_fibers_.push_back(std::move(fiber));
+            }
+            fiber.reset();
             fiber_slots_[index].id = 0;
             vacant_slots_.push_back(static_cast<std::uint32_t>(index));
         }
@@ -161,6 +169,26 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::s
 
     const auto id = (next_sequence_++ << kSlotIndexBits) | index;
 
+    // Warm path: re-arm a parked fiber. Reuses the fiber object, its stack
+    // and its live coroutine context — no allocation, no context setup.
+    if (!free_fibers_.empty() && stack_size == config_.default_stack_size) {
+        auto fiber = std::move(free_fibers_.back());
+        free_fibers_.pop_back();
+
+        try {
+            fiber->ResetForReuse(id, std::move(func));
+        } catch (...) {
+            vacant_slots_.push_back(index);
+            throw;
+        }
+
+        detail::Fiber* fiber_raw_ptr = fiber.get();
+        fiber_slots_[index].id = id;
+        fiber_slots_[index].fiber = std::move(fiber);
+        ready_queue_.push_back(fiber_raw_ptr);
+        return id;
+    }
+
     // Place the fiber object itself in MemoryResource storage so that with
     // the default pooled resource a spawn performs no system allocations.
     const auto& resource = config_.memory_resource;
@@ -168,7 +196,11 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::s
 
     detail::Fiber* fiber_raw_ptr = nullptr;
     try {
-        fiber_raw_ptr = new (memory) detail::Fiber(id, std::move(func), stack_size, resource);
+        fiber_raw_ptr = new (memory) detail::Fiber(id,
+                                                   std::move(func),
+                                                   stack_size,
+                                                   resource,
+                                                   /*reusable=*/config_.max_pooled_fibers > 0);
     } catch (...) {
         resource->Deallocate(memory, sizeof(detail::Fiber), alignof(detail::Fiber));
         vacant_slots_.push_back(index);

@@ -39,6 +39,10 @@ public:
         // recycled instead of hitting the system allocator on every Spawn.
         // Safe because a scheduler and its fibers live on a single thread.
         MemoryResourceSharedPtr memory_resource = MakePooledMemoryResource();
+        // Finished fibers are parked (up to this many) and reused by the next
+        // Spawn instead of being destroyed: no object construction and no
+        // context setup on the warm path. 0 disables fiber reuse.
+        std::size_t max_pooled_fibers = 64;
     };
 
     /**
@@ -218,6 +222,9 @@ private:
     std::deque<detail::Fiber*> ready_queue_;
     std::vector<FiberSlot> fiber_slots_;
     std::vector<std::uint32_t> vacant_slots_;
+    // Finished fibers parked for reuse. Not in fiber_slots_: a parked fiber
+    // has no identity until ResetForReuse assigns a fresh id and slot.
+    std::vector<detail::FiberPtr> free_fibers_;
     std::vector<detail::Fiber::Id> pending_cleanup_;
     // Owned liveness token; weak copies in Futures expire when this scheduler is
     // destroyed. Declared last so it outlives the other members during teardown.
