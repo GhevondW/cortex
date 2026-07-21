@@ -41,6 +41,7 @@ target_sources(cortex
         base_coroutine.cpp
         coroutine.cpp
         memory_resource.cpp
+        pooled_memory_resource.cpp
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
         ${CORTEX_EXEC_SRC}
@@ -67,6 +68,7 @@ endif()
 # Apply Modular Configuration
 cortex_apply_warnings(cortex)
 cortex_apply_sanitizers(cortex)
+cortex_apply_lto(cortex)
 cortex_configure_platform(cortex)
 
 # Alias

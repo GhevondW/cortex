@@ -49,7 +49,9 @@ struct MemoryResourceStackAllocator {
 
 } // namespace
 
-CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource)
+CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
+                             std::size_t stack_size,
+                             const MemoryResourceSharedPtr& resource)
     : stack_size_bytes_(stack_size)
     , fiber_(std::allocator_arg,
              MemoryResourceStackAllocator {resource, stack_size},

@@ -253,9 +253,26 @@ python3 -m http.server 8080
 ## CMake Options
 
 - `CORTEX_BUILD_TESTS` - Build the library + per-component test binaries, including the native `apps/video_editor` engine tests (default: ON)
+- `CORTEX_BUILD_BENCHMARKS` - Build the micro-benchmarks in `benchmarks/` (default: OFF)
 - `CORTEX_BUILD_EXAMPLES` - Build the standalone WASM demos in `examples/` (default: OFF)
 - `CORTEX_BUILD_APPS` - Build the full apps: `apps/algo_viz` and `apps/video_editor` (default: OFF)
 - `CORTEX_USE_SANITIZERS` - Enable Address and Undefined Behavior sanitizers (default: OFF). Works for both Native and WASM builds.
+- `CORTEX_ENABLE_LTO` - Enable link-time optimization for the cortex library (default: OFF)
+
+When cortex is the top-level project and no `CMAKE_BUILD_TYPE` is given, the build defaults to `Release`.
+
+## Performance
+
+- Fiber stacks are recycled: `tiny_fiber::Scheduler` uses a per-scheduler `cortex::PooledMemoryResource` by default, so `Spawn` reuses stacks, fiber objects and future state instead of hitting the system allocator. Pass your own `Scheduler::Config::memory_resource` to opt out or tune (`PooledMemoryResource::Config::max_cached_bytes` bounds the cache).
+- The pool is intentionally not thread-safe; a scheduler and its fibers always live on one thread. For raw `Coroutine` use across threads, keep the default `GetDefaultMemoryResource()` or provide your own resource.
+
+Run the micro-benchmarks to check hot-path regressions:
+
+```bash
+cmake -B build/native -DCMAKE_BUILD_TYPE=Release -DCORTEX_BUILD_BENCHMARKS=ON
+cmake --build build/native --target cortex_bench
+./build/native/benchmarks/cortex_bench            # optional: pass a name filter
+```
 
 ## Building the Browser Demos
 

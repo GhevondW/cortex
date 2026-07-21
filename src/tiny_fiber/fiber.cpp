@@ -40,10 +40,9 @@ void Fiber::Wake() {
     state_ = FiberState::Ready;
 }
 
-std::vector<Fiber::Id> Fiber::Complete() {
+void Fiber::Complete() {
     suspend_ctx_ = nullptr;
     state_ = FiberState::Finished;
-    return std::move(waiters_);
 }
 
 void Fiber::Suspend() {
@@ -54,8 +53,15 @@ void Fiber::Suspend() {
 }
 
 void Fiber::AddWaiter(Id waiter_id) {
-    if (waiter_id != 0) {
-        waiters_.push_back(waiter_id);
+    if (waiter_id == 0) {
+        return;
+    }
+
+    if (inline_waiter_count_ < inline_waiters_.size()) {
+        inline_waiters_[inline_waiter_count_] = waiter_id;
+        ++inline_waiter_count_;
+    } else {
+        overflow_waiters_.push_back(waiter_id);
     }
 }
 

@@ -6,11 +6,22 @@ project(cortex
     DESCRIPTION "Stackful coroutine library with WASM support"
 )
 
+# Coroutine switching and stack recycling are allocation- and call-heavy;
+# an unoptimized build is several times slower. Default to Release when the
+# user hasn't chosen a build type.
+if(PROJECT_IS_TOP_LEVEL AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "No CMAKE_BUILD_TYPE set: defaulting to Release")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 # --- Options ---
 option(CORTEX_BUILD_TESTS "Build unit tests" ON)
+option(CORTEX_BUILD_BENCHMARKS "Build micro-benchmarks" OFF)
 option(CORTEX_BUILD_EXAMPLES "Build examples" OFF)
 option(CORTEX_BUILD_APPS "Build applications (AlgoViz, etc.)" OFF)
 option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
+option(CORTEX_ENABLE_LTO "Enable link-time optimization for the cortex library" OFF)
 
 # --- Module Path ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -27,6 +38,10 @@ add_subdirectory(src)
 if(CORTEX_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(CORTEX_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
 
 if(CORTEX_BUILD_EXAMPLES)

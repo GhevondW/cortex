@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <cstring>
 #include <emscripten.h>
 #include <stdexcept>
 #include <utility>
@@ -31,7 +30,6 @@ struct MainFiberContext {
     MainFiberContext()
         : resource(cortex::GetDefaultMemoryResource()) {
         asyncify_stack = resource->Allocate(kAsyncifyStackSize, kStackAlignment);
-        std::memset(asyncify_stack, 0, kAsyncifyStackSize);
     }
     ~MainFiberContext() {
         if (asyncify_stack) {
@@ -70,14 +68,19 @@ private:
 
 } // namespace
 
-CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size, MemoryResourceSharedPtr resource)
+CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
+                             std::size_t stack_size,
+                             const MemoryResourceSharedPtr& resource)
     : body_(std::move(body))
     , stack_size_bytes_(stack_size)
-    , resource_(std::move(resource)) {
+    , resource_(resource) {
     if (emscripten_has_asyncify() != 1) {
         throw std::runtime_error("Cortex requires ASYNCIFY to be enabled for Emscripten.");
     }
 
+    // Neither stack needs zero-initialization: emscripten_fiber_init writes
+    // the asyncify bookkeeping itself, and the C stack contents are written
+    // before use. Zeroing them cost a 256KB+16KB memset per coroutine.
     try {
         c_stack_ = resource_->Allocate(stack_size, kStackAlignment);
         asyncify_stack_ = resource_->Allocate(kAsyncifyStackSize, kStackAlignment);
@@ -85,8 +88,6 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body, std::size_t stack_size,
         if (c_stack_) resource_->Deallocate(c_stack_, stack_size, kStackAlignment);
         throw;
     }
-    std::memset(c_stack_, 0, stack_size);
-    std::memset(asyncify_stack_, 0, kAsyncifyStackSize);
 
     emscripten_fiber_init(&fiber_, FiberEntry, this, c_stack_, stack_size, asyncify_stack_, kAsyncifyStackSize);
 }
