@@ -2,6 +2,22 @@
 
 #include <utility>
 
+// AddressSanitizer poisons redzones inside a fiber's stack while it runs.
+// malloc/free would reset that shadow state, but recycled blocks skip the
+// allocator, so they must be unpoisoned explicitly before reuse — otherwise
+// the next fiber starts executing on memory ASan still considers poisoned.
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CORTEX_POOL_HAS_ASAN 1
+#endif
+#elif defined(__SANITIZE_ADDRESS__)
+#define CORTEX_POOL_HAS_ASAN 1
+#endif
+
+#if defined(CORTEX_POOL_HAS_ASAN)
+#include <sanitizer/asan_interface.h>
+#endif
+
 namespace cortex {
 
 namespace {
@@ -11,6 +27,12 @@ namespace {
 // blocks keyed by size.
 constexpr bool IsPoolableAlignment(std::size_t alignment) noexcept {
     return alignment <= alignof(std::max_align_t);
+}
+
+void UnpoisonBlock([[maybe_unused]] void* block, [[maybe_unused]] std::size_t bytes) noexcept {
+#if defined(CORTEX_POOL_HAS_ASAN)
+    __asan_unpoison_memory_region(block, bytes);
+#endif
 }
 
 } // namespace
@@ -36,6 +58,7 @@ void* PooledMemoryResource::DoAllocate(std::size_t bytes, std::size_t alignment)
             void* block = it->second.back();
             it->second.pop_back();
             cached_bytes_ -= bytes;
+            UnpoisonBlock(block, bytes);
             return block;
         }
     }
