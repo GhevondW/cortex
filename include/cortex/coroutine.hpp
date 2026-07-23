@@ -117,6 +117,15 @@ public:
     void Resume();
 
 private:
+    friend class BaseCoroutine;
+
+    // Internal support for BaseCoroutine reuse (e.g. tiny_fiber fiber
+    // recycling): a reusable coroutine parks after its body finishes instead
+    // of letting the context die, and RebindForReuseInternal re-arms it.
+    static Coroutine
+    MakeInternal(CoroutineBody body, std::size_t stack_size_bytes, MemoryResourceSharedPtr resource, bool reusable);
+    void RebindForReuseInternal();
+
     struct ImplDeleter {
         MemoryResourceSharedPtr resource;
         void operator()(detail::CoroutineImpl* impl) const;

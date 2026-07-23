@@ -41,6 +41,13 @@ Coroutine::Builder Coroutine::Builder::SetMemoryResource(MemoryResourceSharedPtr
 }
 
 Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes, MemoryResourceSharedPtr resource) {
+    return MakeInternal(std::move(body), stack_size_bytes, std::move(resource), /*reusable=*/false);
+}
+
+Coroutine Coroutine::MakeInternal(CoroutineBody body,
+                                  std::size_t stack_size_bytes,
+                                  MemoryResourceSharedPtr resource,
+                                  bool reusable) {
     if (!static_cast<bool>(body)) {
         throw std::invalid_argument("coroutine body is null.");
     }
@@ -55,7 +62,7 @@ Coroutine Coroutine::Make(CoroutineBody body, std::size_t stack_size_bytes, Memo
 
     void* ptr = resource->Allocate(sizeof(detail::CoroutineImpl), alignof(detail::CoroutineImpl));
     try {
-        auto* impl = new (ptr) detail::CoroutineImpl(std::move(body), stack_size_bytes, resource);
+        auto* impl = new (ptr) detail::CoroutineImpl(std::move(body), stack_size_bytes, resource, reusable);
         return Coroutine(std::unique_ptr<detail::CoroutineImpl, ImplDeleter>(impl, ImplDeleter {std::move(resource)}));
     } catch (...) {
         resource->Deallocate(ptr, sizeof(detail::CoroutineImpl), alignof(detail::CoroutineImpl));
@@ -84,6 +91,11 @@ bool Coroutine::IsDone() const noexcept {
 void Coroutine::Resume() {
     assert(impl_);
     impl_->Resume();
+}
+
+void Coroutine::RebindForReuseInternal() {
+    assert(impl_);
+    impl_->Rebind();
 }
 
 } // namespace cortex

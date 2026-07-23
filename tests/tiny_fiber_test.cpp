@@ -1,6 +1,8 @@
+#include <cortex/pooled_memory_resource.hpp>
 #include <cortex/tiny_fiber/tiny_fiber.hpp>
 #include <functional>
 #include <gtest/gtest.h>
+#include <memory>
 #include <queue>
 #include <string>
 #include <vector>
@@ -1754,4 +1756,86 @@ TEST(TinyFiberComplexTest, LargeNumberOfFibers) {
     });
 
     EXPECT_EQ(counter, num_fibers);
+}
+
+// ============================================================================
+// Fiber Reuse Tests
+// ============================================================================
+
+TEST(TinyFiberReuseTest, FinishedFibersAreReusedNotRecycledThroughMemoryPool) {
+    auto pooled = std::make_shared<cortex::PooledMemoryResource>();
+    tf::Scheduler::Run(
+        [&pooled] {
+            for (int i = 0; i < 5; ++i) {
+                auto future = tf::Spawn([] {
+                    return 1;
+                });
+                (void)future.Get();
+            }
+            // Finished fibers were parked for reuse, so their 256KB stacks
+            // never went back to the memory pool's free lists. (Small blocks
+            // like future state do round-trip the pool.)
+            EXPECT_LT(pooled->GetCachedBytes(), cortex::Coroutine::kDefaultStackSizeBytes);
+        },
+        tf::Scheduler::Config {.memory_resource = pooled});
+}
+
+TEST(TinyFiberReuseTest, ZeroMaxPooledFibersDisablesReuse) {
+    auto pooled = std::make_shared<cortex::PooledMemoryResource>();
+    tf::Scheduler::Run(
+        [&pooled] {
+            for (int i = 0; i < 5; ++i) {
+                auto future = tf::Spawn([] {
+                    return 1;
+                });
+                (void)future.Get();
+            }
+            // Without fiber reuse, destroyed fibers push their stacks into
+            // the memory pool's free lists.
+            EXPECT_GE(pooled->GetCachedBytes(), cortex::Coroutine::kDefaultStackSizeBytes);
+        },
+        tf::Scheduler::Config {.memory_resource = pooled, .max_pooled_fibers = 0});
+}
+
+TEST(TinyFiberReuseTest, ReusedFibersDeliverResultsAndWakeWaiters) {
+    tf::Scheduler::Run([] {
+        for (int i = 0; i < 100; ++i) {
+            auto future = tf::Spawn([i] {
+                tf::Yield();
+                return i * 2;
+            });
+            EXPECT_EQ(future.Get(), i * 2);
+        }
+    });
+}
+
+TEST(TinyFiberReuseTest, ReuseAcrossWavesOfConcurrentFibers) {
+    tf::Scheduler::Run([] {
+        for (int wave = 0; wave < 5; ++wave) {
+            std::vector<tf::Future<int>> futures;
+            futures.reserve(32);
+            for (int i = 0; i < 32; ++i) {
+                futures.push_back(tf::Spawn([i] {
+                    tf::Yield();
+                    return i;
+                }));
+            }
+            for (int i = 0; i < 32; ++i) {
+                EXPECT_EQ(futures[static_cast<std::size_t>(i)].Get(), i);
+            }
+        }
+    });
+}
+
+TEST(TinyFiberReuseTest, TeardownWithParkedFibersIsClean) {
+    auto scheduler = tf::Scheduler::Create([] {
+        auto future = tf::Spawn([] {
+            return 7;
+        });
+        (void)future.Get();
+        tf::Yield();
+    });
+    while (scheduler->Step()) {
+    }
+    scheduler.reset(); // destroys parked (reusable) fibers cleanly
 }

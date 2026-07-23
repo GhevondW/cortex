@@ -6,10 +6,21 @@
 
 namespace cortex::tiny_fiber::detail {
 
-Fiber::Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource)
-    : BaseCoroutine(stack_size, std::move(resource))
+Fiber::Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource, bool reusable)
+    : BaseCoroutine(stack_size, std::move(resource), reusable)
     , id_(id)
     , body_(std::move(body)) {}
+
+void Fiber::ResetForReuse(Id id, Body body) {
+    assert(state_ == FiberState::Finished);
+    id_ = id;
+    body_ = std::move(body);
+    state_ = FiberState::Ready;
+    suspend_ctx_ = nullptr;
+    inline_waiter_count_ = 0;
+    overflow_waiters_.clear();
+    ResetCoroutineForReuse();
+}
 
 void Fiber::Continuation(CoroutineSuspendContext& ctx) {
     suspend_ctx_ = &ctx;

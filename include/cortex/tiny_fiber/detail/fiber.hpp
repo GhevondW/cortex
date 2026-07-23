@@ -37,8 +37,15 @@ public:
     using Body = fu2::function_base<true, false, fu2::capacity_fixed<64>, true, false, void()>;
 
     // Construction goes through Scheduler::SpawnFiberInternal so the scheduler can
-    // assign unique IDs. The constructor takes the ID directly.
-    Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource);
+    // assign unique IDs. The constructor takes the ID directly. When reusable is
+    // true the underlying coroutine parks after the body finishes so the whole
+    // fiber can be re-armed with ResetForReuse.
+    Fiber(Id id, Body body, std::size_t stack_size, MemoryResourceSharedPtr resource, bool reusable);
+
+    // Re-arm a finished fiber with a new identity and body: resets state and
+    // waiters and rebinds the parked coroutine. Only valid on fibers
+    // constructed with reusable == true whose state is Finished.
+    void ResetForReuse(Id id, Body body);
 
     ~Fiber() override = default;
 
