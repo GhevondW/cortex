@@ -55,12 +55,14 @@ function(cortex_apply_sanitizers TARGET_NAME)
                 -fsanitize=undefined
             )
 
-            # Boost.Context requires these macros to be defined when using sanitizers
-            # to properly notify the sanitizer about stack switches.
-            target_compile_definitions(${TARGET_NAME} PUBLIC 
-                BOOST_USE_ASAN
-                BOOST_USE_UBSAN
-            )
+            # Boost.Context sanitizer support (ucontext backend +
+            # BOOST_USE_UCONTEXT + BOOST_USE_ASAN) is configured on the
+            # boost_context target in cmake/Dependencies.cmake and propagates
+            # to every consumer through Boost::context's PUBLIC definitions.
+            # (Defining BOOST_USE_ASAN only here was a no-op: without
+            # BOOST_USE_UCONTEXT the fcontext backend is used, which contains
+            # no sanitizer annotations at all, and BOOST_USE_UBSAN is not
+            # referenced anywhere in Boost.Context.)
         endif()
     endif()
 endfunction()

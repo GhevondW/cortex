@@ -45,6 +45,23 @@ Scheduler::~Scheduler() {
             } catch (...) {
                 // Ignore exceptions during shutdown.
             }
+
+            // Same completion bookkeeping as Step(): wake fibers waiting on
+            // the one that just finished so they too can run to completion
+            // within this drain. Without it, a fiber parked in a Future
+            // destructor-wait stays parked, is later force-unwound by
+            // fiber_slots_.clear(), and the destructor's catch(...) swallows
+            // the internal ForcedUnwind sentinel — letting the body continue
+            // running on a Fiber that is mid-destruction.
+            if (current_fiber_->IsDone()) {
+                current_fiber_->Complete();
+                current_fiber_->ForEachWaiter([this](detail::Fiber::Id id) {
+                    auto* waiter = GetFiber(id);
+                    if (waiter && waiter->IsSuspended()) {
+                        Schedule(waiter);
+                    }
+                });
+            }
         }
         current_fiber_ = nullptr;
     }

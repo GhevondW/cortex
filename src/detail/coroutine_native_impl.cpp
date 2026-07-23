@@ -31,14 +31,30 @@ private:
     CoroutineImpl* _impl;
 };
 
+#if defined(BOOST_USE_UCONTEXT)
+// The ucontext backend (used by sanitizer builds — the only backend with ASan
+// fiber-switch annotations, see cmake/Dependencies.cmake) carves its control
+// block off the top of the user stack. That block embeds a ucontext_t (~4.5 KB
+// on AArch64), plus a 64-byte gap and up-to-255-byte alignment round-down.
+// Sanitizer instrumentation additionally inflates stack frames by kilobytes
+// (e.g. UBSan's dynamic type checks call __dynamic_cast on the fiber stack).
+// Pad every allocation so a stack size tuned for the production fcontext
+// backend, whose control block is tiny, keeps its requested usable capacity.
+constexpr std::size_t kUcontextStackPad = sizeof(ucontext_t) + 16 * 1024;
+#endif
+
 struct MemoryResourceStackAllocator {
     MemoryResourceSharedPtr resource;
     std::size_t size;
 
     boost::context::stack_context allocate() {
-        void* vp = resource->Allocate(size);
+        std::size_t alloc_size = size;
+#if defined(BOOST_USE_UCONTEXT)
+        alloc_size += kUcontextStackPad;
+#endif
+        void* vp = resource->Allocate(alloc_size);
         boost::context::stack_context sctx;
-        sctx.size = size;
+        sctx.size = alloc_size;
         sctx.sp = static_cast<char*>(vp) + sctx.size;
         return sctx;
     }
@@ -61,6 +77,14 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
              MemoryResourceStackAllocator {resource, stack_size},
              [this](boost::context::fiber&& sink) {
                  started_ = true;
+                 // Destruction of a never-resumed fiber: fcontext's ~fiber()
+                 // unwinds it without entering this function, but ucontext's
+                 // ~fiber() (sanitizer builds) can only unwind by resuming,
+                 // so it lands here — with the owning object mid-destruction.
+                 // The body must not run in that case.
+                 if (is_unwinding_) {
+                     return std::move(sink);
+                 }
                  FiberSuspendContext suspend_context(sink, this);
 
                  for (;;) {
@@ -104,11 +128,13 @@ CoroutineImpl::CoroutineImpl(cortex::CoroutineBody body,
 CoroutineImpl::~CoroutineImpl() {
     // A started context (mid-body or parked) must be resumed with the
     // unwinding flag set so the trampoline exits and the stack is released.
-    // A never-started context must NOT be resumed — that would execute the
-    // body during destruction; boost's ~fiber() unwinds it without entering
-    // the entry function. A finished one-shot leaves fiber_ empty.
+    // A never-started context must NOT execute the body during destruction:
+    // fcontext's ~fiber() unwinds it without entering the entry function,
+    // while ucontext's ~fiber() (sanitizer builds) enters it — the flag,
+    // set unconditionally here, makes the trampoline return immediately in
+    // that case. A finished one-shot leaves fiber_ empty.
+    is_unwinding_ = true;
     if (fiber_ && started_) {
-        is_unwinding_ = true;
         fiber_ = std::move(fiber_).resume();
     }
 }
