@@ -119,6 +119,41 @@ TEST(TinyFiberFuture, WaitIsStopAware) {
     EXPECT_TRUE(threw);
 }
 
+// Structured shutdown: even while the scheduler stops, a parent's scope does
+// not end before the children it spawned have finished — children may use the
+// parent's locals (a Mutex, captured references) until they exit.
+TEST(TinyFiberFuture, StopStillJoinsChildrenBeforeParentScopeEnds) {
+    std::vector<std::string> events;
+    auto scheduler = tf::Scheduler::Create([&] {
+        struct Scope {
+            std::vector<std::string>& events;
+            ~Scope() {
+                events.push_back("parent scope ended");
+            }
+        } scope {events};
+        auto child = tf::Spawn([&] {
+            try {
+                for (;;) {
+                    tf::Yield();
+                }
+            } catch (const tf::SchedulerStoppingError&) {
+                events.push_back("child stopped");
+                throw;
+            }
+        });
+        for (;;) {
+            tf::Yield();
+        }
+    });
+    scheduler->Step();
+    scheduler->Step();
+    scheduler->Stop();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+    EXPECT_EQ(events, (std::vector<std::string> {"child stopped", "parent scope ended"}));
+}
+
 TEST(TinyFiberFuture, DetachedFutureDoesNotJoin) {
     std::vector<int> order;
     tf::Scheduler::Run([&] {

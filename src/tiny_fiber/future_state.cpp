@@ -79,7 +79,13 @@ void AwaitState(FutureStateBase& state, bool cancellable) {
     }
     Scheduler& scheduler = RequireWaitingFiberScheduler(state);
     while (!state.ready) {
-        scheduler.ThrowIfInterrupted(cancellable);
+        // An interruptible wait (Wait/Get) ends on stop or cancellation. A
+        // join (a Future's destructor) keeps waiting: the child may still use
+        // the joining scope's locals, and it finishes promptly during a stop
+        // because every other suspension point throws then.
+        if (cancellable) {
+            scheduler.ThrowIfInterrupted(true);
+        }
         Register(state, scheduler, scheduler.PrepareWait());
         ExternalWaitScope external(scheduler, state.external);
         scheduler.ParkCurrent("Future::Wait", cancellable);

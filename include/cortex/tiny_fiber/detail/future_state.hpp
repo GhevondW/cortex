@@ -93,9 +93,10 @@ private:
 };
 
 // Parks the calling fiber until `state` is ready. Throws std::logic_error if
-// the caller is not a fiber of the state's scheduler, SchedulerStoppingError
-// once the scheduler is stopping, and (when `cancellable`) CancelledError if
-// the calling fiber is cancelled.
+// the caller is not a fiber of the state's scheduler. When `cancellable`, also
+// throws SchedulerStoppingError once the scheduler is stopping and
+// CancelledError if the calling fiber is cancelled; otherwise (a destructor's
+// join) it waits regardless.
 void AwaitState(FutureStateBase& state, bool cancellable);
 
 // Like AwaitState (cancellable), but gives up at `deadline`. Returns whether

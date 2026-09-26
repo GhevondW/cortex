@@ -142,8 +142,11 @@ protected:
 
 private:
     // A Future of a spawned fiber joins it on destruction, when that is
-    // possible: from a fiber of the same, non-stopping scheduler. Elsewhere
-    // (plain code, a destroyed scheduler) the fiber simply keeps running.
+    // possible: from a fiber of the same scheduler. Elsewhere (plain code, a
+    // destroyed scheduler) the fiber simply keeps running. The join also
+    // happens while the scheduler stops, so a child never outlives the scope
+    // that spawned it (it may be using that scope's locals); during a stop the
+    // child finishes promptly because every other suspension point throws.
     // A cancelled parent cancels the child before joining it, so cancellation
     // reaches the whole tree of fibers it spawned.
     void JoinOnDestroy() noexcept {
@@ -151,8 +154,7 @@ private:
             return;
         }
         Scheduler* scheduler = state_->LiveScheduler();
-        if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler || scheduler->GetCurrentFiber() == nullptr ||
-            scheduler->IsStopping()) {
+        if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler || scheduler->GetCurrentFiber() == nullptr) {
             return;
         }
         if (scheduler->GetCurrentFiber()->IsCancelRequested()) {
@@ -161,7 +163,7 @@ private:
         try {
             AwaitState(*state_, /*cancellable=*/false);
         } catch (...) {
-            // Stopping while joining: abandon the wait.
+            // Only std::bad_alloc can escape a join; a destructor must not throw.
         }
     }
 };
