@@ -171,6 +171,7 @@ Cortex and workers complement each other: workers for parallel number crunching 
 - **Return values of exports that run fibers are unreliable.** Under Asyncify such an export still finishes before JavaScript regains control, but the value it returns is a placeholder. Poll state through a separate export (as `drive()` does with `cortex_scheduler_last_status`), or write results to memory.
 - **Don't suspend inside a `catch` block.** Exception state is per thread, and all fibers share one thread.
 - **Deep recursion that suspends** needs Asyncify buffer space (`CORTEX_WASM_ASYNCIFY_STACK_SIZE`, 64 KB by default, about 16–24 bytes per frame, 2–3× that with `-fsanitize=address`) as well as C stack (`Scheduler::Config::default_stack_size`, 256 KB by default).
+- **Pump between frames, not once per frame.** One `RunFor()` slice per `requestAnimationFrame` wastes the rest of each frame: heavy work then takes several frames, and the page runs *slower* than the blocking version. `drive()` runs slices back to back between frames; if you drive a scheduler yourself, do the same.
 - **Don't call `Scheduler::Run()` in the browser.** It blocks until every fiber finishes, and nothing from JavaScript can arrive meanwhile: a fiber waiting on a `Promise` makes it throw `DeadlockError`. Use `Create()` + `drive()`.
 - **Debugging a hang:** name fibers with `tf::SetFiberName("loader")`. A deadlock report, or `Scheduler::DescribeFibers()`, then lists each fiber and what it is waiting in.
 

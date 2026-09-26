@@ -79,6 +79,14 @@ if(EMSCRIPTEN)
     add_dependencies(video_editor_assets video_editor_runtime)
 
     add_custom_target(video_editor DEPENDS video_editor_runtime video_editor_assets)
+
+    # The page's playback loop (Node, with a fake video and a fake engine):
+    # cooperative renders must finish between video frames, not one slice per
+    # frame.
+    if(CORTEX_BUILD_TESTS)
+        add_test(NAME video_editor_playback_test
+            COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/playback_test.mjs)
+    endif()
 endif()
 
 # --- Native unit tests ---

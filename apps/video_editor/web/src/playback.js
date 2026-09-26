@@ -12,6 +12,23 @@
 // and is playing, we drive off it (one callback per displayed video frame, so
 // the loop naturally drops frames it can't keep up with); otherwise rAF.
 
+// Cooperative engine: longest a slice of filtering may hold the main thread.
+// Slices run back to back between display ticks, so a frame's filtering uses
+// all the idle time instead of one slice per tick, and the browser still gets
+// the thread every few milliseconds to paint and handle input.
+const COOPERATIVE_SLICE_MS = 8;
+
+// Queue `callback` as a new macrotask (the same technique as js/cortex.mjs):
+// a MessageChannel message in browsers, setImmediate elsewhere.
+function makeMacrotaskQueue(callback) {
+    if (typeof setImmediate === "function") {
+        return { post: () => setImmediate(callback) };
+    }
+    const channel = new MessageChannel();
+    channel.port1.onmessage = callback;
+    return { post: () => channel.port2.postMessage(null) };
+}
+
 export class Playback {
     constructor({ client, canvas, onPosition }) {
         this._client = client;
@@ -27,14 +44,20 @@ export class Playback {
         // Phase 2 (cooperative engine) hooks — inert until enabled.
         this._cooperative = false;
         this._coopActive = false; // a cooperative render is in flight
+        this._coopQueued = false; // a newer frame arrived while it ran
         this._coopIndex = 0;
-        this._coopStallTicks = 0;
+        this._pumpQueued = false;
+        this._pump = makeMacrotaskQueue(() => {
+            this._pumpQueued = false;
+            this._pumpCooperative();
+        });
     }
 
     setProvider(provider) {
         this._provider = provider;
         this._dirty = true;
         this._coopActive = false;
+        this._coopQueued = false;
         // Re-kick scheduling. A pending requestVideoFrameCallback is bound to the
         // previous provider's <video>, which the caller is about to dispose — it
         // would never fire and the loop would stall (this is why opening a second
@@ -51,6 +74,7 @@ export class Playback {
     setCooperative(on) {
         this._cooperative = !!on;
         this._coopActive = false;  // restart cleanly on mode change
+        this._coopQueued = false;
         this._dirty = true;
     }
 
@@ -98,12 +122,10 @@ export class Playback {
         const p = this._provider;
         if (!p) { this._schedule(); return; }
 
-        const playing = p.playing;
-        const needRender = this._dirty || playing || this._coopActive;
-
+        const needRender = this._dirty || p.playing;
         if (needRender) {
             if (this._cooperative) {
-                this._renderCooperative(p);
+                this._requestCooperative(p);
             } else {
                 this._renderSync(p);
             }
@@ -120,40 +142,56 @@ export class Playback {
         this._dirty = false;
     }
 
-    // Cooperative path: a single frame's filtering is stepped across ticks via
-    // tiny_fiber so a heavy filter never blocks the main thread. We begin a new
-    // cooperative render when none is active, pump it within a time budget each
-    // tick, and only paint when it completes. A watchdog falls back to a sync
-    // render if a frame fails to converge.
-    _renderCooperative(p) {
-        const client = this._client;
-        if (!this._coopActive) {
-            this._coopIndex = p.produce(client);
-            client.beginCooperativeRender(this._coopIndex);
-            this._coopActive = true;
-            this._coopStallTicks = 0;
+    // Cooperative path: a frame's filtering runs in a tiny_fiber fiber whose
+    // filters call CheckPoint() once per row. It is pumped in short slices,
+    // back to back, between display ticks (_pumpCooperative), so heavy
+    // filtering never blocks the main thread for long and still finishes as
+    // soon as the synchronous path would. A frame that arrives while a render
+    // is running is rendered next; several such frames collapse into one.
+    _requestCooperative(p) {
+        this._dirty = false;
+        if (this._coopActive) {
+            this._coopQueued = true;
+            return;
         }
+        this._beginCooperative(p);
+    }
 
-        // Per-tick compute budget. ~12 ms uses most of a 60 fps frame while leaving
-        // headroom for the browser to paint and stay responsive. A bigger budget
-        // lets each frame's filtering finish in fewer ticks, keeping the cooperative
-        // path closer to the synchronous one on heavy blur (it is inherently a bit
-        // slower — it deliberately yields so the page never freezes).
-        const budgetMs = 12;
-        client.runCooperativeFor(budgetMs);
-        const done = client.cooperativeDone();
+    _beginCooperative(p) {
+        this._coopIndex = p.produce(this._client);
+        this._client.beginCooperativeRender(this._coopIndex);
+        this._coopActive = true;
+        this._coopQueued = false;
+        this._schedulePump();
+    }
 
-        if (done) {
-            this._paint(this._coopIndex);
-            this._coopActive = false;
-            this._dirty = false;
-        } else if (++this._coopStallTicks > 240) {
-            // ~4s without converging: fall back so the editor never wedges.
+    _schedulePump() {
+        if (!this._pumpQueued) {
+            this._pumpQueued = true;
+            this._pump.post();
+        }
+    }
+
+    _pumpCooperative() {
+        if (!this._coopActive) {
+            return; // cancelled: the mode or the source changed
+        }
+        const client = this._client;
+        try {
+            client.runCooperativeFor(COOPERATIVE_SLICE_MS);
+            if (!client.cooperativeDone()) {
+                this._schedulePump(); // let the browser in, then continue
+                return;
+            }
+        } catch (error) {
+            // Never leave the preview stuck: render this frame synchronously.
+            console.error("cooperative render failed; rendering synchronously", error);
             client.renderPreview(this._coopIndex);
-            this._paint(this._coopIndex);
-            this._coopActive = false;
-            this._dirty = false;
-            this._coopStallTicks = 0;
+        }
+        this._paint(this._coopIndex);
+        this._coopActive = false;
+        if (this._coopQueued && this._running && this._provider) {
+            this._beginCooperative(this._provider);
         }
     }
 
