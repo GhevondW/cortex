@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive C++ — Cortex</title>
+    <style>
+        :root {
+            --bg: #0f1220;
+            --panel: #181c30;
+            --panel-2: #1f2440;
+            --text: #e8eaf6;
+            --muted: #9aa0c3;
+            --accent: #7c8cff;
+            --good: #4ade80;
+            --warn: #fbbf24;
+            --bad: #f87171;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 1.5rem 1rem 3rem;
+        }
+
+        a {
+            color: var(--accent);
+        }
+
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 1.25rem;
+        }
+
+        header .back {
+            font-size: 0.9rem;
+            text-decoration: none;
+        }
+
+        h1 {
+            font-size: 1.9rem;
+            margin: 0.4rem 0 0.3rem;
+        }
+
+        .lead {
+            color: var(--muted);
+            max-width: 62rem;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 320px;
+            gap: 1rem;
+            align-items: start;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .card h2 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 0.6rem;
+        }
+
+        .viewer {
+            position: relative;
+        }
+
+        #view {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 8px;
+            background: #000;
+            cursor: zoom-in;
+            image-rendering: auto;
+        }
+
+        .progress {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 4px;
+            border-radius: 0 0 8px 8px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.35);
+        }
+
+        .progress > div {
+            height: 100%;
+            width: 0;
+            background: var(--accent);
+            transition: width 60ms linear;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem 1rem;
+            align-items: center;
+            margin-top: 0.8rem;
+        }
+
+        .segmented {
+            display: inline-flex;
+            background: var(--panel-2);
+            border-radius: 999px;
+            padding: 3px;
+        }
+
+        .segmented button {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .segmented button.active {
+            background: var(--accent);
+            color: #0b0e1c;
+            font-weight: 600;
+        }
+
+        .controls label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .controls input[type="range"] {
+            width: 140px;
+        }
+
+        button.action {
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 0.45rem 0.85rem;
+            border-radius: 8px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        button.action:hover:not(:disabled) {
+            border-color: var(--accent);
+        }
+
+        button.action:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 0.8rem;
+            padding: 0.55rem 0.8rem;
+            border-radius: 8px;
+            background: var(--panel-2);
+            font-size: 0.9rem;
+        }
+
+        .status.frozen {
+            background: rgba(248, 113, 113, 0.15);
+            color: var(--bad);
+        }
+
+        #pulse {
+            width: 100%;
+            height: 70px;
+            display: block;
+            background: var(--panel-2);
+            border-radius: 8px;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.6rem;
+        }
+
+        .metric {
+            background: var(--panel-2);
+            border-radius: 8px;
+            padding: 0.45rem 0.6rem;
+        }
+
+        .metric .value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric .label {
+            color: var(--muted);
+            font-size: 0.75rem;
+        }
+
+        .good {
+            color: var(--good);
+        }
+
+        .warn {
+            color: var(--warn);
+        }
+
+        .bad {
+            color: var(--bad);
+        }
+
+        #typing {
+            width: 100%;
+            margin-top: 0.6rem;
+            padding: 0.5rem 0.6rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            font: inherit;
+        }
+
+        pre {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        #fibers {
+            min-height: 7.5em;
+            color: #c7ccf2;
+        }
+
+        #log {
+            height: 180px;
+            overflow-y: auto;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+        }
+
+        #log div {
+            padding: 0.1rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        #log .warn {
+            color: var(--warn);
+        }
+
+        #log .error {
+            color: var(--bad);
+            white-space: pre-wrap;
+        }
+
+        .code {
+            background: #0b0e1c;
+            border-radius: 8px;
+            padding: 0.75rem;
+            overflow-x: auto;
+            color: #cfd5ff;
+        }
+
+        .code .c {
+            color: #7f89b8;
+        }
+
+        .explain {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .explain p {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <header>
+        <a class="back" href="examples_index.html">← All examples</a>
+        <h1>Responsive C++</h1>
+        <p class="lead">
+            A Mandelbrot explorer rendered by C++ compiled to WebAssembly. The renderer is ordinary C++ with one
+            <code>CheckPoint()</code> per row. Run as <strong>Cortex fibers</strong>, it shares the main thread
+            fairly: keep clicking, typing and watching the pulse while it works. Switch to
+            <strong>Plain call</strong> to run the very same function directly, and watch the page freeze.
+        </p>
+    </header>
+
+    <div class="layout">
+        <main>
+            <section class="card">
+                <div class="viewer">
+                    <canvas id="view" width="640" height="400" aria-label="Mandelbrot set"></canvas>
+                    <div class="progress"><div id="progress"></div></div>
+                </div>
+                <p class="hint">Click to zoom in · Shift-click or right-click to zoom out · clicking during a render
+                    cancels it.</p>
+
+                <div class="controls">
+                    <div class="segmented" role="group" aria-label="How to run the renderer">
+                        <button id="modeFibers" class="active">Cortex fibers</button>
+                        <button id="modePlain">Plain call</button>
+                    </div>
+                    <label>Detail <input id="detail" type="range" min="200" max="4000" step="100" value="800">
+                        <span id="detailValue">800</span></label>
+                    <button id="tour" class="action">▶ Tour</button>
+                    <button id="reset" class="action">Reset view</button>
+                    <button id="deadlock" class="action">Cause a deadlock</button>
+                </div>
+                <div id="status" class="status">Loading WebAssembly…</div>
+            </section>
+
+            <section class="card explain">
+                <div>
+                    <h2>The renderer: plain C++</h2>
+                    <pre class="code">void RenderRows(const View&amp; view, int y0, int y1, ...) {
+    for (int y = y0; y &lt; y1; ++y) {
+        for (int x = 0; x &lt; kWidth; ++x) {
+            <span class="c">// escape-time iteration for one pixel</span>
+        }
+        tf::CheckPoint(); <span class="c">// one check per row is plenty</span>
+    }
+}</pre>
+                    <p>In a fiber, <code>CheckPoint()</code> yields once its 2 ms slice is used up. Called
+                        directly, it does nothing, which is what "Plain call" does.</p>
+                </div>
+                <div>
+                    <h2>The controller: a fiber</h2>
+                    <pre class="code">for (const Command&amp; command : commands) { <span class="c">// Channel fed by clicks</span>
+    if (render) {
+        render-&gt;Cancel(); <span class="c">// stale view: stop its bands</span>
+        render.reset();
+    }
+    render.emplace(tf::Spawn([=] { RenderView(id, view); }));
+}</pre>
+                    <p>Each render spawns four band fibers and <code>WaitAll</code>s them. The palette is loaded
+                        with <code>cortex::web::Await(fetch(...))</code>, and the tour sleeps with
+                        <code>tf::SleepFor</code>. <code>js/cortex.mjs</code> drives it all in 8 ms slices.</p>
+                </div>
+            </section>
+        </main>
+
+        <aside>
+            <section class="card">
+                <h2>Is the page alive?</h2>
+                <canvas id="pulse" width="300" height="70" aria-hidden="true"></canvas>
+                <div class="metrics">
+                    <div class="metric">
+                        <div id="fps" class="value">–</div>
+                        <div class="label">frames per second</div>
+                    </div>
+                    <div class="metric">
+                        <div id="longest" class="value">–</div>
+                        <div class="label">longest frame, last 5 s</div>
+                    </div>
+                </div>
+                <input id="typing" placeholder="Type here while it renders…" autocomplete="off">
+            </section>
+
+            <section class="card">
+                <h2>Renders</h2>
+                <div class="metrics">
+                    <div class="metric">
+                        <div id="lastRender" class="value">–</div>
+                        <div class="label">last render</div>
+                    </div>
+                    <div class="metric">
+                        <div id="cancelled" class="value">0</div>
+                        <div class="label">cancelled renders</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Fibers right now</h2>
+                <pre id="fibers">–</pre>
+            </section>
+
+            <section class="card">
+                <h2>Log</h2>
+                <div id="log"></div>
+            </section>
+        </aside>
+    </div>
+</div>
+
+<script type="module">
+    import createModule from "./responsive_demo.js";
+    import { drive } from "./cortex.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const logBox = $("log");
+
+    function log(text, kind = "") {
+        const line = document.createElement("div");
+        if (kind) {
+            line.className = kind;
+        }
+        line.textContent = `${new Date().toLocaleTimeString()}  ${text}`;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function setStatus(text, frozen = false) {
+        $("status").textContent = text;
+        $("status").classList.toggle("frozen", frozen);
+    }
+
+    const Module = await createModule();
+    const W = Module._demo_width();
+    const H = Module._demo_height();
+    const canvas = $("view");
+    const ctx = canvas.getContext("2d");
+
+    const initialView = { cx: -0.6, cy: 0.0, scale: 3.2 };
+    let view = { ...initialView };
+    let iterations = 800;
+    let mode = "fibers";
+    let touring = false;
+    let cancelledCount = 0;
+
+    // --- Hooks the C++ side calls ------------------------------------------
+    Module.onLog = (text) => log(text);
+    Module.onRenderDone = (id, ms) => {
+        $("lastRender").textContent = `${ms.toFixed(0)} ms`;
+        $("lastRender").className = "value good";
+        setStatus(`Render #${id} took ${ms.toFixed(0)} ms, and the page never stopped responding.`);
+        log(`render #${id} finished in ${ms.toFixed(0)} ms`);
+    };
+    Module.onRenderCancelled = (id, rows) => {
+        cancelledCount++;
+        $("cancelled").textContent = String(cancelledCount);
+        log(`render #${id} cancelled after ${rows} of ${H} rows (Future::Cancel)`, "warn");
+    };
+    Module.onView = (cx, cy, scale, maxIter) => {
+        view = { cx, cy, scale };
+        setDetail(maxIter);
+    };
+
+    // --- Drive the fibers from the event loop -------------------------------
+    const scheduler = Module._demo_start();
+    drive(Module, scheduler, { budgetMs: 8 }).done.catch((error) => {
+        log(`the fibers stopped: ${error.message}`, "error");
+    });
+
+    function render() {
+        if (mode === "fibers") {
+            setStatus("Rendering in fibers: click, type, or watch the pulse meanwhile.");
+            Module._demo_render(view.cx, view.cy, view.scale, iterations);
+            return;
+        }
+        setStatus("Plain call: the page is frozen until C++ returns…", true);
+        // Let the browser show that message, then block the main thread.
+        requestAnimationFrame(() =>
+            setTimeout(() => {
+                const ms = Module._demo_render_plain(view.cx, view.cy, view.scale, iterations);
+                $("lastRender").textContent = `${ms.toFixed(0)} ms`;
+                $("lastRender").className = "value bad";
+                setStatus(`The plain call took ${ms.toFixed(0)} ms, with the page frozen the whole time.`, true);
+                log(`plain call: ${ms.toFixed(0)} ms with the page frozen`, "warn");
+            }, 0),
+        );
+    }
+
+    // --- Controls ------------------------------------------------------------
+    function setDetail(value) {
+        iterations = value;
+        $("detail").value = String(value);
+        $("detailValue").textContent = String(value);
+    }
+
+    function setTour(on) {
+        touring = on;
+        $("tour").textContent = on ? "■ Stop tour" : "▶ Tour";
+        Module._demo_tour(on ? 1 : 0);
+    }
+
+    function setMode(next) {
+        if (next === mode) {
+            return;
+        }
+        mode = next;
+        $("modeFibers").classList.toggle("active", mode === "fibers");
+        $("modePlain").classList.toggle("active", mode === "plain");
+        $("tour").disabled = mode === "plain";
+        if (mode === "plain" && touring) {
+            setTour(false);
+        }
+        log(mode === "fibers" ? "mode: Cortex fibers" : "mode: plain call (the same C++, no fiber)");
+        render();
+    }
+
+    function zoomAt(event, factor) {
+        const rect = canvas.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * W;
+        const y = ((event.clientY - rect.top) / rect.height) * H;
+        const step = view.scale / W;
+        view = {
+            cx: view.cx - view.scale / 2 + x * step,
+            cy: view.cy - (step * H) / 2 + y * step,
+            scale: view.scale * factor,
+        };
+        if (touring) {
+            setTour(false);
+        }
+        render();
+    }
+
+    canvas.addEventListener("click", (event) => zoomAt(event, event.shiftKey ? 2 : 0.5));
+    canvas.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        zoomAt(event, 2);
+    });
+    $("modeFibers").onclick = () => setMode("fibers");
+    $("modePlain").onclick = () => setMode("plain");
+    $("detail").oninput = () => ($("detailValue").textContent = $("detail").value);
+    $("detail").onchange = () => {
+        setDetail(Number($("detail").value));
+        render();
+    };
+    $("tour").onclick = () => setTour(!touring);
+    $("reset").onclick = () => {
+        if (touring) {
+            setTour(false);
+        }
+        view = { ...initialView };
+        render();
+    };
+    $("deadlock").onclick = () => {
+        $("deadlock").disabled = true;
+        log("starting a client and a server with a bug, on a second scheduler…");
+        drive(Module, Module._demo_start_deadlock())
+            .done.then(
+                () => log("…it finished?!"),
+                (error) => log(error.message, "error"),
+            )
+            .finally(() => ($("deadlock").disabled = false));
+    };
+
+    // --- Every frame: blit the pixels, measure responsiveness ------------------
+    const pulse = $("pulse").getContext("2d");
+    const frameTimes = [];
+    let lastFrame = performance.now();
+    let framesCounted = 0;
+    let fpsSince = lastFrame;
+
+    function drawPulse(now) {
+        const { width, height } = pulse.canvas;
+        pulse.clearRect(0, 0, width, height);
+        const t = now / 1000;
+        const x = ((Math.sin(t * 2.2) + 1) / 2) * (width - 24) + 12;
+        const y = height / 2 + Math.sin(t * 5.1) * (height / 2 - 12);
+        pulse.fillStyle = "#7c8cff";
+        pulse.beginPath();
+        pulse.arc(x, y, 10, 0, Math.PI * 2);
+        pulse.fill();
+    }
+
+    function frame(now) {
+        const dt = now - lastFrame;
+        lastFrame = now;
+        frameTimes.push([now, dt]);
+        while (frameTimes.length && now - frameTimes[0][0] > 5000) {
+            frameTimes.shift();
+        }
+        framesCounted++;
+        if (now - fpsSince >= 500) {
+            $("fps").textContent = String(Math.round((framesCounted * 1000) / (now - fpsSince)));
+            framesCounted = 0;
+            fpsSince = now;
+            const longest = Math.max(...frameTimes.map(([, d]) => d));
+            $("longest").textContent = `${longest.toFixed(0)} ms`;
+            $("longest").className = `value ${longest > 250 ? "bad" : longest > 50 ? "warn" : "good"}`;
+        }
+        drawPulse(now);
+
+        const plain = mode === "plain" ? 1 : 0;
+        const pixels = new Uint8ClampedArray(Module.HEAPU8.buffer, Module._demo_pixels(plain), W * H * 4);
+        ctx.putImageData(new ImageData(pixels, W, H), 0, 0);
+        $("progress").style.width = `${(Module._demo_rows_done(plain) / H) * 100}%`;
+        requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+
+    setInterval(() => {
+        $("fibers").textContent = Module.UTF8ToString(Module._demo_describe_fibers()) || "(none)";
+    }, 250);
+
+    log("WebAssembly loaded; fibers are driven by js/cortex.mjs");
+    render();
+</script>
+</body>
+</html>

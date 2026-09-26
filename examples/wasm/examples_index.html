@@ -121,6 +121,43 @@
         <p class="subtitle">Explore the power of stackful coroutines in WebAssembly</p>
 
         <div class="examples-grid">
+            <a href="responsive_demo.html" class="example-card">
+                <div class="example-icon">🌀</div>
+                <div class="example-title">Responsive C++</div>
+                <div class="example-description">
+                    A Mandelbrot explorer rendered by C++ fibers: time slicing with CheckPoint(),
+                    cancellation, channels, awaiting fetch(), timers and deadlock reports. Flip to
+                    "plain call" to run the same C++ directly and watch the page freeze.
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge recommended">🔥 Start here</span>
+                </div>
+            </a>
+
+            <a href="../video-editor/index.html" class="example-card">
+                <div class="example-icon">🎬</div>
+                <div class="example-title">Video Editor</div>
+                <div class="example-description">
+                    Open a local video and edit it while it plays: brightness, contrast, saturation and blur
+                    applied to every frame in C++. The cooperative engine keeps playback smooth.
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge recommended">🔥 Real app</span>
+                </div>
+            </a>
+
+            <a href="../algoviz/index.html" class="example-card">
+                <div class="example-icon">🌳</div>
+                <div class="example-title">AlgoViz</div>
+                <div class="example-description">
+                    Binary search trees and union-find, visualised step by step by coroutines that pause
+                    in the middle of the algorithm.
+                </div>
+                <div style="text-align: center;">
+                    <span class="badge">Visualization</span>
+                </div>
+            </a>
+
             <a href="index.html" class="example-card">
                 <div class="example-icon">📝</div>
                 <div class="example-title">Basic Coroutine Example</div>
@@ -161,18 +198,18 @@
                 <div class="example-icon">🧵</div>
                 <div class="example-title">Fiber Workflow Demo</div>
                 <div class="example-description">
-                    Cooperative multitasking in action! Watch multiple fibers (producer + workers)
-                    coordinate tasks using Mutex & ConditionVariable—all without threads!
+                    Cooperative multitasking in action! A producer fiber feeds a bounded Channel and
+                    worker fibers drain it, all on one thread, driven by js/cortex.mjs.
                 </div>
                 <div style="text-align: center;">
-                    <span class="badge recommended">✨ NEW - tiny_fiber</span>
+                    <span class="badge">tiny_fiber</span>
                 </div>
             </a>
         </div>
 
         <footer>
             <p>
-                Built with <a href="https://github.com/yourusername/cortex" target="_blank">Cortex</a> - 
+                Built with <a href="https://github.com/GhevondW/cortex" target="_blank">Cortex</a> - 
                 A C++ Stackful Coroutine Library
             </p>
         </footer>

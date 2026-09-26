@@ -2,13 +2,15 @@
  * @file fiber_workflow.cpp
  * @brief Demonstrates tiny_fiber cooperative multitasking in WebAssembly
  *
- * Uses Scheduler::Create() + Step() for clean WASM integration.
- * Each Step() runs one fiber until it yields, then returns to JS.
+ * A producer fiber feeds tasks into a bounded Channel; worker fibers take
+ * them out and "work" on them (sleeping, as if waiting on I/O). The page
+ * drives the scheduler with js/cortex.mjs's drive(), which runs the fibers
+ * between browser tasks and sleeps while they all sleep.
  */
 
-#include <cmath>
-#include <deque>
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -64,6 +66,7 @@ EM_JS(void, js_set_progress, (int completed, int total), {
 #endif
 
 namespace tf = cortex::tiny_fiber;
+using namespace std::chrono_literals;
 
 // Fiber visual states
 enum FiberVisualState {
@@ -80,15 +83,12 @@ struct Task {
     int complexity;
 };
 
-// Shared state
-std::deque<Task> task_queue;
-tf::Mutex* queue_mutex = nullptr;
-tf::ConditionVariable* queue_cv = nullptr;
-bool producer_done = false;
+// Room for three tasks: when it is full, the producer waits for a worker.
+constexpr std::size_t kQueueCapacity = 3;
+
 int tasks_completed = 0;
 int total_tasks = 0;
 
-// The scheduler instance for stepping
 std::unique_ptr<tf::Scheduler> g_scheduler;
 
 void log_msg(const std::string& msg) {
@@ -105,93 +105,62 @@ void update_fiber_state(int id, FiberVisualState state, int task_id = 0) {
 #endif
 }
 
-// Producer fiber
-void producer_fiber(int num_tasks) {
+// Producer fiber: creates the tasks and closes the queue when done.
+void producer_fiber(tf::Channel<Task>& queue, int num_tasks) {
+    tf::SetFiberName("producer");
     log_msg("Producer: Starting");
-    update_fiber_state(0, FIBER_WORKING, 0);
-    tf::Yield();
 
     for (int i = 1; i <= num_tasks; ++i) {
         Task task {i, ((i - 1) % 5) + 1};
 
         update_fiber_state(0, FIBER_WORKING, i);
         log_msg("Producer: Creating task #" + std::to_string(i));
-        tf::Yield();
+        tf::SleepFor(300ms);
 
-        {
-            auto guard = tf::Lock(*queue_mutex);
-            task_queue.push_back(task);
-#ifdef __EMSCRIPTEN__
-            js_add_task_to_queue(task.id, task.complexity);
-#endif
+        if (queue.Size() == queue.Capacity()) {
+            update_fiber_state(0, FIBER_WAITING, i);
+            log_msg("Producer: Queue full, waiting for a worker");
         }
-        queue_cv->NotifyOne();
-
+        queue.Send(task); // waits while the queue is full
+#ifdef __EMSCRIPTEN__
+        js_add_task_to_queue(task.id, task.complexity);
+#endif
         log_msg("Producer: Queued task #" + std::to_string(i));
-        tf::Yield();
     }
 
-    {
-        auto guard = tf::Lock(*queue_mutex);
-        producer_done = true;
-    }
-    queue_cv->NotifyAll();
-
+    queue.Close(); // workers finish once the queue is drained
     update_fiber_state(0, FIBER_DONE, 0);
     log_msg("Producer: Done");
 }
 
-// Worker fiber
-void worker_fiber(int worker_id) {
-    std::string name = "Worker " + std::to_string(worker_id);
+// Worker fiber: takes tasks until the queue is closed and empty.
+void worker_fiber(tf::Channel<Task>& queue, int worker_id) {
+    const std::string name = "Worker " + std::to_string(worker_id);
+    tf::SetFiberName(name);
     log_msg(name + ": Ready");
-    update_fiber_state(worker_id, FIBER_IDLE, 0);
-    tf::Yield();
 
     while (true) {
-        Task task {0, 0};
-        bool got_task = false;
-
-        {
-            update_fiber_state(worker_id, FIBER_WAITING, 0);
-            auto guard = tf::Lock(*queue_mutex);
-
-            queue_cv->Wait(guard, [&] {
-                return !task_queue.empty() || producer_done;
-            });
-
-            if (!task_queue.empty()) {
-                task = task_queue.front();
-                task_queue.pop_front();
-                got_task = true;
-#ifdef __EMSCRIPTEN__
-                js_remove_task_from_queue(task.id);
-#endif
-            } else if (producer_done) {
-                break;
-            }
+        update_fiber_state(worker_id, FIBER_WAITING, 0);
+        const std::optional<Task> task = queue.Receive(); // waits while empty
+        if (!task) {
+            break; // closed and drained
         }
-
-        if (got_task) {
-            update_fiber_state(worker_id, FIBER_WORKING, task.id);
-            log_msg(name + ": Processing #" + std::to_string(task.id));
-
-            // Simulate work - more yields for higher complexity
-            // Each complexity unit = 3 yields for visible work time
-            for (int i = 0; i < task.complexity * 3; ++i) {
-                tf::Yield();
-            }
-
-            tasks_completed++;
 #ifdef __EMSCRIPTEN__
-            js_task_completed(task.id, worker_id);
-            js_set_progress(tasks_completed, total_tasks);
+        js_remove_task_from_queue(task->id);
 #endif
+        update_fiber_state(worker_id, FIBER_WORKING, task->id);
+        log_msg(name + ": Processing #" + std::to_string(task->id));
 
-            log_msg(name + ": Done #" + std::to_string(task.id));
-            update_fiber_state(worker_id, FIBER_IDLE, 0);
-            tf::Yield();
-        }
+        // Simulated work: a wait (like network or disk I/O) that parks only
+        // this fiber; the others and the page keep going.
+        tf::SleepFor(task->complexity * 400ms);
+
+        tasks_completed++;
+#ifdef __EMSCRIPTEN__
+        js_task_completed(task->id, worker_id);
+        js_set_progress(tasks_completed, total_tasks);
+#endif
+        log_msg(name + ": Done #" + std::to_string(task->id));
     }
 
     update_fiber_state(worker_id, FIBER_DONE, 0);
@@ -202,10 +171,8 @@ void worker_fiber(int worker_id) {
 
 extern "C" {
 
-CORTEX_API void start_workflow(int num_tasks, int num_workers) {
-    // Reset state
-    task_queue.clear();
-    producer_done = false;
+// Creates the workflow's scheduler; the page drives it with js/cortex.mjs.
+CORTEX_API void* start_workflow(int num_tasks, int num_workers) {
     tasks_completed = 0;
     total_tasks = num_tasks;
 
@@ -216,52 +183,30 @@ CORTEX_API void start_workflow(int num_tasks, int num_workers) {
     js_set_progress(0, total_tasks);
 #endif
 
-    // Create scheduler for manual stepping
     g_scheduler = tf::Scheduler::Create([num_tasks, num_workers] {
-        // Create sync primitives on fiber stack
-        tf::Mutex mutex;
-        tf::ConditionVariable cv;
-        queue_mutex = &mutex;
-        queue_cv = &cv;
+        tf::Channel<Task> queue(kQueueCapacity);
 
-        // Spawn producer
-        auto producer = tf::Spawn([num_tasks] {
-            producer_fiber(num_tasks);
+        auto producer = tf::Spawn([&queue, num_tasks] {
+            producer_fiber(queue, num_tasks);
         });
-
-        // Spawn workers
         std::vector<tf::Future<void>> workers;
         for (int i = 1; i <= num_workers; ++i) {
-            workers.push_back(tf::Spawn([i] {
-                worker_fiber(i);
+            workers.push_back(tf::Spawn([&queue, i] {
+                worker_fiber(queue, i);
             }));
         }
 
-        // Wait for all
-        producer.Wait();
-        for (auto& w : workers) {
-            w.Wait();
+        producer.Get();
+        for (auto& worker : workers) {
+            worker.Get();
         }
-
-        queue_mutex = nullptr;
-        queue_cv = nullptr;
 
         log_msg("=== Workflow Complete! ===");
 #ifdef __EMSCRIPTEN__
         js_workflow_complete();
 #endif
     });
-}
-
-CORTEX_API int step_workflow() {
-    if (g_scheduler && !g_scheduler->IsDone()) {
-        return g_scheduler->Step() ? 1 : 0;
-    }
-    return 0;
-}
-
-CORTEX_API int is_workflow_done() {
-    return (!g_scheduler || g_scheduler->IsDone()) ? 1 : 0;
+    return g_scheduler.get();
 }
 
 } // extern "C"
