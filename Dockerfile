@@ -36,7 +36,12 @@ WORKDIR /opt/emsdk
 RUN ./emsdk install latest \
     && ./emsdk activate latest
 
-# 3. Environment Setup
+# 3. System Boost.Context for the install/find_package packaging check
+#    (a separate layer so changing it does not rebuild the SDK layers above)
+RUN apt-get update && apt-get install -y libboost-context-dev \
+    && apt-get clean
+
+# 4. Environment Setup
 ENV EMSDK=/opt/emsdk
 ENV EM_CONFIG=/opt/emsdk/.emscripten
 ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"

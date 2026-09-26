@@ -26,6 +26,17 @@ services:
       ctest --test-dir build/wasm --output-on-failure
       "
 
+  # 2b. Packaging checks: consume cortex with add_subdirectory (FetchContent)
+  #     and, after installing it against system Boost, with find_package
+  test-package:
+    build: .
+    volumes: [".:/workspace"]
+    environment:
+      - CORTEX_PACKAGE_CMAKE_ARGS=-DCPM_SOURCE_CACHE=/workspace/build/cpm-cache
+    command: >
+      bash -c "tests/package/check_subdirectory.sh build/package-subdir &&
+               tests/package/check_install.sh build/package-install"
+
   # 3. Build Native Examples
   build-example-native:
     build: .

@@ -12,6 +12,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK="${1:-$ROOT/build/package-install}"
 
 rm -rf "$WORK"
+mkdir -p "$WORK"
+# Absolute: CMake resolves a relative CMAKE_PREFIX_PATH against the consumer's
+# source directory, not the shell's.
+WORK="$(cd "$WORK" && pwd)"
 # shellcheck disable=SC2086
 cmake -S "$ROOT" -B "$WORK/build" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \

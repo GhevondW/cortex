@@ -12,6 +12,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD="${1:-$ROOT/build/package-subdir}"
 
 rm -rf "$BUILD"
+mkdir -p "$BUILD"
+BUILD="$(cd "$BUILD" && pwd)"
 # shellcheck disable=SC2086
 cmake -S "$ROOT/tests/package/subdir" -B "$BUILD" -G Ninja \
     -DCORTEX_SOURCE_DIR="$ROOT" ${CORTEX_PACKAGE_CMAKE_ARGS:-}
