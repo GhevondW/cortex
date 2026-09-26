@@ -19,8 +19,11 @@ if(NOT EMSCRIPTEN)
             "BOOST_INCLUDE_LIBRARIES context"
         )
 
+        # Only Boost.Context's ucontext backend tells ASan about stack
+        # switches; with the default fcontext backend an exception thrown on a
+        # fiber stack makes ASan report false stack-buffer-underflows.
         if(CORTEX_USE_SANITIZERS)
-            list(APPEND BOOST_OPTIONS "BOOST_USE_ASAN ON")
+            list(APPEND BOOST_OPTIONS "BOOST_CONTEXT_IMPLEMENTATION ucontext")
         endif()
 
         CPMAddPackage(

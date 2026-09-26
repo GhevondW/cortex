@@ -161,8 +161,8 @@ private:
 
         auto* current = scheduler_->GetCurrentFiber();
         if (current) {
-            fiber->AddWaiter(current->GetId());
-            scheduler_->SuspendCurrent();
+            fiber->AddJoiner(scheduler_->PrepareWait());
+            scheduler_->ParkCurrent("Future::Wait", true);
         }
     }
 
@@ -267,8 +267,8 @@ private:
 
         auto* current = scheduler_->GetCurrentFiber();
         if (current) {
-            fiber->AddWaiter(current->GetId());
-            scheduler_->SuspendCurrent();
+            fiber->AddJoiner(scheduler_->PrepareWait());
+            scheduler_->ParkCurrent("Future::Wait", true);
         }
     }
 

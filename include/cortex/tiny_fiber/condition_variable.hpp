@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cortex/tiny_fiber/detail/fiber.hpp>
+#include <cortex/tiny_fiber/detail/wait_queue.hpp>
 #include <cortex/tiny_fiber/mutex.hpp>
-
-#include <deque>
 
 /**
  * @file condition_variable.hpp
@@ -60,9 +59,9 @@ public:
     void NotifyAll();
 
 private:
-    // Stored by ID, not pointer, so stale entries (from Stop() or fiber death)
-    // can be safely detected and skipped on notify.
-    std::deque<detail::Fiber::Id> waiters_;
+    // Stored as tokens (fiber id + wait epoch) so stale entries — from Stop(),
+    // fiber death, or a wait that already ended — are skipped on notify.
+    detail::WaitQueue waiters_;
 };
 
 } // namespace cortex::tiny_fiber

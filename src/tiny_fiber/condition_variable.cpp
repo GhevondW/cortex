@@ -24,7 +24,7 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
         throw std::logic_error("ConditionVariable::Wait() must be called from within a fiber");
     }
 
-    waiters_.push_back(current->GetId());
+    waiters_.Push(scheduler.PrepareWait());
 
     // Detach the guard from the mutex before unlocking so that, if any subsequent
     // step throws, the Guard destructor doesn't try to Unlock an unlocked mutex
@@ -33,7 +33,7 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
     guard.mutex_ = nullptr;
     mutex->Unlock();
 
-    scheduler.SuspendCurrent();
+    scheduler.ParkCurrent("ConditionVariable::Wait", true);
 
     if (scheduler.IsStopping()) {
         throw SchedulerStoppingError();
@@ -44,29 +44,11 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
 }
 
 void ConditionVariable::NotifyOne() {
-    auto& scheduler = Scheduler::Current();
-    // Skip stale entries (fibers that died or were force-scheduled).
-    while (!waiters_.empty()) {
-        auto id = waiters_.front();
-        waiters_.pop_front();
-        auto* waiter = scheduler.GetFiber(id);
-        if (waiter && waiter->IsSuspended()) {
-            scheduler.Schedule(waiter);
-            return;
-        }
-    }
+    waiters_.WakeOne(Scheduler::Current());
 }
 
 void ConditionVariable::NotifyAll() {
-    auto& scheduler = Scheduler::Current();
-    while (!waiters_.empty()) {
-        auto id = waiters_.front();
-        waiters_.pop_front();
-        auto* waiter = scheduler.GetFiber(id);
-        if (waiter && waiter->IsSuspended()) {
-            scheduler.Schedule(waiter);
-        }
-    }
+    waiters_.WakeAll(Scheduler::Current());
 }
 
 } // namespace cortex::tiny_fiber

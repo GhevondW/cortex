@@ -173,6 +173,8 @@ private:
     friend class Future;
     friend class Mutex;
     friend class ConditionVariable;
+    friend class detail::WaitQueue;
+    friend class detail::WaiterList;
     friend void Yield();
     friend bool YieldIfOthersReady();
 
@@ -188,11 +190,22 @@ private:
         return current_fiber_;
     }
 
-    // Wake a suspended fiber and enqueue it to run
-    void Schedule(detail::Fiber* fiber);
+    // Start a wait for the current fiber: returns the token to record in the
+    // queue the fiber is about to park on. Throws if no fiber is running.
+    detail::WaiterRef PrepareWait();
 
-    // Suspend current fiber
-    void SuspendCurrent();
+    // Park the current fiber until something wakes it. `reason` must be a
+    // string literal (reported by diagnostics); `cancellable` marks waits
+    // that cancellation may interrupt.
+    void ParkCurrent(const char* reason, bool cancellable);
+
+    // Wake the fiber `ref` names iff it is still parked in that same wait.
+    // Stale tokens (fiber gone, already woken, or parked in a later wait)
+    // are ignored. Returns whether a fiber was woken.
+    bool WakeIfWaiting(detail::WaiterRef ref);
+
+    // Unconditionally wake a parked fiber and enqueue it to run.
+    void WakeFiber(detail::Fiber* fiber);
 
     // Yield current fiber (put back in ready queue)
     void YieldCurrent();

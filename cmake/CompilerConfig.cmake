@@ -63,11 +63,14 @@ function(cortex_apply_sanitizers TARGET_NAME)
                 -fsanitize=undefined
             )
 
-            # Boost.Context requires these macros to be defined when using sanitizers
-            # to properly notify the sanitizer about stack switches.
-            target_compile_definitions(${TARGET_NAME} PUBLIC 
+            # Boost.Context only notifies ASan about stack switches in its
+            # ucontext backend (BOOST_USE_UCONTEXT), and only with
+            # BOOST_USE_ASAN defined. Without both, exceptions thrown on fiber
+            # stacks produce false stack-buffer-underflow reports.
+            target_compile_definitions(${TARGET_NAME} PUBLIC
                 BOOST_USE_ASAN
                 BOOST_USE_UBSAN
+                BOOST_USE_UCONTEXT
             )
         endif()
     endif()

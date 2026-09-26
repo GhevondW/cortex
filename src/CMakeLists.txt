@@ -13,6 +13,7 @@ set(CORTEX_TINY_FIBER_SRC
     tiny_fiber/yield.cpp
     tiny_fiber/mutex.cpp
     tiny_fiber/condition_variable.cpp
+    tiny_fiber/wait_queue.cpp
 )
 
 # exec sources (native only — requires OS threads)

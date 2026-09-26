@@ -3,11 +3,10 @@
 #include <cortex/base_coroutine.hpp>
 #include <cortex/coroutine_suspend_context.hpp>
 #include <cortex/memory_resource.hpp>
+#include <cortex/tiny_fiber/detail/wait_queue.hpp>
 
-#include <array>
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include <function2/function2.hpp>
 
@@ -30,7 +29,7 @@ enum class FiberState : std::uint8_t {
 // The user's function is stored and called from Continuation().
 class Fiber final : public BaseCoroutine {
 public:
-    using Id = std::uint64_t;
+    using Id = FiberId;
     // 64 bytes of inline storage: the Spawn() wrapper captures a shared_ptr
     // (16 bytes) plus the user functor, so the fu2 default of 16 bytes would
     // heap-allocate for every non-empty user lambda.
@@ -55,35 +54,54 @@ public:
         return state_ == FiberState::Suspended;
     }
 
+    [[nodiscard]] FiberState GetState() const noexcept {
+        return state_;
+    }
+
+    // Start a new wait: advances the epoch and returns a token for it. Record
+    // the token in the queue you are about to park on, then call Park().
+    [[nodiscard]] WaiterRef PrepareWait() noexcept {
+        return WaiterRef {id_, ++wait_epoch_};
+    }
+
+    [[nodiscard]] std::uint64_t GetWaitEpoch() const noexcept {
+        return wait_epoch_;
+    }
+
+    // What the fiber is parked in (for diagnostics); nullptr when not parked.
+    [[nodiscard]] const char* GetWaitReason() const noexcept {
+        return wait_reason_;
+    }
+
+    // Whether the current park may be interrupted by cancellation.
+    [[nodiscard]] bool IsCancellablePark() const noexcept {
+        return cancellable_park_;
+    }
+
     // Run this fiber (Ready -> Running, resumes coroutine execution)
     void Run();
 
     // Yield control back to the scheduler (Running -> Ready, suspends)
     void Yield();
 
-    // Park until woken by another fiber (Running -> Suspended, suspends)
-    void Park();
+    // Park until woken (Running -> Suspended, suspends). `reason` must be a
+    // string literal; it is reported by Scheduler diagnostics.
+    void Park(const char* reason, bool cancellable);
 
     // Wake a parked fiber (Suspended -> Ready)
     void Wake();
 
-    // Mark fiber as finished. The recorded waiters stay readable via
-    // ForEachWaiter until the fiber is destroyed.
+    // Mark fiber as finished.
     void Complete();
 
-    // Add the ID of a fiber that is waiting for this fiber to finish.
-    void AddWaiter(Id waiter_id);
+    // Register a fiber that waits for this fiber to finish.
+    void AddJoiner(WaiterRef waiter) {
+        joiners_.Push(waiter);
+    }
 
-    // Visit the IDs of fibers waiting on this one. IDs (not pointers) so
-    // callers can validate liveness via Scheduler::GetFiber.
-    template <typename F>
-    void ForEachWaiter(F&& func) const {
-        for (std::uint8_t i = 0; i < inline_waiter_count_; ++i) {
-            func(inline_waiters_[i]);
-        }
-        for (Id id : overflow_waiters_) {
-            func(id);
-        }
+    // Wake every registered joiner (called once the fiber finished).
+    void WakeJoiners(Scheduler& scheduler) {
+        joiners_.WakeAll(scheduler);
     }
 
 private:
@@ -97,11 +115,11 @@ private:
     FiberState state_ {FiberState::Ready};
     Body body_;
     CoroutineSuspendContext* suspend_ctx_ {nullptr};
-    // Waiter IDs. Almost always 0 or 1 (a Future's Get/Wait), so the first
-    // few live inline to avoid a heap allocation per join.
-    std::array<Id, 2> inline_waiters_ {};
-    std::uint8_t inline_waiter_count_ {0};
-    std::vector<Id> overflow_waiters_;
+    std::uint64_t wait_epoch_ {0};
+    const char* wait_reason_ {nullptr};
+    bool cancellable_park_ {false};
+    // Fibers waiting for this one to finish (a Future's Get/Wait).
+    WaiterList joiners_;
 };
 
 // Deleter for fibers placement-constructed in MemoryResource storage. Holds

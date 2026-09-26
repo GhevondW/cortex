@@ -89,7 +89,7 @@ void Scheduler::Stop() {
     // IDs on Complete(), so this is safe.
     for (auto& slot : fiber_slots_) {
         if (slot.fiber && slot.fiber->IsSuspended()) {
-            Schedule(slot.fiber.get());
+            WakeFiber(slot.fiber.get());
         }
     }
 }
@@ -131,15 +131,8 @@ bool Scheduler::Step() {
     }
 
     if (current_fiber_->IsDone()) {
-        // Resolve each recorded waiter via the fiber map and skip any that
-        // are gone or already runnable.
         current_fiber_->Complete();
-        current_fiber_->ForEachWaiter([this](detail::Fiber::Id id) {
-            auto* waiter = GetFiber(id);
-            if (waiter && waiter->IsSuspended()) {
-                Schedule(waiter);
-            }
-        });
+        current_fiber_->WakeJoiners(*this);
 
         pending_cleanup_.push_back(current_fiber_->GetId());
     }
@@ -206,19 +199,33 @@ detail::Fiber* Scheduler::GetFiber(detail::Fiber::Id id) {
     return nullptr;
 }
 
-void Scheduler::Schedule(detail::Fiber* fiber) {
-    if (fiber) {
-        fiber->Wake();
-        ready_queue_.push_back(fiber);
-    }
-}
-
-void Scheduler::SuspendCurrent() {
+detail::WaiterRef Scheduler::PrepareWait() {
     if (!current_fiber_) {
         throw std::logic_error("No fiber is currently running");
     }
+    return current_fiber_->PrepareWait();
+}
 
-    current_fiber_->Park();
+void Scheduler::ParkCurrent(const char* reason, bool cancellable) {
+    if (!current_fiber_) {
+        throw std::logic_error("No fiber is currently running");
+    }
+    current_fiber_->Park(reason, cancellable);
+}
+
+bool Scheduler::WakeIfWaiting(detail::WaiterRef ref) {
+    auto* fiber = GetFiber(ref.id);
+    if (!fiber || !fiber->IsSuspended() || fiber->GetWaitEpoch() != ref.epoch) {
+        return false;
+    }
+    WakeFiber(fiber);
+    return true;
+}
+
+void Scheduler::WakeFiber(detail::Fiber* fiber) {
+    assert(fiber && fiber->IsSuspended());
+    fiber->Wake();
+    ready_queue_.push_back(fiber);
 }
 
 void Scheduler::YieldCurrent() {

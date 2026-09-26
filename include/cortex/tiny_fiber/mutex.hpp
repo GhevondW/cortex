@@ -1,8 +1,7 @@
 #pragma once
 
 #include <cortex/tiny_fiber/detail/fiber.hpp>
-
-#include <deque>
+#include <cortex/tiny_fiber/detail/wait_queue.hpp>
 
 /**
  * @file mutex.hpp
@@ -79,12 +78,12 @@ public:
 private:
     friend class ConditionVariable;
 
-    // Waiters are stored by ID rather than pointer so a fiber that died (or was
-    // force-scheduled by Scheduler::Stop()) while still listed here is detected
-    // and skipped on the next Unlock — avoiding use-after-free of a stale Fiber*.
+    // Waiters are stored as tokens (fiber id + wait epoch) rather than
+    // pointers, so a fiber that died, or was woken by Scheduler::Stop() and
+    // is now waiting on something else, is skipped on the next Unlock.
     bool locked_ {false};
     detail::Fiber* owner_ {nullptr};
-    std::deque<detail::Fiber::Id> waiters_;
+    detail::WaitQueue waiters_;
 };
 
 /**

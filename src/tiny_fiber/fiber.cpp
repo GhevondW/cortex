@@ -29,15 +29,19 @@ void Fiber::Yield() {
     Suspend();
 }
 
-void Fiber::Park() {
+void Fiber::Park(const char* reason, bool cancellable) {
     assert(state_ == FiberState::Running);
     state_ = FiberState::Suspended;
+    wait_reason_ = reason;
+    cancellable_park_ = cancellable;
     Suspend();
 }
 
 void Fiber::Wake() {
     assert(state_ == FiberState::Suspended);
     state_ = FiberState::Ready;
+    wait_reason_ = nullptr;
+    cancellable_park_ = false;
 }
 
 void Fiber::Complete() {
@@ -50,19 +54,6 @@ void Fiber::Suspend() {
         throw std::logic_error("Cannot suspend: no suspend context available");
     }
     suspend_ctx_->Suspend();
-}
-
-void Fiber::AddWaiter(Id waiter_id) {
-    if (waiter_id == 0) {
-        return;
-    }
-
-    if (inline_waiter_count_ < inline_waiters_.size()) {
-        inline_waiters_[inline_waiter_count_] = waiter_id;
-        ++inline_waiter_count_;
-    } else {
-        overflow_waiters_.push_back(waiter_id);
-    }
 }
 
 } // namespace cortex::tiny_fiber::detail

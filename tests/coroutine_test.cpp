@@ -155,7 +155,9 @@ TEST(CortexCoroutineTest, MemoryResourceSupport) {
             [](cortex::CoroutineSuspendContext& ctx) {
                 ctx.Suspend();
             },
-            4096,
+            // Small, but big enough for ASan + Boost's ucontext backend
+            // (sanitizer builds), whose switch frames need more than 4 KB.
+            16384,
             tracker);
 
         EXPECT_GT(tracker->allocations, 0);
