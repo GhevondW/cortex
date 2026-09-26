@@ -61,7 +61,11 @@ target_include_directories(cortex PRIVATE
 # Consumers only need C++20 to use the public headers.
 target_compile_features(cortex PUBLIC cxx_std_20)
 
-target_link_libraries(cortex PUBLIC function2::function2)
+# function2 is header-only. Inside the build it comes from its CMake target;
+# an installed cortex ships the header under include/cortex/third_party (see
+# cmake/Install.cmake), so exported consumers need no function2 package.
+target_link_libraries(cortex PUBLIC $<BUILD_INTERFACE:function2::function2>)
+target_include_directories(cortex PUBLIC $<INSTALL_INTERFACE:include/cortex/third_party>)
 
 # Dependencies
 if(NOT EMSCRIPTEN)

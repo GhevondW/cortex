@@ -24,6 +24,21 @@ option(CORTEX_BUILD_EXAMPLES "Build examples" OFF)
 option(CORTEX_BUILD_APPS "Build applications (AlgoViz, etc.)" OFF)
 option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CORTEX_ENABLE_LTO "Enable link-time optimization for the cortex library" OFF)
+option(CORTEX_USE_SYSTEM_BOOST "Use an installed Boost.Context instead of fetching it" OFF)
+
+# Installing needs every dependency to be exportable. A CPM-fetched Boost is
+# not, so on native builds install rules default ON only with system Boost.
+if(PROJECT_IS_TOP_LEVEL AND (EMSCRIPTEN OR CORTEX_USE_SYSTEM_BOOST))
+    set(CORTEX_INSTALL_DEFAULT ON)
+else()
+    set(CORTEX_INSTALL_DEFAULT OFF)
+endif()
+option(CORTEX_INSTALL "Generate install rules and the cortex CMake package" ${CORTEX_INSTALL_DEFAULT})
+if(CORTEX_INSTALL AND NOT EMSCRIPTEN AND NOT CORTEX_USE_SYSTEM_BOOST)
+    message(FATAL_ERROR
+        "CORTEX_INSTALL=ON requires CORTEX_USE_SYSTEM_BOOST=ON on native builds: "
+        "a Boost fetched by CPM cannot be exported with the cortex package.")
+endif()
 
 # --- Module Path ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -36,6 +51,10 @@ include(AppRuntime)
 
 # --- Subdirectories ---
 add_subdirectory(src)
+
+if(CORTEX_INSTALL)
+    include(Install)
+endif()
 
 if(CORTEX_BUILD_TESTS)
     enable_testing()

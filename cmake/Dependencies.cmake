@@ -1,27 +1,36 @@
 include(cmake/CPM.cmake)
 
 # --- Boost (Native Only) ---
+# Only Boost.Context is needed. By default it is fetched with CPM; set
+# CORTEX_USE_SYSTEM_BOOST=ON to use an installed Boost instead (required for
+# `cmake --install`, since a fetched Boost cannot be exported).
+set(CORTEX_BOOST_MIN_VERSION 1.74)
 if(NOT EMSCRIPTEN)
-    message(STATUS "Native build detected: Fetching Boost.Context via CPM")
-    
-    set(BOOST_OPTIONS 
-        "BOOST_ENABLE_CMAKE ON" 
-        "BOOST_SKIP_INSTALL_RULES ON"
-        "BUILD_SHARED_LIBS OFF" 
-        "BOOST_INCLUDE_LIBRARIES context"
-    )
+    if(CORTEX_USE_SYSTEM_BOOST)
+        message(STATUS "Native build detected: using system Boost.Context")
+        find_package(Boost ${CORTEX_BOOST_MIN_VERSION} CONFIG REQUIRED COMPONENTS context)
+    else()
+        message(STATUS "Native build detected: Fetching Boost.Context via CPM")
 
-    if(CORTEX_USE_SANITIZERS)
-        list(APPEND BOOST_OPTIONS "BOOST_USE_ASAN ON")
+        set(BOOST_OPTIONS
+            "BOOST_ENABLE_CMAKE ON"
+            "BOOST_SKIP_INSTALL_RULES ON"
+            "BUILD_SHARED_LIBS OFF"
+            "BOOST_INCLUDE_LIBRARIES context"
+        )
+
+        if(CORTEX_USE_SANITIZERS)
+            list(APPEND BOOST_OPTIONS "BOOST_USE_ASAN ON")
+        endif()
+
+        CPMAddPackage(
+            NAME Boost
+            VERSION 1.86.0
+            URL https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
+            URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
+            OPTIONS ${BOOST_OPTIONS}
+        )
     endif()
-
-    CPMAddPackage(
-        NAME Boost
-        VERSION 1.86.0
-        URL https://github.com/boostorg/boost/releases/download/boost-1.86.0/boost-1.86.0-cmake.tar.xz
-        URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
-        OPTIONS ${BOOST_OPTIONS}
-    )
 else()
     message(STATUS "WASM build detected: Skipping Boost (Using Emscripten built-ins)")
 endif()
