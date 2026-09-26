@@ -11,6 +11,19 @@
 #include "cortex/memory_resource.hpp"
 #include <cortex/detail/forced_unwind.hpp>
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CORTEX_ASAN_ENABLED 1
+#endif
+#endif
+#if !defined(CORTEX_ASAN_ENABLED) && defined(__SANITIZE_ADDRESS__)
+#define CORTEX_ASAN_ENABLED 1
+#endif
+
+#ifdef CORTEX_ASAN_ENABLED
+#include <sanitizer/common_interface_defs.h>
+#endif
+
 namespace cortex::detail {
 
 namespace {
@@ -19,9 +32,9 @@ namespace {
 // stack into this buffer, so its size bounds how deep a coroutine may be when
 // it suspends. Measured: a small recursive function needs 16-24 bytes per
 // frame (2000 frames overflow 32 KB and fit in 48 KB), so the default 64 KB
-// allows a few thousand frames. Overflowing it aborts with
-// "RuntimeError: unreachable". Configure with the
-// CORTEX_WASM_ASYNCIFY_STACK_SIZE CMake cache variable.
+// allows a few thousand frames; with -fsanitize=address frames need 2-3x as
+// much. Overflowing it aborts with "RuntimeError: unreachable". Configure with
+// the CORTEX_WASM_ASYNCIFY_STACK_SIZE CMake cache variable.
 #ifndef CORTEX_WASM_ASYNCIFY_STACK_SIZE
 #define CORTEX_WASM_ASYNCIFY_STACK_SIZE 65536
 #endif
@@ -65,7 +78,9 @@ struct FiberSuspendContext final : cortex::CoroutineSuspendContext {
 
         running_fiber = back_f;
 
+        impl_->OnSwitchingOut(/*finished=*/false);
         emscripten_fiber_swap(current_f, back_f);
+        impl_->OnSwitchedIn();
 
         if (impl_->IsUnwinding()) {
             throw ForcedUnwind {};
@@ -118,6 +133,7 @@ CoroutineImpl::~CoroutineImpl() {
 void CoroutineImpl::FiberEntry(void* arg) {
     auto* self = static_cast<CoroutineImpl*>(arg);
     assert(self);
+    self->OnSwitchedIn();
 
     FiberSuspendContext suspend_context(self);
 
@@ -134,6 +150,7 @@ void CoroutineImpl::FiberEntry(void* arg) {
     // Exit fiber back to the context that resumed us
     emscripten_fiber_t* back_f = self->back_fiber_;
     running_fiber = back_f;
+    self->OnSwitchingOut(/*finished=*/true);
     emscripten_fiber_swap(&self->fiber_, back_f);
 }
 
@@ -175,17 +192,47 @@ void CoroutineImpl::Resume() {
 
     back_fiber_ = back_f;
     running_fiber = &fiber_;
+    switched_in_ = false;
 
+#ifdef CORTEX_ASAN_ENABLED
+    void* fake_stack = nullptr;
+    __sanitizer_start_switch_fiber(&fake_stack, c_stack_, stack_size_bytes_);
+#endif
     emscripten_fiber_swap(back_f, &fiber_);
+#ifdef CORTEX_ASAN_ENABLED
+    __sanitizer_finish_switch_fiber(fake_stack, nullptr, nullptr);
+#endif
 
     // Upon return back to Resume(), the running fiber is what it was before
     running_fiber = back_f;
+
+    if (!switched_in_) {
+        // emscripten_fiber_swap() does nothing once the runtime has exited or
+        // aborted. Without this check the caller would carry on as if the
+        // coroutine had run and suspended.
+        throw std::runtime_error("cortex: cannot switch to a coroutine: the Emscripten runtime has exited or aborted. "
+                                 "Keep it alive with -sEXIT_RUNTIME=0 (the default, except with -fsanitize=address).");
+    }
 
     if (exception_ptr_) {
         auto ex = exception_ptr_;
         exception_ptr_ = nullptr;
         std::rethrow_exception(ex);
     }
+}
+
+void CoroutineImpl::OnSwitchedIn() noexcept {
+    switched_in_ = true;
+#ifdef CORTEX_ASAN_ENABLED
+    __sanitizer_finish_switch_fiber(asan_fake_stack_, &back_stack_bottom_, &back_stack_size_);
+#endif
+}
+
+void CoroutineImpl::OnSwitchingOut([[maybe_unused]] bool finished) noexcept {
+#ifdef CORTEX_ASAN_ENABLED
+    // A null save slot tells ASan this stack is done, so it frees its state.
+    __sanitizer_start_switch_fiber(finished ? nullptr : &asan_fake_stack_, back_stack_bottom_, back_stack_size_);
+#endif
 }
 
 } // namespace cortex::detail

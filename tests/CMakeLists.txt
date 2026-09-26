@@ -65,16 +65,38 @@ if(EMSCRIPTEN)
     target_link_libraries(cortex_web_driver_test PRIVATE cortex::cortex)
     cortex_apply_warnings(cortex_web_driver_test)
     set_target_properties(cortex_web_driver_test PROPERTIES SUFFIX ".mjs")
+    # Modules driven from JavaScript must keep their runtime alive after
+    # start-up; -fsanitize=address would otherwise default EXIT_RUNTIME to 1.
     target_link_options(cortex_web_driver_test PRIVATE
         "-sMODULARIZE=1"
         "-sEXPORT_ES6=1"
         "-sENVIRONMENT=node"
         "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
         "-fexceptions"
     )
     add_test(NAME cortex_web_driver_test
         COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/web/driver_test.mjs
                 ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_driver_test.mjs
+                ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
+
+    # The same module with its runtime shut down after start-up: fibers can no
+    # longer switch, and the driver must say why instead of reporting a bogus
+    # deadlock.
+    add_executable(cortex_web_exit_runtime_test web/driver_test.cpp)
+    target_link_libraries(cortex_web_exit_runtime_test PRIVATE cortex::cortex)
+    set_target_properties(cortex_web_exit_runtime_test PROPERTIES SUFFIX ".mjs")
+    target_link_options(cortex_web_exit_runtime_test PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=1"
+        "-fexceptions"
+    )
+    add_test(NAME cortex_web_exit_runtime_test
+        COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/web/exit_runtime_test.mjs
+                ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_exit_runtime_test.mjs
                 ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
 
     # cortex::web::Await: fibers awaiting JavaScript promises.
@@ -87,6 +109,7 @@ if(EMSCRIPTEN)
         "-sEXPORT_ES6=1"
         "-sENVIRONMENT=node"
         "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
         "-sEXPORTED_RUNTIME_METHODS=UTF8ToString"
         "-fexceptions"
     )

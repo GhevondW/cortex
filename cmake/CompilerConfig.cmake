@@ -67,10 +67,12 @@ function(cortex_apply_sanitizers TARGET_NAME)
             # ucontext backend (BOOST_USE_UCONTEXT), and only with
             # BOOST_USE_ASAN defined. Without both, exceptions thrown on fiber
             # stacks produce false stack-buffer-underflow reports.
+            # BOOST_USE_UCONTEXT is defined empty, as Boost's own CMake does,
+            # so the two definitions agree instead of warning in every file.
             target_compile_definitions(${TARGET_NAME} PUBLIC
                 BOOST_USE_ASAN
                 BOOST_USE_UBSAN
-                BOOST_USE_UCONTEXT
+                BOOST_USE_UCONTEXT=
             )
         endif()
     endif()

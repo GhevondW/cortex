@@ -39,8 +39,20 @@ int Expected(int depth) {
 
 } // namespace
 
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CORTEX_TEST_ASAN 1
+#endif
+#endif
+
 TEST(WasmAsyncify, DeepRecursionCanSuspendAtTheBottom) {
+#ifdef CORTEX_TEST_ASAN
+    // AddressSanitizer gives every frame more locals to save: 1000 frames of
+    // Descend() fit in the default 64 KB buffer, 1500 do not.
+    constexpr int kDepth = 1000;
+#else
     constexpr int kDepth = 2000;
+#endif
     int result = -1;
     std::vector<int> trail;
     auto coroutine = cortex::Coroutine::Make(
