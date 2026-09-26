@@ -54,6 +54,24 @@ public:
     }
 
     /**
+     * @brief Ask the fiber to stop.
+     *
+     * The fiber throws CancelledError at its next cancellation point (Yield,
+     * CheckPoint, SleepFor/Until, Future::Wait/Get, ConditionVariable::Wait,
+     * Channel operations), and is woken if it is parked in one. A fiber that
+     * has not started never runs. Get()/Wait() then rethrow CancelledError
+     * unless the fiber caught it. No effect once the fiber finished.
+     */
+    void Cancel() noexcept {
+        if (!state_ || state_->ready || state_->fiber_id == 0) {
+            return;
+        }
+        if (Scheduler* scheduler = state_->LiveScheduler()) {
+            scheduler->CancelFiber(state_->fiber_id);
+        }
+    }
+
+    /**
      * @brief Stop tracking the fiber: the destructor no longer waits for it.
      *
      * The fiber keeps running. If it later fails, its exception is reported
@@ -89,6 +107,8 @@ private:
     // A Future of a spawned fiber joins it on destruction, when that is
     // possible: from a fiber of the same, non-stopping scheduler. Elsewhere
     // (plain code, a destroyed scheduler) the fiber simply keeps running.
+    // A cancelled parent cancels the child before joining it, so cancellation
+    // reaches the whole tree of fibers it spawned.
     void JoinOnDestroy() noexcept {
         if (!state_ || state_->ready || state_->fiber_id == 0) {
             return;
@@ -97,6 +117,9 @@ private:
         if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler ||
             scheduler->GetCurrentFiber() == nullptr || scheduler->IsStopping()) {
             return;
+        }
+        if (scheduler->GetCurrentFiber()->IsCancelRequested()) {
+            scheduler->CancelFiber(state_->fiber_id);
         }
         try {
             AwaitState(*state_, /*cancellable=*/false);

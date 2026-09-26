@@ -8,17 +8,13 @@ namespace cortex::tiny_fiber {
 
 void Yield() {
     auto& scheduler = Scheduler::Current();
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
-    }
+    scheduler.ThrowIfInterrupted(true);
     scheduler.YieldCurrent();
 }
 
 bool YieldIfOthersReady() {
     auto& scheduler = Scheduler::Current();
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
-    }
+    scheduler.ThrowIfInterrupted(true);
     if (scheduler.HasOtherReadyFibers()) {
         scheduler.YieldCurrent();
         return true;
@@ -32,6 +28,12 @@ void CheckPoint() {
         return; // plain code: nothing to yield to
     }
     scheduler->CheckPointCurrent();
+}
+
+bool IsCancellationRequested() {
+    Scheduler* scheduler = Scheduler::TryCurrent();
+    const detail::Fiber* fiber = scheduler != nullptr ? scheduler->GetCurrentFiber() : nullptr;
+    return fiber != nullptr && fiber->IsCancelRequested();
 }
 
 bool IsStopping() {

@@ -91,6 +91,16 @@ public:
         name_.assign(name);
     }
 
+    // Cancellation: once requested, the fiber throws CancelledError at its
+    // next cancellation point.
+    void RequestCancel() noexcept {
+        cancel_requested_ = true;
+    }
+
+    [[nodiscard]] bool IsCancelRequested() const noexcept {
+        return cancel_requested_;
+    }
+
     // Timer entry of the current sleep, if any.
     void ArmTimer(TimerMap::iterator entry) noexcept {
         timer_ = entry;
@@ -142,6 +152,7 @@ private:
     const char* wait_reason_ {nullptr};
     bool cancellable_park_ {false};
     bool timer_armed_ {false};
+    bool cancel_requested_ {false};
     TimerMap::iterator timer_ {};
     std::string name_;
 };

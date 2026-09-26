@@ -280,9 +280,14 @@ public:
     // Unconditionally wake a parked fiber and enqueue it to run.
     void WakeFiber(detail::Fiber* fiber);
 
-    // Throws SchedulerStoppingError once the scheduler is stopping. Every
-    // suspension point calls this before parking.
+    // Throws SchedulerStoppingError once the scheduler is stopping, and —
+    // when `cancellable` — CancelledError if the current fiber was cancelled.
+    // Every suspension point calls this before parking.
     void ThrowIfInterrupted(bool cancellable) const;
+
+    // Request cancellation of fiber `id`; wakes it if it is parked in a
+    // cancellable wait. Unknown or finished fibers are ignored.
+    void CancelFiber(detail::FiberId id);
 
     // An exception escaped a fiber nobody observes (a detached fiber or the
     // Create() entry). Delivered by the Step() that ran the fiber.

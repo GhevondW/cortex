@@ -15,9 +15,8 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
 
     auto& scheduler = Scheduler::Current();
 
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
-    }
+    // A cancellation point: stopping or a cancelled fiber throws here.
+    scheduler.ThrowIfInterrupted(true);
 
     auto* current = scheduler.GetCurrentFiber();
     if (!current) {
@@ -35,9 +34,9 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
 
     scheduler.ParkCurrent("ConditionVariable::Wait", true);
 
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
-    }
+    // Woken by Stop() or Cancel(): leave without the mutex (the guard is
+    // detached, so its destructor will not unlock).
+    scheduler.ThrowIfInterrupted(true);
 
     mutex->Lock();
     guard.mutex_ = mutex; // Re-attach: guard owns the mutex again.

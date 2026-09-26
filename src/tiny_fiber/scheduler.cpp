@@ -431,9 +431,23 @@ bool Scheduler::WakeIfWaiting(detail::WaiterRef ref) {
     return true;
 }
 
-void Scheduler::ThrowIfInterrupted([[maybe_unused]] bool cancellable) const {
+void Scheduler::ThrowIfInterrupted(bool cancellable) const {
     if (stopping_) {
         throw SchedulerStoppingError();
+    }
+    if (cancellable && current_fiber_ != nullptr && current_fiber_->IsCancelRequested()) {
+        throw CancelledError();
+    }
+}
+
+void Scheduler::CancelFiber(detail::FiberId id) {
+    detail::Fiber* fiber = GetFiber(id);
+    if (fiber == nullptr || fiber->IsDone()) {
+        return;
+    }
+    fiber->RequestCancel();
+    if (fiber->IsSuspended() && fiber->IsCancellablePark()) {
+        WakeFiber(fiber);
     }
 }
 

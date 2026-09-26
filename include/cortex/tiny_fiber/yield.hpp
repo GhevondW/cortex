@@ -18,6 +18,7 @@ namespace cortex::tiny_fiber {
  *
  * @throws std::logic_error if called outside of a fiber.
  * @throws SchedulerStoppingError if the scheduler is stopping.
+ * @throws CancelledError if the current fiber was cancelled.
  */
 void Yield();
 
@@ -29,6 +30,16 @@ void Yield();
  * @throws SchedulerStoppingError if the scheduler is stopping.
  */
 bool YieldIfOthersReady();
+
+/**
+ * @brief Whether the current fiber has been cancelled (Future::Cancel()).
+ *
+ * A cancelled fiber throws CancelledError at its next cancellation point
+ * (Yield, CheckPoint, SleepFor/Until, Future::Wait/Get,
+ * ConditionVariable::Wait, Channel operations); this lets long computations
+ * that have no such point bail out early. Always false outside of fibers.
+ */
+[[nodiscard]] bool IsCancellationRequested();
 
 /**
  * @brief Check if the current scheduler is stopping.
