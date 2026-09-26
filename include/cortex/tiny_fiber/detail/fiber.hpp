@@ -94,16 +94,6 @@ public:
     // Mark fiber as finished.
     void Complete();
 
-    // Register a fiber that waits for this fiber to finish.
-    void AddJoiner(WaiterRef waiter) {
-        joiners_.Push(waiter);
-    }
-
-    // Wake every registered joiner (called once the fiber finished).
-    void WakeJoiners(Scheduler& scheduler) {
-        joiners_.WakeAll(scheduler);
-    }
-
 private:
     void Continuation(CoroutineSuspendContext& ctx) override;
 
@@ -118,8 +108,6 @@ private:
     std::uint64_t wait_epoch_ {0};
     const char* wait_reason_ {nullptr};
     bool cancellable_park_ {false};
-    // Fibers waiting for this one to finish (a Future's Get/Wait).
-    WaiterList joiners_;
 };
 
 // Deleter for fibers placement-constructed in MemoryResource storage. Holds

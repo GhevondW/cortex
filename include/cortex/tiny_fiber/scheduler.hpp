@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <memory>
 #include <vector>
 
@@ -157,7 +158,39 @@ public:
     void Stop();
 
     /// @cond INTERNAL
+    // Internal hooks used by tiny_fiber's own primitives (futures, wait
+    // queues, sync primitives). Not part of the public API.
     detail::Fiber::Id SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size);
+
+    // Currently running fiber of this scheduler, or nullptr.
+    [[nodiscard]] detail::Fiber* GetCurrentFiber() noexcept {
+        return current_fiber_;
+    }
+
+    // Start a wait for the current fiber: returns the token to record in the
+    // queue the fiber is about to park on. Throws if no fiber is running.
+    detail::WaiterRef PrepareWait();
+
+    // Park the current fiber until something wakes it. `reason` must be a
+    // string literal (reported by diagnostics); `cancellable` marks waits
+    // that cancellation may interrupt.
+    void ParkCurrent(const char* reason, bool cancellable);
+
+    // Wake the fiber `ref` names iff it is still parked in that same wait.
+    // Stale tokens (fiber gone, already woken, or parked in a later wait)
+    // are ignored. Returns whether a fiber was woken.
+    bool WakeIfWaiting(detail::WaiterRef ref);
+
+    // Unconditionally wake a parked fiber and enqueue it to run.
+    void WakeFiber(detail::Fiber* fiber);
+
+    // Throws SchedulerStoppingError once the scheduler is stopping. Every
+    // suspension point calls this before parking.
+    void ThrowIfInterrupted(bool cancellable) const;
+
+    // An exception escaped a fiber nobody observes (a detached fiber or the
+    // Create() entry). Currently discarded.
+    void ReportUnhandledInternal(std::exception_ptr ex);
 
     // Liveness token. A Future holds this weakly so its destructor / Wait / Get
     // can detect that the scheduler has been destroyed and skip dereferencing a
@@ -184,28 +217,6 @@ private:
 
     // Get fiber by ID
     detail::Fiber* GetFiber(detail::Fiber::Id id);
-
-    // Get currently running fiber
-    detail::Fiber* GetCurrentFiber() {
-        return current_fiber_;
-    }
-
-    // Start a wait for the current fiber: returns the token to record in the
-    // queue the fiber is about to park on. Throws if no fiber is running.
-    detail::WaiterRef PrepareWait();
-
-    // Park the current fiber until something wakes it. `reason` must be a
-    // string literal (reported by diagnostics); `cancellable` marks waits
-    // that cancellation may interrupt.
-    void ParkCurrent(const char* reason, bool cancellable);
-
-    // Wake the fiber `ref` names iff it is still parked in that same wait.
-    // Stale tokens (fiber gone, already woken, or parked in a later wait)
-    // are ignored. Returns whether a fiber was woken.
-    bool WakeIfWaiting(detail::WaiterRef ref);
-
-    // Unconditionally wake a parked fiber and enqueue it to run.
-    void WakeFiber(detail::Fiber* fiber);
 
     // Yield current fiber (put back in ready queue)
     void YieldCurrent();
@@ -244,29 +255,10 @@ private:
     std::shared_ptr<void> alive_token_ {std::make_shared<char>()};
 };
 
-// Template implementations
-template <typename F>
-void Scheduler::Run(F&& entry) {
-    Run(std::forward<F>(entry), Config {});
-}
-
-template <typename F>
-void Scheduler::Run(F&& entry, Config config) {
-    Scheduler scheduler(std::move(config));
-    scheduler.SpawnFiberInternal(std::forward<F>(entry), scheduler.config_.default_stack_size);
-    scheduler.RunLoop();
-}
-
-template <typename F>
-std::unique_ptr<Scheduler> Scheduler::Create(F&& entry) {
-    return Create(std::forward<F>(entry), Config {});
-}
-
-template <typename F>
-std::unique_ptr<Scheduler> Scheduler::Create(F&& entry, Config config) {
-    std::unique_ptr<Scheduler> scheduler(new Scheduler(std::move(config)));
-    scheduler->SpawnFiberInternal(std::forward<F>(entry), scheduler->config_.default_stack_size);
-    return scheduler;
-}
-
 } // namespace cortex::tiny_fiber
+
+// Scheduler's template members need the fiber-body helpers declared in
+// future_state.hpp, which in turn needs the complete Scheduler class above.
+// Their definitions live at the end of that header; including it here keeps
+// either include order valid.
+#include <cortex/tiny_fiber/detail/future_state.hpp>

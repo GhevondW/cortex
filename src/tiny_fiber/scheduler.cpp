@@ -1,3 +1,4 @@
+#include <cortex/tiny_fiber/errors/scheduler_stopping_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
 #include <cassert>
@@ -72,8 +73,12 @@ Scheduler::~Scheduler() {
     }
 
     running_ = false;
-    // Clearing the slots triggers forced unwinding for any that didn't exit.
+    // Destroying the slots force-unwinds any fiber that did not exit. Move
+    // them out first so that wake-ups triggered while they unwind (e.g. a
+    // Future state being abandoned) find no fibers to wake.
+    auto slots = std::move(fiber_slots_);
     fiber_slots_.clear();
+    slots.clear();
 }
 
 void Scheduler::Stop() {
@@ -132,7 +137,6 @@ bool Scheduler::Step() {
 
     if (current_fiber_->IsDone()) {
         current_fiber_->Complete();
-        current_fiber_->WakeJoiners(*this);
 
         pending_cleanup_.push_back(current_fiber_->GetId());
     }
@@ -221,6 +225,14 @@ bool Scheduler::WakeIfWaiting(detail::WaiterRef ref) {
     WakeFiber(fiber);
     return true;
 }
+
+void Scheduler::ThrowIfInterrupted([[maybe_unused]] bool cancellable) const {
+    if (stopping_) {
+        throw SchedulerStoppingError();
+    }
+}
+
+void Scheduler::ReportUnhandledInternal([[maybe_unused]] std::exception_ptr ex) {}
 
 void Scheduler::WakeFiber(detail::Fiber* fiber) {
     assert(fiber && fiber->IsSuspended());

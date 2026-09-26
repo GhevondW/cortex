@@ -610,7 +610,7 @@ TEST(TinyFiberCleanupTest, SchedulerDestroyedImmediately) {
     // Test destroying scheduler without running any steps
     {
         auto scheduler = tf::Scheduler::Create([] {
-            tf::Spawn([] {
+            (void)tf::Spawn([] {
                 tf::Yield();
                 tf::Yield();
             });

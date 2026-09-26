@@ -50,3 +50,4 @@ cortex_add_test(cortex_tiny_fiber_nested_test tiny_fiber_nested_test.cpp)
 # SingleThreadExecutor relies on OS threads, so its source is native-only
 # (see src/CMakeLists.txt).
 cortex_add_test(cortex_exec_single_thread_executor_test single_thread_executor_test.cpp NATIVE_ONLY)
+cortex_add_test(cortex_tiny_fiber_future_test tiny_fiber_future_test.cpp)
