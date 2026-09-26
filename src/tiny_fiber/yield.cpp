@@ -26,6 +26,14 @@ bool YieldIfOthersReady() {
     return false;
 }
 
+void CheckPoint() {
+    Scheduler* scheduler = Scheduler::TryCurrent();
+    if (scheduler == nullptr || scheduler->GetCurrentFiber() == nullptr) {
+        return; // plain code: nothing to yield to
+    }
+    scheduler->CheckPointCurrent();
+}
+
 bool IsStopping() {
     return Scheduler::Current().IsStopping();
 }

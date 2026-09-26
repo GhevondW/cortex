@@ -148,6 +148,23 @@ void BenchFiberYield() {
     });
 }
 
+// CheckPoint() in a tight loop: the cost a hot loop pays for being
+// cooperative. The slice is long enough that it never actually yields.
+void BenchCheckPoint() {
+    RunBench("checkpoint (no yield due)", [] {
+        double ns = 0.0;
+        tf::Scheduler::Run(
+            [&ns] {
+                constexpr std::uint64_t kIterations = 10'000'000;
+                ns = TimeNsPerOp(kIterations, [] {
+                    tf::CheckPoint();
+                });
+            },
+            tf::Scheduler::Config {.time_slice = std::chrono::hours(1)});
+        return ns;
+    });
+}
+
 // Generator Next()/DetachValue() round trip.
 void BenchGenerator() {
     RunBench("generator_next (yield int)", [] {
@@ -189,6 +206,7 @@ int main(int argc, char** argv) {
     BenchFiberSpawnJoin("fiber_spawn_join (unpooled alloc)",
                         tf::Scheduler::Config {.memory_resource = cortex::GetDefaultMemoryResource()});
     BenchFiberYield();
+    BenchCheckPoint();
     BenchGenerator();
 
     return 0;

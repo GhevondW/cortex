@@ -157,3 +157,108 @@ TEST(TinyFiberTimer, DeadlockIsNotConfusedWithWaiting) {
     scheduler->RunFor(1ms);
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kWaiting); // the sleeper will wake
 }
+
+// --- CheckPoint: budget-aware yielding ----------------------------------------
+
+TEST(TinyFiberCheckPoint, NoOpOutsideFibers) {
+    EXPECT_NO_THROW(tf::CheckPoint());
+}
+
+TEST(TinyFiberCheckPoint, YieldsOnlyWhenSliceIsSpent) {
+    auto config = FakeClockConfig();
+    config.time_slice = 2ms;
+    int iterations = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            for (int i = 0; i < 1000; ++i) {
+                ++iterations;
+                if (i == 500) {
+                    g_now += 3ms; // this iteration used up the slice
+                }
+                tf::CheckPoint();
+            }
+        },
+        config);
+
+    scheduler->Step(); // runs until a checkpoint notices the spent slice
+    EXPECT_GE(iterations, 501);
+    EXPECT_LT(iterations, 1000);
+
+    while (scheduler->Step()) {
+    }
+    EXPECT_EQ(iterations, 1000);
+}
+
+TEST(TinyFiberCheckPoint, RespectsRunForDeadline) {
+    tf::Scheduler::Config config;
+    config.time_slice = 1h; // only the RunFor budget can end the slice
+    auto scheduler = tf::Scheduler::Create(
+        [] {
+            for (;;) {
+                tf::CheckPoint();
+            }
+        },
+        config);
+    const auto start = std::chrono::steady_clock::now();
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kRunnable);
+    EXPECT_LT(std::chrono::steady_clock::now() - start, 1s);
+    scheduler->Stop();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+}
+
+TEST(TinyFiberCheckPoint, ThrowsWhenStopping) {
+    bool stopped = false;
+    auto scheduler = tf::Scheduler::Create([&] {
+        try {
+            for (;;) {
+                tf::CheckPoint();
+                tf::Yield();
+            }
+        } catch (const tf::SchedulerStoppingError&) {
+            stopped = true;
+        }
+    });
+    scheduler->Step();
+    scheduler->Stop();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+    EXPECT_TRUE(stopped);
+}
+
+TEST(TinyFiberCheckPoint, SameFunctionRunsSyncAndCooperative) {
+    auto work = [] {
+        long sum = 0;
+        for (int i = 0; i < 100000; ++i) {
+            sum += i;
+            tf::CheckPoint();
+        }
+        return sum;
+    };
+    const long sync = work(); // plain call: CheckPoint is a no-op
+    EXPECT_EQ(tf::Scheduler::Run(work), sync);
+}
+
+TEST(TinyFiberCheckPoint, YieldsTheInnermostFiber) {
+    int inner_steps = 0;
+    bool outer_finished = false;
+    tf::Scheduler::Run([&] {
+        tf::Scheduler::Config config;
+        config.time_slice = 0ms; // every checkpoint yields
+        auto inner = tf::Scheduler::Create(
+            [] {
+                for (int i = 0; i < 3; ++i) {
+                    tf::CheckPoint();
+                }
+            },
+            config);
+        while (inner->Step()) {
+            ++inner_steps;
+        }
+        outer_finished = true;
+    });
+    EXPECT_GE(inner_steps, 3);
+    EXPECT_TRUE(outer_finished);
+}

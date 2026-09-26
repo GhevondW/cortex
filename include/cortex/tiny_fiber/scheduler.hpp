@@ -79,6 +79,9 @@ public:
         /// Source of time for timers and budgets. Replace it to control time
         /// (e.g. in tests); blocking Run() assumes it advances in real time.
         TimePoint (*clock)() = &Clock::now;
+        /// How long a fiber may run before CheckPoint() yields it (the slice
+        /// also ends at the deadline of RunFor()/RunUntil()).
+        Duration time_slice = std::chrono::milliseconds(2);
     };
 
     /**
@@ -288,6 +291,9 @@ public:
     // Park the current fiber until `deadline` (SleepFor/SleepUntil).
     void SleepUntilInternal(TimePoint deadline);
 
+    // tf::CheckPoint() for the current fiber: yield iff its slice is spent.
+    void CheckPointCurrent();
+
     // Liveness token. A Future holds this weakly so its destructor / Wait / Get
     // can detect that the scheduler has been destroyed and skip dereferencing a
     // dangling pointer (a Future may legally outlive its scheduler).
@@ -368,6 +374,17 @@ private:
     detail::TimerMap timers_;
     // Deadline of the RunFor()/RunUntil() in progress (max when none).
     TimePoint run_deadline_ {TimePoint::max()};
+
+    // CheckPoint() state. A slice starts with the first CheckPoint() after a
+    // fiber is resumed (identified by step_count_). The clock is read only
+    // every checkpoint_stride_ calls; the stride adapts so a cheap loop reads
+    // the clock rarely while an expensive one still yields on time.
+    std::uint64_t step_count_ {0};
+    std::uint64_t checkpoint_slice_ {0};
+    std::uint32_t checkpoint_countdown_ {0};
+    std::uint32_t checkpoint_stride_ {1};
+    TimePoint slice_deadline_ {};
+    TimePoint last_checkpoint_ {};
     // Owned liveness token; weak copies in Futures expire when this scheduler is
     // destroyed. Declared last so it outlives the other members during teardown.
     std::shared_ptr<void> alive_token_ {std::make_shared<char>()};

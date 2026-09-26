@@ -40,6 +40,20 @@ bool YieldIfOthersReady();
  */
 bool IsStopping();
 
+/**
+ * @brief Cooperative checkpoint for long-running code: yields only when the
+ *        current fiber has used up its time slice.
+ *
+ * Sprinkle it in hot loops. It is cheap — the clock is read only every so
+ * many calls, adaptively — and it is a no-op outside of fibers, so the same
+ * function works both when called directly and when run in a fiber. The
+ * slice is Scheduler::Config::time_slice, cut short by the deadline of a
+ * running RunFor()/RunUntil().
+ *
+ * @throws SchedulerStoppingError if the scheduler is stopping.
+ */
+void CheckPoint();
+
 namespace detail {
 void SleepForImpl(std::chrono::steady_clock::duration duration);
 void SleepUntilImpl(std::chrono::steady_clock::time_point deadline);

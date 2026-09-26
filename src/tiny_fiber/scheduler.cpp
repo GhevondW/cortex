@@ -2,6 +2,7 @@
 #include <cortex/tiny_fiber/errors/scheduler_stopping_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <new>
 #include <sstream>
@@ -141,6 +142,7 @@ bool Scheduler::Step() {
 
         current_fiber_ = ready_queue_.front();
         ready_queue_.pop_front();
+        ++step_count_;
 
         assert(current_fiber_);
 
@@ -227,6 +229,41 @@ void Scheduler::SleepUntilInternal(TimePoint deadline) {
     fiber->ArmTimer(timers_.emplace(deadline, fiber->GetId()));
     fiber->Park("SleepFor", /*cancellable=*/true);
     ThrowIfInterrupted(true);
+}
+
+void Scheduler::CheckPointCurrent() {
+    // Upper bound on calls between two clock reads.
+    constexpr std::uint32_t kMaxCheckpointStride = 4096;
+
+    ThrowIfInterrupted(true);
+
+    const bool new_slice = checkpoint_slice_ != step_count_;
+    if (!new_slice && --checkpoint_countdown_ > 0) {
+        return;
+    }
+
+    const TimePoint now = config_.clock();
+    if (new_slice) {
+        checkpoint_slice_ = step_count_;
+        const bool slice_overflows = config_.time_slice >= TimePoint::max() - now;
+        const TimePoint slice_end = slice_overflows ? TimePoint::max() : now + config_.time_slice;
+        slice_deadline_ = std::min(slice_end, run_deadline_);
+    } else {
+        // Aim for ~16 clock reads per slice.
+        const Duration since = now - last_checkpoint_;
+        const Duration target = config_.time_slice / 16;
+        if (since < target / 2 && checkpoint_stride_ < kMaxCheckpointStride) {
+            checkpoint_stride_ *= 2;
+        } else if (since > target * 2 && checkpoint_stride_ > 1) {
+            checkpoint_stride_ /= 2;
+        }
+    }
+    last_checkpoint_ = now;
+    checkpoint_countdown_ = checkpoint_stride_;
+
+    if (now >= slice_deadline_) {
+        YieldCurrent();
+    }
 }
 
 void Scheduler::WaitForWork() {
