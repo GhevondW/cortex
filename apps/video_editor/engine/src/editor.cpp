@@ -153,6 +153,12 @@ private:
     }
 
     void RebuildChain() {
+        // A cooperative Apply has fibers suspended inside the chain's filters:
+        // stop it before those filters are replaced under it.
+        if (runner_) {
+            runner_->Cancel();
+            runner_.reset();
+        }
         BuildFilterChain(chain_, LiveFilterParams {brightness_, contrast_, saturation_, blur_radius_});
     }
 

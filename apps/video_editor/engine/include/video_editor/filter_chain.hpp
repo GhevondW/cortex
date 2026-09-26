@@ -33,12 +33,15 @@ public:
     }
 
     // Reads `in`, writes the final result to `out`. May use an internal
-    // scratch buffer sized to match in/out dimensions.
+    // scratch buffer sized to match in/out dimensions. Filters yield
+    // mid-frame, so several fibers may be in Apply() at once (each gets its
+    // own intermediate buffer), but the filters must stay unchanged meanwhile.
     void Apply(const FrameBuffer& in, FrameBuffer& out) const;
 
 private:
     std::vector<std::unique_ptr<IFilter>> filters_;
     mutable FrameBuffer scratch_;
+    mutable bool scratch_in_use_ {false};
 };
 
 } // namespace cortex::video_editor

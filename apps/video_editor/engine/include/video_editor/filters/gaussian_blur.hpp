@@ -12,7 +12,8 @@ namespace cortex::video_editor::filters {
 //
 // Apply() does two passes through a scratch buffer (horizontal then vertical).
 // The scratch buffer is held as a mutable member so chained Apply() calls
-// don't reallocate; this is the heavy filter that the demo showcases.
+// don't reallocate (a second fiber blurring while the first is suspended
+// mid-frame gets its own); this is the heavy filter that the demo showcases.
 class GaussianBlurFilter final : public IFilter {
 public:
     explicit GaussianBlurFilter(int radius);
@@ -23,6 +24,7 @@ private:
     int radius_;
     std::vector<float> kernel_;
     mutable FrameBuffer scratch_;
+    mutable bool scratch_in_use_ {false};
 };
 
 } // namespace cortex::video_editor::filters

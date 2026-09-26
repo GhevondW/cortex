@@ -12,10 +12,12 @@ namespace cortex::video_editor {
 
 class Pipeline;
 
-// Cooperative runner backed by tiny_fiber. Spawns N worker fibers; each owns
-// a slice of the frame index range and calls tf::Yield() after every frame so
-// JS gets a turn between work units. The runner is driven by repeated Step()
-// calls from JS (typically once per requestAnimationFrame).
+// Cooperative runner backed by tiny_fiber. Spawns N worker fibers; each takes
+// the next frame index and calls tf::Yield() after every frame so JS gets a
+// turn between work units. The filters also yield mid-frame (CheckPoint() per
+// row), so workers interleave inside the same FilterChain; the chain gives
+// each concurrent Apply() its own scratch buffers. The runner is driven by
+// repeated Step() calls from JS (typically once per requestAnimationFrame).
 //
 // On Cancel(): scheduler->Stop() signals all suspended fibers. They observe
 // IsStopping() at the next yield and throw SchedulerStoppingError, which the

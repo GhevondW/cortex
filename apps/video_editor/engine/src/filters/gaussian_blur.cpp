@@ -1,4 +1,5 @@
 #include <video_editor/filters/gaussian_blur.hpp>
+#include <video_editor/scratch_lease.hpp>
 
 #include <cortex/tiny_fiber/yield.hpp>
 
@@ -110,12 +111,9 @@ void GaussianBlurFilter::Apply(const FrameBuffer& in, FrameBuffer& out) const {
         return;
     }
 
-    if (scratch_.Width() != in.Width() || scratch_.Height() != in.Height()) {
-        scratch_ = FrameBuffer(in.Width(), in.Height());
-    }
-
-    BlurHorizontal(in, scratch_, kernel_, radius_);
-    BlurVertical(scratch_, out, kernel_, radius_);
+    ScratchLease scratch(scratch_, scratch_in_use_, in.Width(), in.Height());
+    BlurHorizontal(in, scratch.Buffer(), kernel_, radius_);
+    BlurVertical(scratch.Buffer(), out, kernel_, radius_);
 }
 
 } // namespace cortex::video_editor::filters

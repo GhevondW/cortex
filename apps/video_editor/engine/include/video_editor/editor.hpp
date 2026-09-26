@@ -65,8 +65,11 @@ public:
     bool StepCooperative();
     [[nodiscard]] bool CooperativeRenderDone() const noexcept;
 
-    // Bulk apply across all frames. Cooperative uses tiny_fiber and yields to
-    // JS between frames; blocking runs to completion synchronously.
+    // Bulk apply across all frames. Cooperative uses tiny_fiber: its workers
+    // yield between frames and, via CheckPoint(), within them; blocking runs
+    // to completion synchronously. Changing a filter parameter stops an
+    // in-flight cooperative apply (without a listener callback) the next time
+    // the chain is rebuilt (RenderPreview() or a new apply).
     void StartCooperativeApply(IProgressListener& listener);
     void RunBlockingApply(IProgressListener& listener);
 
