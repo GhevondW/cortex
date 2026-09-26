@@ -48,25 +48,25 @@ jobs:
             !build/**/_deps
           retention-days: 7
 
-  # Memory leak check with Valgrind
+  # Memory errors and leaks. Valgrind cannot follow Boost.Context's stack
+  # switches (it reports every fiber switch), so use AddressSanitizer with
+  # LeakSanitizer and stack-use-after-return detection, which the per-PR
+  # sanitizer job leaves off.
   memory-check:
-    name: Memory Leak Check
+    name: Memory Check (ASan + LSan, use-after-return)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Run tests with Valgrind
+
+      - name: Run tests with sanitizers
         run: |
-          docker compose run --rm test-native bash -c "
-            apt-get update && apt-get install -y valgrind &&
-            cmake -B build/native -DCORTEX_BUILD_TESTS=ON &&
-            cmake --build build/native &&
-            valgrind --leak-check=full --error-exitcode=1 \
-              build/native/tests/cortex_tests
-          "
+          docker compose run --rm \
+            -e CORTEX_USE_SANITIZERS=ON \
+            -e ASAN_OPTIONS=detect_leaks=1:detect_stack_use_after_return=1 \
+            test-native
 
   # Code coverage
   coverage:
@@ -93,8 +93,8 @@ jobs:
         run: |
           docker compose run --rm test-native bash -c "
             apt-get update && apt-get install -y lcov &&
-            lcov --capture --directory build/coverage --output-file coverage.info &&
-            lcov --remove coverage.info '/usr/*' '*/tests/*' '*/examples/*' '*/build/*' --output-file coverage.info &&
+            lcov --capture --directory build/coverage --output-file coverage.info --ignore-errors mismatch &&
+            lcov --remove coverage.info '/usr/*' '*/tests/*' '*/examples/*' '*/build/*' --output-file coverage.info --ignore-errors unused &&
             lcov --list coverage.info
           "
       
@@ -110,6 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [extended-tests, memory-check, coverage]
     if: failure()
+    permissions:
+      issues: write
     
     steps:
       - name: Create issue on failure

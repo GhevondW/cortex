@@ -10,6 +10,15 @@ services:
                cmake --build build/native &&
                ctest --test-dir build/native --output-on-failure"
 
+  # 1b. The same tests built with Clang 19 (the image's default c++ is GCC 13)
+  test-native-clang:
+    build: .
+    volumes: [".:/workspace"]
+    command: >
+      bash -c "cmake -B build/native-clang -DCMAKE_C_COMPILER=clang-19 -DCMAKE_CXX_COMPILER=clang++-19 -DCORTEX_BUILD_TESTS=ON &&
+               cmake --build build/native-clang --parallel &&
+               ctest --test-dir build/native-clang --output-on-failure"
+
   # 2. Run Tests on WASM (Node.js Emulation)
   test-wasm:
     build: .
@@ -45,7 +54,9 @@ services:
       bash -c "cmake -B build/native -DCORTEX_BUILD_EXAMPLES=ON && 
                cmake --build build/native &&
                echo -e '\n--- Running binary tree example ---' &&
-               ./build/native/examples/binary_tree_example"
+               ./build/native/examples/binary_tree_example &&
+               echo -e '\n--- Running runtime tour ---' &&
+               ./build/native/examples/runtime_tour"
 
   # 4. Build and Run WASM Example
   build-example-wasm:
@@ -57,7 +68,8 @@ services:
       emcmake cmake -B build/wasm -G Ninja -DCORTEX_BUILD_EXAMPLES=ON &&
       cmake --build build/wasm &&
       cd build/wasm/examples &&
-      node wasm_example.js
+      node wasm_example.js &&
+      node /workspace/examples/wasm/responsive_demo_test.mjs responsive_demo.js cortex.mjs
       "
 
   # 5. Serve WASM Example in Browser
@@ -79,6 +91,7 @@ services:
         echo '' &&
         echo 'Available at:' &&
         echo '  → http://localhost:8080/examples/examples_index.html (All Examples)' &&
+        echo '  → http://localhost:8080/examples/responsive_demo.html (Responsive C++ - Start here!)' &&
         echo '  → http://localhost:8080/examples/sudoku_demo.html (Sudoku Solver - Must See!)' &&
         echo '  → http://localhost:8080/examples/particle_demo.html (Particle Demo - Recommended!)' &&
         echo '  → http://localhost:8080/examples/index.html (Basic Example)' &&

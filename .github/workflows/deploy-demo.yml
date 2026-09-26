@@ -25,7 +25,8 @@ jobs:
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 'latest'
+          # Keep in sync with EMSDK_VERSION in the Dockerfile (what CI tests).
+          version: '4.0.23'
 
       - name: Install Doxygen
         run: |
@@ -95,6 +96,13 @@ jobs:
           # instead of stopping silently on the first failing `test -f`.
           missing=0
           for f in \
+              deploy/examples/examples_index.html \
+              deploy/examples/responsive_demo.html \
+              deploy/examples/responsive_demo.js \
+              deploy/examples/responsive_demo.wasm \
+              deploy/examples/palette.json \
+              deploy/examples/cortex.mjs \
+              deploy/examples/fiber_demo.html \
               deploy/algoviz/index.html \
               deploy/algoviz/bst.html \
               deploy/algoviz/union_find.html \
