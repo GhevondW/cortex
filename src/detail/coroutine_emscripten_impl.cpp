@@ -15,7 +15,17 @@ namespace cortex::detail {
 
 namespace {
 
-static constexpr std::size_t kAsyncifyStackSize = 16384;
+// Suspending a coroutine saves the WebAssembly locals of every frame on its
+// stack into this buffer, so its size bounds how deep a coroutine may be when
+// it suspends. Measured: a small recursive function needs 16-24 bytes per
+// frame (2000 frames overflow 32 KB and fit in 48 KB), so the default 64 KB
+// allows a few thousand frames. Overflowing it aborts with
+// "RuntimeError: unreachable". Configure with the
+// CORTEX_WASM_ASYNCIFY_STACK_SIZE CMake cache variable.
+#ifndef CORTEX_WASM_ASYNCIFY_STACK_SIZE
+#define CORTEX_WASM_ASYNCIFY_STACK_SIZE 65536
+#endif
+static constexpr std::size_t kAsyncifyStackSize = CORTEX_WASM_ASYNCIFY_STACK_SIZE;
 static constexpr std::size_t kStackAlignment = 16;
 
 // Track the currently executing fiber

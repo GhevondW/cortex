@@ -1,8 +1,9 @@
-# cortex_add_test(<name> <source> [NATIVE_ONLY])
+# cortex_add_test(<name> <source> [NATIVE_ONLY | WASM_ONLY])
 #
 # Builds one GoogleTest executable. Natively its tests are registered with
 # gtest_discover_tests; under Emscripten it is linked to a .js file and run
-# with node. NATIVE_ONLY skips the test on WASM (e.g. it needs OS threads).
+# with node. NATIVE_ONLY skips the test on WASM (e.g. it needs OS threads);
+# WASM_ONLY skips it natively (it tests the Emscripten backend).
 set(CORTEX_WASM_TEST_LINK_OPTIONS
     "-sEXIT_RUNTIME=1"
     "-sALLOW_MEMORY_GROWTH=1"
@@ -17,8 +18,8 @@ if(NOT EMSCRIPTEN)
 endif()
 
 function(cortex_add_test NAME SOURCE)
-    cmake_parse_arguments(ARG "NATIVE_ONLY" "" "" ${ARGN})
-    if(EMSCRIPTEN AND ARG_NATIVE_ONLY)
+    cmake_parse_arguments(ARG "NATIVE_ONLY;WASM_ONLY" "" "" ${ARGN})
+    if((EMSCRIPTEN AND ARG_NATIVE_ONLY) OR (NOT EMSCRIPTEN AND ARG_WASM_ONLY))
         return()
     endif()
 
@@ -54,3 +55,4 @@ cortex_add_test(cortex_tiny_fiber_future_test tiny_fiber_future_test.cpp)
 cortex_add_test(cortex_tiny_fiber_errors_test tiny_fiber_errors_test.cpp)
 cortex_add_test(cortex_guarded_stack_test guarded_stack_test.cpp NATIVE_ONLY)
 cortex_add_test(cortex_tiny_fiber_timer_test tiny_fiber_timer_test.cpp)
+cortex_add_test(cortex_wasm_asyncify_test wasm_asyncify_test.cpp WASM_ONLY)

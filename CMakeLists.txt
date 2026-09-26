@@ -25,6 +25,8 @@ option(CORTEX_BUILD_APPS "Build applications (AlgoViz, etc.)" OFF)
 option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CORTEX_ENABLE_LTO "Enable link-time optimization for the cortex library" OFF)
 option(CORTEX_BUILD_EXPERIMENTAL "Build unfinished experimental modules (experimental/)" OFF)
+set(CORTEX_WASM_ASYNCIFY_STACK_SIZE 65536 CACHE STRING
+    "WASM only: bytes of Asyncify buffer per coroutine. Suspending saves the locals of every frame on the coroutine's stack here, so it bounds how deep a coroutine may be when it suspends.")
 option(CORTEX_USE_SYSTEM_BOOST "Use an installed Boost.Context instead of fetching it" OFF)
 
 # Installing needs every dependency to be exportable. A CPM-fetched Boost is

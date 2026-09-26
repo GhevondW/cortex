@@ -58,6 +58,8 @@ target_include_directories(cortex PUBLIC $<INSTALL_INTERFACE:include/cortex/thir
 # Dependencies
 if(NOT EMSCRIPTEN)
     target_link_libraries(cortex PUBLIC Boost::context)
+else()
+    target_compile_definitions(cortex PRIVATE CORTEX_WASM_ASYNCIFY_STACK_SIZE=${CORTEX_WASM_ASYNCIFY_STACK_SIZE})
 endif()
 
 # Apply Modular Configuration
