@@ -24,6 +24,7 @@ option(CORTEX_BUILD_EXAMPLES "Build examples" OFF)
 option(CORTEX_BUILD_APPS "Build applications (AlgoViz, etc.)" OFF)
 option(CORTEX_USE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
 option(CORTEX_ENABLE_LTO "Enable link-time optimization for the cortex library" OFF)
+option(CORTEX_BUILD_EXPERIMENTAL "Build unfinished experimental modules (experimental/)" OFF)
 option(CORTEX_USE_SYSTEM_BOOST "Use an installed Boost.Context instead of fetching it" OFF)
 
 # Installing needs every dependency to be exportable. A CPM-fetched Boost is
@@ -59,6 +60,10 @@ endif()
 if(CORTEX_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(CORTEX_BUILD_EXPERIMENTAL)
+    add_subdirectory(experimental)
 endif()
 
 if(CORTEX_BUILD_BENCHMARKS)

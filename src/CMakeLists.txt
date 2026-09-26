@@ -15,24 +15,10 @@ set(CORTEX_TINY_FIBER_SRC
     tiny_fiber/condition_variable.cpp
 )
 
-# async sources (native only — requires OS threads)
+# exec sources (native only — requires OS threads)
 if(NOT EMSCRIPTEN)
     set(CORTEX_EXEC_SRC
         exec/single_thread_executor.cpp
-    )
-
-    set(CORTEX_ASYNC_SRC
-        async/runtime.cpp
-        async/executor.cpp
-        async/future.cpp
-        async/spawn.cpp
-        async/sync/mutex.cpp
-        async/sync/shared_mutex.cpp
-        async/sync/condition_variable.cpp
-        async/sync/baton.cpp
-        async/sync/semaphore.cpp
-        async/sync/wait_group.cpp
-        async/sync/event.cpp
     )
 endif()
 
@@ -45,7 +31,6 @@ target_sources(cortex
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
         ${CORTEX_EXEC_SRC}
-        ${CORTEX_ASYNC_SRC}
 )
 
 # Includes
