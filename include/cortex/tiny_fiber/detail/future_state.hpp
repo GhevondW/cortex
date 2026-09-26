@@ -96,7 +96,8 @@ private:
 // the caller is not a fiber of the state's scheduler. When `cancellable`, also
 // throws SchedulerStoppingError once the scheduler is stopping and
 // CancelledError if the calling fiber is cancelled; otherwise (a destructor's
-// join) it waits regardless.
+// join) it waits regardless, cancelling the producing fiber if the calling
+// fiber is or becomes cancelled.
 void AwaitState(FutureStateBase& state, bool cancellable);
 
 // Like AwaitState (cancellable), but gives up at `deadline`. Returns whether

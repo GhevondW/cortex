@@ -47,10 +47,6 @@ void FutureStateBase::Abandon() {
 
 namespace {
 
-// Waits that give up early (timeouts, WaitAny) leave their token in the
-// list; prune once it holds this many so it cannot grow without bound.
-constexpr std::size_t kPruneThreshold = 8;
-
 // The scheduler that `state`'s waiter must belong to, validated.
 Scheduler& RequireWaitingFiberScheduler(const FutureStateBase& state) {
     Scheduler* scheduler = state.LiveScheduler();
@@ -64,11 +60,10 @@ Scheduler& RequireWaitingFiberScheduler(const FutureStateBase& state) {
     return *scheduler;
 }
 
-void Register(FutureStateBase& state, Scheduler& scheduler, WaiterRef ref) {
-    if (state.waiters.Size() >= kPruneThreshold) {
-        state.waiters.PruneStale(scheduler);
-    }
-    state.waiters.Push(ref);
+void Register(FutureStateBase& state, const Scheduler& scheduler, WaiterRef ref) {
+    state.waiters.Push(ref, [&scheduler](WaiterRef token) {
+        return scheduler.IsWaiting(token);
+    });
 }
 
 } // namespace
@@ -78,17 +73,26 @@ void AwaitState(FutureStateBase& state, bool cancellable) {
         return;
     }
     Scheduler& scheduler = RequireWaitingFiberScheduler(state);
+    const Fiber* self = scheduler.GetCurrentFiber();
+    bool child_cancelled = false;
     while (!state.ready) {
-        // An interruptible wait (Wait/Get) ends on stop or cancellation. A
-        // join (a Future's destructor) keeps waiting: the child may still use
-        // the joining scope's locals, and it finishes promptly during a stop
-        // because every other suspension point throws then.
         if (cancellable) {
+            // An interruptible wait (Wait/Get) ends on stop or cancellation.
             scheduler.ThrowIfInterrupted(true);
+        } else if (!child_cancelled && state.fiber_id != 0 && self->IsCancelRequested()) {
+            // A join (a Future's destructor) keeps waiting — the child may
+            // still use the joining scope's locals — but passes the joining
+            // fiber's cancellation on to the child, once. During a stop the
+            // child finishes promptly because every other suspension point
+            // throws then.
+            scheduler.CancelFiber(state.fiber_id);
+            child_cancelled = true;
         }
         Register(state, scheduler, scheduler.PrepareWait());
         ExternalWaitScope external(scheduler, state.external);
-        scheduler.ParkCurrent("Future::Wait", cancellable);
+        // Cancellation wakes both kinds of wait: an interruptible one to throw,
+        // a join to pass the cancellation on.
+        scheduler.ParkCurrent("Future::Wait", /*cancellable=*/true);
     }
 }
 

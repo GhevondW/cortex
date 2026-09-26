@@ -22,12 +22,12 @@ bool YieldIfOthersReady() {
     return false;
 }
 
-void CheckPoint() {
+void CheckPoint(std::source_location where) {
     Scheduler* scheduler = Scheduler::TryCurrent();
     if (scheduler == nullptr || scheduler->GetCurrentFiber() == nullptr) {
         return; // plain code: nothing to yield to
     }
-    scheduler->CheckPointCurrent();
+    scheduler->CheckPointCurrent(where);
 }
 
 bool IsCancellationRequested() {

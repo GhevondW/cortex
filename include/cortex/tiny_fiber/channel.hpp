@@ -71,7 +71,9 @@ public:
     bool Send(U&& value) {
         Scheduler& scheduler = FiberScheduler();
         for (;;) {
-            scheduler.ThrowIfInterrupted(true);
+            ThrowIfInterruptedPassingOn(scheduler, senders_, [this] {
+                return buffer_.size() < capacity_;
+            });
             if (closed_) {
                 return false;
             }
@@ -79,7 +81,7 @@ public:
                 Push(std::forward<U>(value));
                 return true;
             }
-            senders_.Push(scheduler.PrepareWait());
+            senders_.Push(scheduler.PrepareWait(), scheduler);
             detail::ExternalWaitScope external(scheduler, external_);
             scheduler.ParkCurrent("Channel::Send", true);
         }
@@ -107,14 +109,16 @@ public:
     std::optional<T> Receive() {
         Scheduler& scheduler = FiberScheduler();
         for (;;) {
-            scheduler.ThrowIfInterrupted(true);
+            ThrowIfInterruptedPassingOn(scheduler, receivers_, [this] {
+                return !buffer_.empty();
+            });
             if (!buffer_.empty()) {
                 return Pop();
             }
             if (closed_) {
                 return std::nullopt;
             }
-            receivers_.Push(scheduler.PrepareWait());
+            receivers_.Push(scheduler.PrepareWait(), scheduler);
             detail::ExternalWaitScope external(scheduler, external_);
             scheduler.ParkCurrent("Channel::Receive", true);
         }
@@ -234,6 +238,21 @@ private:
 
     [[nodiscard]] Scheduler* LiveScheduler() const noexcept {
         return alive_.expired() ? nullptr : scheduler_;
+    }
+
+    // A cancellation point. A fiber may have been woken for a value (or a
+    // free slot) and then cancelled before it ran; before leaving, it hands
+    // that wake-up to the next waiter of `queue` if the reason still holds.
+    template <typename Condition>
+    static void ThrowIfInterruptedPassingOn(Scheduler& scheduler, detail::WaitQueue& queue, Condition still_ready) {
+        try {
+            scheduler.ThrowIfInterrupted(true);
+        } catch (...) {
+            if (still_ready()) {
+                queue.WakeOne(scheduler);
+            }
+            throw;
+        }
     }
 
     // The scheduler, checked to be the one running the calling fiber.

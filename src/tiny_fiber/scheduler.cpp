@@ -63,8 +63,12 @@ Scheduler::Scheduler(Config config)
 }
 
 Scheduler::~Scheduler() {
-    // Nobody may be told to drive a scheduler that is going away.
-    wakeup_handler_ = nullptr;
+    // Nobody may be told to drive a scheduler that is going away. Taking the
+    // lock also waits for a Post() still inside its critical section.
+    {
+        std::lock_guard lock(post_mutex_);
+        wakeup_handler_ = nullptr;
+    }
 
     if (!stopping_) {
         Stop();
@@ -107,8 +111,8 @@ void Scheduler::Stop() {
 
     // Wake every suspended fiber so it can observe IsStopping() and exit. Each
     // fiber may still be referenced by stale entries in someone's waiter queue;
-    // unlock/notify code paths skip stale entries, and Step() validates waiter
-    // IDs on Complete(), so this is safe.
+    // unlock/notify code paths skip stale entries: waiter tokens carry the wait
+    // epoch, so a token from an earlier wait never wakes a later one.
     for (auto& slot : fiber_slots_) {
         if (slot.fiber && slot.fiber->IsSuspended()) {
             WakeFiber(slot.fiber.get());
@@ -129,6 +133,16 @@ void Scheduler::ProcessPendingCleanup() {
 }
 
 bool Scheduler::Step() {
+    // Everything this step wakes (posted work, due timers, fibers) is picked
+    // up by the caller driving it: no wake-up handler calls until it returns.
+    struct InStepScope {
+        bool& flag;
+        bool saved;
+        ~InStepScope() {
+            flag = saved;
+        }
+    } in_step {in_step_, std::exchange(in_step_, true)};
+
     ProcessPendingCleanup();
     if (has_posted_.load(std::memory_order_acquire)) {
         RunPosted();
@@ -145,13 +159,6 @@ bool Scheduler::Step() {
 
     {
         CurrentSchedulerScope scope(this);
-        struct InStepScope {
-            bool& flag;
-            ~InStepScope() {
-                flag = false;
-            }
-        } in_step {in_step_};
-        in_step_ = true;
         running_ = true;
 
         current_fiber_ = ready_queue_.front();
@@ -243,14 +250,16 @@ void Scheduler::SleepUntilInternal(TimePoint deadline) {
     ThrowIfInterrupted(true);
 }
 
-void Scheduler::CheckPointCurrent() {
+void Scheduler::CheckPointCurrent(const std::source_location& where) {
     // Upper bound on calls between two clock reads.
-    constexpr std::uint32_t kMaxCheckpointStride = 4096;
+    constexpr std::uint32_t kMaxCheckpointStride = 256;
 
     ThrowIfInterrupted(true);
 
     const bool new_slice = checkpoint_slice_ != step_count_;
-    if (!new_slice && --checkpoint_countdown_ > 0) {
+    const bool new_site = where.line() != checkpoint_line_ || where.column() != checkpoint_column_ ||
+                          where.file_name() != checkpoint_file_;
+    if (!new_slice && !new_site && --checkpoint_countdown_ > 0) {
         return;
     }
 
@@ -260,14 +269,25 @@ void Scheduler::CheckPointCurrent() {
         const bool slice_overflows = config_.time_slice >= TimePoint::max() - now;
         const TimePoint slice_end = slice_overflows ? TimePoint::max() : now + config_.time_slice;
         slice_deadline_ = std::min(slice_end, run_deadline_);
+    }
+    if (new_slice || new_site) {
+        // How long an iteration takes here is unknown: measure from scratch.
+        checkpoint_stride_ = 1;
+        checkpoint_file_ = where.file_name();
+        checkpoint_line_ = where.line();
+        checkpoint_column_ = where.column();
     } else {
-        // Aim for ~16 clock reads per slice.
+        // Aim for ~16 clock reads per slice: grow slowly while reads come too
+        // often, shrink at once, proportionally, when they come too late.
         const Duration since = now - last_checkpoint_;
         const Duration target = config_.time_slice / 16;
-        if (since < target / 2 && checkpoint_stride_ < kMaxCheckpointStride) {
-            checkpoint_stride_ *= 2;
-        } else if (since > target * 2 && checkpoint_stride_ > 1) {
-            checkpoint_stride_ /= 2;
+        if (since < target / 2) {
+            checkpoint_stride_ = std::min(checkpoint_stride_ * 2, kMaxCheckpointStride);
+        } else if (since > target * 2) {
+            const auto scaled = static_cast<std::uint64_t>(checkpoint_stride_) *
+                                static_cast<std::uint64_t>(std::max<Duration::rep>(target.count(), 0)) /
+                                static_cast<std::uint64_t>(since.count());
+            checkpoint_stride_ = static_cast<std::uint32_t>(std::max<std::uint64_t>(scaled, 1));
         }
     }
     last_checkpoint_ = now;
@@ -329,18 +349,23 @@ Scheduler::Status Scheduler::GetStatus() const {
 }
 
 void Scheduler::Post(fu2::unique_function<void()> work) {
+    std::function<void()> handler;
     {
         std::lock_guard lock(post_mutex_);
         posted_.push_back(std::move(work));
         has_posted_.store(true, std::memory_order_release);
+        post_cv_.notify_one();
+        handler = wakeup_handler_;
     }
-    post_cv_.notify_one();
-    if (wakeup_handler_) {
-        wakeup_handler_();
+    // Nothing below may touch the scheduler: once the lock is released its
+    // thread may run the work, finish and destroy it.
+    if (handler) {
+        handler();
     }
 }
 
 void Scheduler::SetWakeupHandler(std::function<void()> handler) {
+    std::lock_guard lock(post_mutex_);
     wakeup_handler_ = std::move(handler);
 }
 
@@ -352,13 +377,6 @@ void Scheduler::RunPosted() {
         has_posted_.store(false, std::memory_order_release);
     }
     CurrentSchedulerScope scope(this);
-    struct InStepScope {
-        bool& flag;
-        bool saved;
-        ~InStepScope() {
-            flag = saved;
-        }
-    } in_step {in_step_, std::exchange(in_step_, true)};
     for (auto& work : batch) {
         try {
             work();
@@ -624,11 +642,11 @@ EM_JS(void, cortex_js_wake, (void* scheduler), {
 // Scheduler::Status values plus one for "a fiber failed".
 constexpr int kStatusFailed = 4;
 
-// Result of the last cortex_scheduler_run_for(). With Asyncify, an exported
-// function that switches fibers returns to JavaScript early (while the stack
-// is unwound) and the real call is replayed afterwards, so its return value
-// is lost. The driver reads the result through cortex_scheduler_last_status()
-// instead, which never switches fibers.
+// Result of the last cortex_scheduler_run_for(). With Asyncify, switching
+// fibers unwinds the stack to the export's JavaScript wrapper, which records
+// a placeholder return value before the call is rewound and completed, so the
+// value JavaScript receives is not the real one. The driver reads the result
+// through cortex_scheduler_last_status() instead, which never switches fibers.
 int g_last_status = 0;
 
 cortex::tiny_fiber::Scheduler& AsScheduler(void* scheduler) {

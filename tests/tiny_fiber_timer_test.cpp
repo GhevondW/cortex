@@ -266,3 +266,60 @@ TEST(TinyFiberCheckPoint, YieldsTheInnermostFiber) {
     EXPECT_GE(inner_steps, 3);
     EXPECT_TRUE(outer_finished);
 }
+
+// A cheap loop must not teach CheckPoint() to skip clock reads for so long
+// that a later expensive loop overruns its slice by orders of magnitude.
+TEST(TinyFiberCheckPoint, ExpensiveFiberAfterCheapFiberStillYieldsOnTime) {
+    auto config = FakeClockConfig();
+    config.time_slice = 2ms;
+    int expensive_iterations_in_first_step = -1;
+    int expensive_iterations = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            auto cheap = tf::Spawn([] {
+                for (int i = 0; i < 100000; ++i) {
+                    tf::CheckPoint(); // free: the fake clock never moves here
+                }
+            });
+            cheap.Wait();
+            tf::SpawnDetached([&] {
+                for (int i = 0; i < 50; ++i) {
+                    g_now += 1ms; // each iteration costs 1 ms
+                    ++expensive_iterations;
+                    tf::CheckPoint();
+                }
+            });
+        },
+        config);
+    // Step until the expensive fiber has run its first slice.
+    while (expensive_iterations == 0 && scheduler->Step()) {
+    }
+    expensive_iterations_in_first_step = expensive_iterations;
+    EXPECT_LE(expensive_iterations_in_first_step, 4); // ~2 ms slice, not 4096 iterations
+    while (scheduler->Step()) {
+    }
+    EXPECT_EQ(expensive_iterations, 50);
+}
+
+TEST(TinyFiberCheckPoint, ExpensiveLoopAfterCheapLoopInSameFiberYieldsOnTime) {
+    auto config = FakeClockConfig();
+    config.time_slice = 2ms;
+    int expensive_iterations = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            for (int i = 0; i < 100000; ++i) {
+                tf::CheckPoint(); // a cheap phase...
+            }
+            for (int i = 0; i < 50; ++i) {
+                g_now += 1ms; // ...then an expensive one, same slice
+                ++expensive_iterations;
+                tf::CheckPoint();
+            }
+        },
+        config);
+    scheduler->Step();
+    EXPECT_LE(expensive_iterations, 4);
+    while (scheduler->Step()) {
+    }
+    EXPECT_EQ(expensive_iterations, 50);
+}

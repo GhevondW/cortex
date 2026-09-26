@@ -132,7 +132,7 @@ await drive(Module, Module._start(), { budgetMs: 8 }).done; // resolves when eve
 | `js/cortex.mjs` | Event-loop driver: time-boxed slices, timer-aware sleeping, wake-ups from JavaScript. |
 | `Coroutine` / `Generator<T>` | The stackful primitives underneath: suspend/resume from any call depth; generators are input ranges. |
 
-Native stacks sit above a guard page, so an overflow crashes on the spot instead of corrupting memory. The same sources build a native static library (Boost.Context) and a WebAssembly one (Emscripten, Asyncify).
+Native stacks sit above a guard page, so running off the end of a stack crashes on the spot instead of silently corrupting memory (a single frame larger than a page can still jump over it). The same sources build a native static library (Boost.Context) and a WebAssembly one (Emscripten, Asyncify).
 
 ## Use it in your project
 
@@ -165,10 +165,18 @@ For the browser, link with Emscripten as usual (`cortex::cortex` adds `-sASYNCIF
 
 ## Good to know
 
-- **Exports that run fibers:** under Asyncify, an exported function that switches fibers returns to JavaScript before its real call finishes, so its return value is unreliable. Return results through a separate export or through memory — as `drive()` does.
+- **Exports that run fibers:** under Asyncify, an exported function that switches fibers still finishes before JavaScript regains control, but the value it returns is a placeholder. Return results through a separate export or through memory — as `drive()` does.
 - **Don't suspend inside a `catch` block.** C++ exception state is per thread, and fibers share the thread.
 - **WASM stack depth:** suspending saves every frame's locals into a per-coroutine buffer (`CORTEX_WASM_ASYNCIFY_STACK_SIZE`, 64 KB by default, about 16–24 bytes per frame).
-- **Behavior changes in this release:** `Scheduler::Run()` returns the entry's result and rethrows its exception; exceptions nobody observes are rethrown by `Step()`/`Run()` (or go to `Config::on_unhandled_exception`); `Run()` throws `DeadlockError`; `IsDone()` means every fiber finished; `Future::Get()` outside a fiber on an unfinished result throws a clear `std::logic_error`; `SchedulerStoppingError` derives from `CancelledError`.
+- **Behavior changes in this release** (for existing users):
+  - `Scheduler::Run()` returns the entry's result and rethrows its exception; exceptions no one can observe (the `Create()` entry, detached fibers) are rethrown by `Step()`/`Run()` or passed to `Config::on_unhandled_exception`; `Run()` throws `DeadlockError` when fibers can never finish.
+  - `IsDone()` means every fiber finished; use `GetStatus()` to tell waiting from deadlocked.
+  - `Future::Get()`/`Wait()` called outside a fiber on an unfinished result throw a clear `std::logic_error`; inside a fiber they throw `SchedulerStoppingError` once the scheduler stops. A fiber whose producer was destroyed leaves `BrokenPromiseError`. A fiber that has not started when its scheduler stops never runs.
+  - `SchedulerStoppingError` derives from the new `CancelledError`. `ConditionVariable::Wait` leaves *without* the mutex re-locked when it throws one of these (unlike `std::condition_variable`).
+  - `Spawn()` is `[[nodiscard]]` (dropping its `Future` waits for the fiber at once — use `SpawnDetached`); builds with `-Werror` must handle the result.
+  - The scheduler's default memory resource puts a guard page under each stack on POSIX.
+  - The unimplemented `cortex/async/*` headers moved to `experimental/` and are no longer installed.
+  - WASM: each coroutine reserves a 64 KB Asyncify buffer (was 16 KB); set `CORTEX_WASM_ASYNCIFY_STACK_SIZE` to change it.
 
 ## Develop
 

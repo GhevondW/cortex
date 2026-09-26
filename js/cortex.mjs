@@ -127,7 +127,7 @@ export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
 
         let status;
         try {
-            // The return value of an export that switched fibers is lost under
+            // The return value of an export that switched fibers is a placeholder under
             // Asyncify; read the recorded outcome instead.
             Module._cortex_scheduler_run_for(scheduler, budgetMs);
             status = Module._cortex_scheduler_last_status();

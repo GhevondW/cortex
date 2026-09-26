@@ -15,14 +15,24 @@
 
 namespace cortex::tiny_fiber {
 
+namespace detail {
+// Waits for one future's state; an empty (detached, moved-from) future is ready.
+inline void AwaitIfPresent(FutureStateBase* state) {
+    if (state != nullptr) {
+        AwaitState(*state, /*cancellable=*/true);
+    }
+}
+} // namespace detail
+
 /**
  * @brief Block the current fiber until every future is ready.
  *
  * Does not rethrow the fibers' exceptions; call Get() on each for results.
+ * Empty futures (detached or moved-from) count as ready.
  */
 template <typename... Futures>
 void WaitAll(Futures&... futures) {
-    (detail::AwaitState(*futures.StateInternal(), /*cancellable=*/true), ...);
+    (detail::AwaitIfPresent(futures.StateInternal()), ...);
 }
 
 /**
@@ -31,9 +41,7 @@ void WaitAll(Futures&... futures) {
 template <typename T>
 void WaitAll(std::span<Future<T>> futures) {
     for (auto& future : futures) {
-        if (auto* state = future.StateInternal()) {
-            detail::AwaitState(*state, /*cancellable=*/true);
-        }
+        detail::AwaitIfPresent(future.StateInternal());
     }
 }
 

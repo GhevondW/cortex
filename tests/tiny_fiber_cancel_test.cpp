@@ -172,3 +172,57 @@ TEST(TinyFiberCancel, CancelledFiberIsNotAnUnhandledError) {
         worker.Detach();
     }));
 }
+
+// NotifyOne picked a waiter that is then cancelled before it runs: another
+// waiter must be woken, or the notification is lost.
+TEST(TinyFiberCancel, CancelledNotifiedCvWaiterPassesTheNotificationOn) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        bool ready = false;
+        auto waiter = [&] {
+            auto guard = tf::Lock(mutex);
+            cv.Wait(guard, [&] {
+                return ready;
+            });
+        };
+        auto first = tf::Spawn(waiter);
+        auto second = tf::Spawn(waiter);
+        tf::Yield(); // both wait, first in line
+        {
+            auto guard = tf::Lock(mutex);
+            ready = true;
+            cv.NotifyOne(); // picks `first`
+        }
+        first.Cancel();
+        EXPECT_THROW(first.Wait(), tf::CancelledError);
+        EXPECT_NO_THROW(second.Wait()); // must not be left waiting forever
+    });
+}
+
+// The parent's scope already ended and it is joining its child when the
+// cancellation arrives: the child must still be cancelled.
+TEST(TinyFiberCancel, CancellingParentDuringItsJoinCancelsTheChild) {
+    int child_iterations = 0;
+    bool child_cancelled = false;
+    tf::Scheduler::Run([&] {
+        auto parent = tf::Spawn([&] {
+            auto child = tf::Spawn([&] {
+                try {
+                    for (int i = 0; i < 200; ++i) {
+                        tf::SleepFor(1ms);
+                        ++child_iterations;
+                    }
+                } catch (const tf::CancelledError&) {
+                    child_cancelled = true;
+                    throw;
+                }
+            });
+        }); // the parent returns at once and waits for `child` in its destructor
+        tf::SleepFor(5ms);
+        parent.Cancel();
+        parent.Wait(); // the parent's own work finished normally
+    });
+    EXPECT_TRUE(child_cancelled);
+    EXPECT_LT(child_iterations, 200);
+}

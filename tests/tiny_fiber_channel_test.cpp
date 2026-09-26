@@ -207,3 +207,41 @@ TEST(TinyFiberChannel, StopWakesEveryKindOfWait) {
     EXPECT_EQ(exited, 6);
     EXPECT_FALSE(scheduler->NextTimerDeadline().has_value());
 }
+
+// A receiver woken for a value but cancelled before it runs must hand the
+// wake-up on: the value must not sit in the buffer next to a parked receiver.
+TEST(TinyFiberChannel, CancelledWokenReceiverPassesTheValueOn) {
+    tf::Scheduler::Run([] {
+        tf::Channel<int> channel;
+        auto first = tf::Spawn([&] {
+            return channel.Receive();
+        });
+        auto second = tf::Spawn([&] {
+            return channel.Receive();
+        });
+        tf::Yield(); // both park, first in line
+        channel.Send(1); // wakes `first`
+        first.Cancel(); // ...which is cancelled before it runs
+        EXPECT_THROW((void)first.Get(), tf::CancelledError);
+        EXPECT_EQ(second.Get(), 1);
+    });
+}
+
+TEST(TinyFiberChannel, CancelledWokenSenderPassesTheSpaceOn) {
+    tf::Scheduler::Run([] {
+        tf::Channel<int> channel(1);
+        channel.Send(0); // full
+        auto first = tf::Spawn([&] {
+            return channel.Send(1);
+        });
+        auto second = tf::Spawn([&] {
+            return channel.Send(2);
+        });
+        tf::Yield(); // both park, first in line
+        EXPECT_EQ(channel.TryReceive(), 0); // frees a slot: wakes `first`
+        first.Cancel();
+        EXPECT_THROW((void)first.Get(), tf::CancelledError);
+        EXPECT_TRUE(second.Get());
+        EXPECT_EQ(channel.TryReceive(), 2);
+    });
+}

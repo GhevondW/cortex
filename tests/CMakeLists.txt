@@ -95,3 +95,4 @@ if(EMSCRIPTEN)
                 ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_await_test.mjs
                 ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
 endif()
+cortex_add_test(cortex_tiny_fiber_wait_queue_test tiny_fiber_wait_queue_test.cpp)

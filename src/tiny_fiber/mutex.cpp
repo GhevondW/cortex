@@ -30,7 +30,7 @@ void Mutex::Lock() {
             // Unlock() validates entries on pop, so we leave it for cleanup there.
             throw SchedulerStoppingError();
         }
-        waiters_.Push(scheduler.PrepareWait());
+        waiters_.Push(scheduler.PrepareWait(), scheduler);
         scheduler.ParkCurrent("Mutex::Lock", false);
     }
 

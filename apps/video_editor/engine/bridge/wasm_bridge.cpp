@@ -151,8 +151,8 @@ CORTEX_API void editor_render_preview(int idx) {
 // Lets a heavy filter run without freezing the page.
 //
 // Poll editor_cooperative_done() rather than using a return value: under
-// Asyncify, an export that switches fibers returns to JavaScript before its
-// real call completes, so its return value is unreliable.
+// Asyncify, an export that switches fibers completes before JavaScript regains
+// control, but the value it returns is a placeholder.
 CORTEX_API void editor_begin_cooperative_render(int idx) {
     if (g_editor) g_editor->BeginCooperativeRender(idx);
 }

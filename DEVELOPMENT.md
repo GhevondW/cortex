@@ -284,7 +284,7 @@ Both build and run `tests/package/main.cpp`, and the first one also fails if cor
 ## Performance
 
 - Fiber stacks are recycled: `tiny_fiber::Scheduler` uses a per-scheduler `cortex::PooledMemoryResource` by default (`tiny_fiber::MakeDefaultFiberResource()`), so `Spawn` reuses stacks, fiber objects and future state instead of hitting the system allocator. Pass your own `Scheduler::Config::memory_resource` to opt out or tune (`PooledMemoryResource::Config::max_cached_bytes` bounds the cache).
-- On POSIX, the pooled stacks come from `cortex::MakeGuardedStackResource()`: each stack sits directly above a `PROT_NONE` page, so a stack overflow faults on the spot instead of corrupting memory. Recycled stacks keep their guard page, so this costs nothing per `Spawn`.
+- On POSIX, the pooled stacks come from `cortex::MakeGuardedStackResource()`: each stack sits directly above a `PROT_NONE` page, so running off the end of a stack faults on the spot instead of corrupting memory (one guard page: a single frame larger than a page can jump it). Recycled stacks keep their guard page, so this costs nothing per `Spawn`.
 - `tiny_fiber::CheckPoint()` costs about 2 ns when no yield is due: it reads the clock only every N calls, with N adapting to the loop's speed.
 - The pool is intentionally not thread-safe; a scheduler and its fibers always live on one thread. For raw `Coroutine` use across threads, keep the default `GetDefaultMemoryResource()` or provide your own resource.
 
@@ -346,7 +346,7 @@ extern "C" {
 
 This expands to `EMSCRIPTEN_KEEPALIVE` on WASM builds and nothing on native builds.
 
-**Don't rely on the return value of an export that runs fibers.** Under Asyncify, a call that switches fibers returns to JavaScript while the stack is unwound (with a placeholder value), and the real call is then replayed to completion — its return value is discarded. Report results through a separate export that does not run fibers (as `editor_cooperative_done()` and `cortex_scheduler_last_status()` do) or through memory.
+**Don't rely on the return value of an export that runs fibers.** Under Asyncify, switching fibers unwinds the stack back to the export's JavaScript wrapper, which records a placeholder return value and then rewinds and completes the call before returning to your code — so the work is done, but the returned value is the placeholder. Report results through a separate export that does not run fibers (as `editor_cooperative_done()` and `cortex_scheduler_last_status()` do) or through memory.
 
 ## Working Inside Docker Container
 

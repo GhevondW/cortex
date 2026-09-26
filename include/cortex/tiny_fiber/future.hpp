@@ -157,10 +157,9 @@ private:
         if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler || scheduler->GetCurrentFiber() == nullptr) {
             return;
         }
-        if (scheduler->GetCurrentFiber()->IsCancelRequested()) {
-            scheduler->CancelFiber(state_->fiber_id);
-        }
         try {
+            // Passes a cancellation of this fiber on to the child, whether it
+            // was requested before or during the join.
             AwaitState(*state_, /*cancellable=*/false);
         } catch (...) {
             // Only std::bad_alloc can escape a join; a destructor must not throw.

@@ -37,7 +37,7 @@ void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadl
         throw std::logic_error("ConditionVariable::Wait() must be called from within a fiber");
     }
 
-    waiters_.Push(scheduler.PrepareWait());
+    waiters_.Push(scheduler.PrepareWait(), scheduler);
 
     // Detach the guard from the mutex before unlocking so that, if any subsequent
     // step throws, the Guard destructor doesn't try to Unlock an unlocked mutex
@@ -55,8 +55,15 @@ void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadl
         deadline);
 
     // Stopped or cancelled: leave without the mutex (the guard is detached, so
-    // its destructor will not unlock).
-    scheduler.ThrowIfInterrupted(true);
+    // its destructor will not unlock). If a NotifyOne() picked this fiber, the
+    // notification would be lost with it: wake the next waiter instead (a
+    // spurious wake-up at worst, which condition-variable users handle).
+    try {
+        scheduler.ThrowIfInterrupted(true);
+    } catch (...) {
+        waiters_.WakeOne(scheduler);
+        throw;
+    }
 
     mutex->Lock();
     guard.mutex_ = mutex; // Re-attach: guard owns the mutex again.

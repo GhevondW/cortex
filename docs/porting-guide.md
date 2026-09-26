@@ -163,7 +163,7 @@ Cortex and workers complement each other: workers for parallel number crunching 
 
 ## Pitfalls
 
-- **Return values of exports that run fibers are unreliable.** Under Asyncify such an export returns to JavaScript before its real call completes. Poll state through a separate export (as `drive()` does with `cortex_scheduler_last_status`), or write results to memory.
+- **Return values of exports that run fibers are unreliable.** Under Asyncify such an export still finishes before JavaScript regains control, but the value it returns is a placeholder. Poll state through a separate export (as `drive()` does with `cortex_scheduler_last_status`), or write results to memory.
 - **Don't suspend inside a `catch` block.** Exception state is per thread, and all fibers share one thread.
 - **Deep recursion that suspends** needs Asyncify buffer space (`CORTEX_WASM_ASYNCIFY_STACK_SIZE`, 64 KB by default, about 16–24 bytes per frame) as well as C stack (`Scheduler::Config::default_stack_size`, 256 KB by default).
 - **Don't call `Scheduler::Run()` in the browser.** It blocks until every fiber finishes. Use `Create()` + `drive()`.

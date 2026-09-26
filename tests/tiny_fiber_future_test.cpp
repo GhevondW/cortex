@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <future>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -582,4 +583,74 @@ TEST(TinyFiberPost, PostFromAnotherThreadCompletesPromiseWhileRunBlocks) {
     });
     EXPECT_EQ(value, 7);
 }
+
+// Once Post() has queued its work, the scheduler thread may run it, finish
+// and destroy the scheduler at any moment. Post() must not touch the
+// scheduler after that point: the wake-up handler it calls may outlive it.
+// (Under ASan the old code read the destroyed handler here.)
+TEST(TinyFiberPost, PostDoesNotTouchTheSchedulerAfterQueueingWork) {
+    std::promise<void> destroyed;
+    std::shared_future<void> destroyed_signal = destroyed.get_future().share();
+    int handler_saw = 0;
+
+    std::thread scheduler_thread([&] {
+        bool done = false;
+        auto scheduler = tf::Scheduler::Create([] {
+        });
+        while (scheduler->Step()) {
+        }
+        int canary = 1234; // not const: it must live in the handler's storage
+        scheduler->SetWakeupHandler([canary, destroyed_signal, &handler_saw] {
+            // Keep Post() inside its call to the handler until the scheduler
+            // is gone, then use the handler's own captured state.
+            destroyed_signal.wait_for(std::chrono::seconds(5));
+            handler_saw = canary;
+        });
+        std::thread poster([&scheduler, &done] {
+            scheduler->Post([&done] {
+                done = true;
+            });
+        });
+        while (!done) {
+            scheduler->RunFor(1ms);
+        }
+        scheduler.reset();
+        destroyed.set_value();
+        poster.join();
+    });
+    scheduler_thread.join();
+    EXPECT_EQ(handler_saw, 1234);
+}
 #endif
+
+TEST(TinyFiberWait, WaitAllAcceptsEmptyFutures) {
+    tf::Scheduler::Run([] {
+        auto detached = tf::Spawn([] {
+            tf::Yield();
+        });
+        detached.Detach(); // empty now: IsReady() is true
+        auto normal = tf::Spawn([] {
+            return 1;
+        });
+        tf::WaitAll(detached, normal);
+        EXPECT_EQ(normal.Get(), 1);
+    });
+}
+
+// The wake-up handler is for work that arrives while nobody steps the
+// scheduler; a timer firing inside RunFor() must not call it.
+TEST(TinyFiberPromise, TimerFiringInsideRunForDoesNotCallWakeupHandler) {
+    int wakeups = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [] {
+            tf::SleepFor(10ms);
+        },
+        FakeClockConfig());
+    scheduler->SetWakeupHandler([&] {
+        ++wakeups;
+    });
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting);
+    g_now += 10ms;
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(wakeups, 0);
+}

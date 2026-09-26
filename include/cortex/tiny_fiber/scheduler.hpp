@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -259,6 +260,10 @@ public:
      * to fibers (e.g. fulfil a Promise) or to spawn work (SpawnDetached may
      * be called from `work`). A blocking Run() wakes up for posted work.
      * Exceptions escaping `work` are treated as unhandled.
+     *
+     * Lifetime: the scheduler must still exist when Post() is called. Once
+     * the work is queued Post() no longer touches the scheduler, so its
+     * thread may run the work and destroy it while Post() is returning.
      */
     void Post(fu2::unique_function<void()> work);
 
@@ -270,7 +275,10 @@ public:
      * An event-loop driver uses it to schedule the next RunFor() instead of
      * polling. It is called on the thread that made the work runnable (for
      * Post, possibly another thread) and may be called more than once per
-     * burst of work. Set it before other threads start posting.
+     * burst of work. It must not throw (it runs inside noexcept paths such as
+     * a Promise's destructor) and must not step the scheduler itself. When
+     * called from Post() on another thread, it may run after the scheduler
+     * was destroyed, so it must not assume the scheduler still exists.
      */
     void SetWakeupHandler(std::function<void()> handler);
 
@@ -344,7 +352,8 @@ public:
     }
 
     // tf::CheckPoint() for the current fiber: yield iff its slice is spent.
-    void CheckPointCurrent();
+    // `where` identifies the call site (see the CheckPoint state below).
+    void CheckPointCurrent(const std::source_location& where);
 
     // Liveness token. A Future holds this weakly so its destructor / Wait / Get
     // can detect that the scheduler has been destroyed and skip dereferencing a
@@ -447,15 +456,24 @@ private:
     // CheckPoint() state. A slice starts with the first CheckPoint() after a
     // fiber is resumed (identified by step_count_). The clock is read only
     // every checkpoint_stride_ calls; the stride adapts so a cheap loop reads
-    // the clock rarely while an expensive one still yields on time.
+    // the clock rarely while an expensive one still yields on time. It is
+    // re-learnt from 1 at every new slice and whenever CheckPoint() is called
+    // from a different call site (a different loop, whose iterations may cost
+    // far more).
     std::uint64_t step_count_ {0};
     std::uint64_t checkpoint_slice_ {0};
     std::uint32_t checkpoint_countdown_ {0};
     std::uint32_t checkpoint_stride_ {1};
+    const char* checkpoint_file_ {nullptr};
+    std::uint_least32_t checkpoint_line_ {0};
+    std::uint_least32_t checkpoint_column_ {0};
     TimePoint slice_deadline_ {};
     TimePoint last_checkpoint_ {};
     // Owned liveness token; weak copies in Futures expire when this scheduler is
-    // destroyed. Declared last so it outlives the other members during teardown.
+    // destroyed. It is alive throughout ~Scheduler's body, where fibers unwind;
+    // as the last member declared it is destroyed first, so anything released
+    // afterwards (e.g. posted work holding a Promise) sees an expired token and
+    // never touches this scheduler.
     std::shared_ptr<void> alive_token_ {std::make_shared<char>()};
 };
 
