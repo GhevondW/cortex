@@ -585,3 +585,109 @@ bool Scheduler::HasOtherReadyFibers() const {
 }
 
 } // namespace cortex::tiny_fiber
+
+#if defined(__EMSCRIPTEN__)
+
+// ---------------------------------------------------------------------------
+// Browser driver API, used by js/cortex.mjs.
+//
+// These live in this file (rather than a separate one) because an object in a
+// static library is linked only when something references it; every program
+// that uses a Scheduler links this one, so the exports are always present.
+// ---------------------------------------------------------------------------
+
+#include <emscripten.h>
+
+#include <cmath>
+#include <cstdint>
+
+namespace {
+
+EM_JS_DEPS(cortex_scheduler_driver, "$UTF8ToString");
+
+// Hands a message (deadlock description, exception text) to the driver.
+EM_JS(void, cortex_js_set_message, (const char* text), { Module["cortexMessage"] = UTF8ToString(text); });
+
+// Tells the driver that a scheduler has runnable work again.
+EM_JS(void, cortex_js_wake, (void* scheduler), {
+    if (Module["cortexWake"]) {
+        Module["cortexWake"](scheduler);
+    }
+});
+
+// Scheduler::Status values plus one for "a fiber failed".
+constexpr int kStatusFailed = 4;
+
+// Result of the last cortex_scheduler_run_for(). With Asyncify, an exported
+// function that switches fibers returns to JavaScript early (while the stack
+// is unwound) and the real call is replayed afterwards, so its return value
+// is lost. The driver reads the result through cortex_scheduler_last_status()
+// instead, which never switches fibers.
+int g_last_status = 0;
+
+cortex::tiny_fiber::Scheduler& AsScheduler(void* scheduler) {
+    return *static_cast<cortex::tiny_fiber::Scheduler*>(scheduler);
+}
+
+} // namespace
+
+extern "C" {
+
+// Run the scheduler for up to `budget_ms`, then record the outcome for
+// cortex_scheduler_last_status(): a Scheduler::Status, or 4 when an exception
+// escaped a fiber (its text is in Module.cortexMessage). On kDeadlocked,
+// Module.cortexMessage describes the stuck fibers. Do not use the return
+// value from JavaScript (see g_last_status).
+EMSCRIPTEN_KEEPALIVE int cortex_scheduler_run_for(void* scheduler, double budget_ms) {
+    using cortex::tiny_fiber::Scheduler;
+    auto& self = AsScheduler(scheduler);
+    g_last_status = kStatusFailed;
+    try {
+        const auto budget =
+            std::chrono::duration_cast<Scheduler::Duration>(std::chrono::duration<double, std::milli>(budget_ms));
+        const Scheduler::Status status = self.RunFor(budget);
+        if (status == Scheduler::Status::kDeadlocked) {
+            const std::string message =
+                "tiny_fiber: deadlock - every remaining fiber is suspended and nothing can wake it.\n" +
+                self.DescribeFibers();
+            cortex_js_set_message(message.c_str());
+        }
+        g_last_status = static_cast<int>(status);
+    } catch (const std::exception& error) {
+        cortex_js_set_message(error.what());
+    } catch (...) {
+        cortex_js_set_message("tiny_fiber: a fiber threw a non-std::exception");
+    }
+    return g_last_status;
+}
+
+// Outcome of the last cortex_scheduler_run_for() call.
+EMSCRIPTEN_KEEPALIVE int cortex_scheduler_last_status() {
+    return g_last_status;
+}
+
+// Milliseconds until the earliest sleeping fiber is due (0 if overdue), or -1
+// when no fiber sleeps.
+EMSCRIPTEN_KEEPALIVE double cortex_scheduler_next_timer_ms(void* scheduler) {
+    auto& self = AsScheduler(scheduler);
+    const auto deadline = self.NextTimerDeadline();
+    if (!deadline) {
+        return -1.0;
+    }
+    const auto remaining = std::chrono::duration<double, std::milli>(*deadline - self.Now()).count();
+    return remaining > 0.0 ? std::ceil(remaining) : 0.0;
+}
+
+// Route the scheduler's wake-up handler to Module.cortexWake(scheduler).
+EMSCRIPTEN_KEEPALIVE void cortex_scheduler_attach(void* scheduler) {
+    AsScheduler(scheduler).SetWakeupHandler([scheduler] { cortex_js_wake(scheduler); });
+}
+
+// Stop routing wake-ups to JavaScript (the driver stopped).
+EMSCRIPTEN_KEEPALIVE void cortex_scheduler_detach(void* scheduler) {
+    AsScheduler(scheduler).SetWakeupHandler(nullptr);
+}
+
+} // extern "C"
+
+#endif // __EMSCRIPTEN__

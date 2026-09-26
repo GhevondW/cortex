@@ -58,3 +58,22 @@ cortex_add_test(cortex_tiny_fiber_timer_test tiny_fiber_timer_test.cpp)
 cortex_add_test(cortex_wasm_asyncify_test wasm_asyncify_test.cpp WASM_ONLY)
 cortex_add_test(cortex_tiny_fiber_cancel_test tiny_fiber_cancel_test.cpp)
 cortex_add_test(cortex_tiny_fiber_channel_test tiny_fiber_channel_test.cpp)
+
+# js/cortex.mjs driven end to end: a WebAssembly module loaded by Node.
+if(EMSCRIPTEN)
+    add_executable(cortex_web_driver_test web/driver_test.cpp)
+    target_link_libraries(cortex_web_driver_test PRIVATE cortex::cortex)
+    cortex_apply_warnings(cortex_web_driver_test)
+    set_target_properties(cortex_web_driver_test PROPERTIES SUFFIX ".mjs")
+    target_link_options(cortex_web_driver_test PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-fexceptions"
+    )
+    add_test(NAME cortex_web_driver_test
+        COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/web/driver_test.mjs
+                ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_driver_test.mjs
+                ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
+endif()
