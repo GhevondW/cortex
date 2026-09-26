@@ -104,6 +104,8 @@ TEST(PooledMemoryResourceTest, SchedulerReusesFiberStacks) {
         .upstream = tracker,
     });
 
+    tf::Scheduler::Config config;
+    config.memory_resource = pool;
     tf::Scheduler::Run(
         [] {
             for (int i = 0; i < 50; ++i) {
@@ -114,7 +116,7 @@ TEST(PooledMemoryResourceTest, SchedulerReusesFiberStacks) {
                 EXPECT_EQ(future.Get(), 1);
             }
         },
-        tf::Scheduler::Config {.memory_resource = pool});
+        config);
 
     // 50 sequential spawns re-use the first fiber's blocks: the upstream sees
     // roughly one allocation per distinct block size, not one per spawn.

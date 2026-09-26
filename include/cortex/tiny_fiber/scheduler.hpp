@@ -45,9 +45,16 @@ MemoryResourceSharedPtr MakeDefaultFiberResource();
  * The scheduler maintains a ready queue of fibers and runs them one at a time
  * on the calling thread.
  *
- * Two modes of operation:
- * 1. `Run()` - blocks until all fibers complete (simple usage)
- * 2. `Create()` + `Step()` - manual stepping for WASM/async integration
+ * Two ways to run it:
+ * 1. `Run()` blocks until all fibers complete and returns the entry's result
+ *    (native programs, tests, tools).
+ * 2. `Create()`, then `RunFor(budget)` from an event loop, calling again when
+ *    the status says so (see NextTimerDeadline() and SetWakeupHandler()). In
+ *    the browser, js/cortex.mjs's drive() does exactly that. `Step()` runs a
+ *    single fiber until it yields, for finer control.
+ *
+ * A scheduler and its fibers belong to the thread that runs them; Post() is
+ * the only member other threads may call.
  *
  * Failures are never silent: an exception escaping a fiber that nobody can
  * observe (the Create() entry, detached fibers) is rethrown by Step()/Run()
@@ -56,8 +63,12 @@ MemoryResourceSharedPtr MakeDefaultFiberResource();
  */
 class Scheduler {
 public:
+    /// The clock timers, budgets and time slices are measured with (see
+    /// Config::clock to replace its source of time).
     using Clock = std::chrono::steady_clock;
+    /// A span of scheduler time.
     using Duration = Clock::duration;
+    /// A point in scheduler time, as returned by Now().
     using TimePoint = Clock::time_point;
 
     /**
@@ -76,6 +87,7 @@ public:
      * @brief Configuration options for the scheduler.
      */
     struct Config {
+        /// Stack size of each fiber, unless Spawn() is given one: 256 KiB.
         std::size_t default_stack_size = cortex::Coroutine::kDefaultStackSizeBytes;
         /// Where fibers, their stacks and future states are allocated.
         MemoryResourceSharedPtr memory_resource = MakeDefaultFiberResource();
@@ -110,11 +122,21 @@ public:
     static auto Run(F&& entry, Config config) -> std::invoke_result_t<F>;
 
     /**
-     * @brief Create a scheduler for manual stepping (WASM/async integration).
+     * @brief Create a scheduler to drive from an event loop (the browser,
+     *        a game loop, a GUI toolkit).
      *
-     * Use Step() to advance the scheduler one fiber at a time.
-     * This allows yielding back to JS event loop between fiber switches.
-     * An exception escaping `entry` is rethrown by the Step() that ran it.
+     * Nothing runs until you call RunFor(), RunUntil() or Step(). In the
+     * browser, hand the pointer to js/cortex.mjs's drive(). An exception
+     * escaping `entry` is rethrown by the call that ran it (or passed to
+     * Config::on_unhandled_exception). Destroying the scheduler stops its
+     * fibers: each unwinds from where it is suspended.
+     *
+     * @code
+     * auto scheduler = tf::Scheduler::Create([] { RunMyApp(); });
+     * while (scheduler->RunFor(8ms) != tf::Scheduler::Status::kDone) {
+     *     // render a frame, handle input, or sleep until NextTimerDeadline()
+     * }
+     * @endcode
      *
      * @param entry The function to run in the initial fiber.
      * @return A unique_ptr to the Scheduler instance.
@@ -123,7 +145,7 @@ public:
     static std::unique_ptr<Scheduler> Create(F&& entry);
 
     /**
-     * @brief Create a scheduler for manual stepping with custom config.
+     * @brief Create() with a custom config.
      */
     template <typename F>
     static std::unique_ptr<Scheduler> Create(F&& entry, Config config);
@@ -159,6 +181,8 @@ public:
      * @return true if more fibers are ready to run right now. false means
      *         nothing is runnable: check GetStatus() to tell "done" from
      *         "deadlocked".
+     * Call it from plain code, never from one of this scheduler's own fibers.
+     *
      * @throws An exception that escaped a fiber nobody observes, unless
      *         Config::on_unhandled_exception is set.
      */
@@ -171,9 +195,16 @@ public:
      * blocks, and returns as soon as the budget is used up (after the step in
      * progress) or no fiber can run right now.
      *
+     * A fiber that does not reach a suspension point (CheckPoint(), a wait)
+     * keeps the thread until it does: the budget is checked between steps
+     * and by CheckPoint(). Call it from plain code, never from one of this
+     * scheduler's own fibers.
+     *
      * @return The status afterwards. kWaiting: fibers sleep or wait for
      *         external events — call again after NextTimerDeadline() (or when
      *         woken). kRunnable: more work is ready now.
+     * @throws An exception that escaped a fiber nobody observes, unless
+     *         Config::on_unhandled_exception is set.
      */
     Status RunFor(Duration budget);
 
@@ -285,6 +316,10 @@ public:
     /**
      * @brief Signal all fibers to stop and wake suspended ones.
      *
+     * From then on every suspension point in its fibers throws
+     * SchedulerStoppingError (a CancelledError), so they unwind the next time
+     * they run; fibers that have not started never run. Joins of child
+     * fibers still wait, so a child never outlives the scope that spawned it.
      * Called automatically during destruction, but can be called
      * manually to initiate graceful shutdown.
      */

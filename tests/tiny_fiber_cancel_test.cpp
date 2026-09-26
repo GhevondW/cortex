@@ -6,6 +6,8 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
 #include <chrono>
 
 namespace tf = cortex::tiny_fiber;
@@ -225,4 +227,31 @@ TEST(TinyFiberCancel, CancellingParentDuringItsJoinCancelsTheChild) {
     });
     EXPECT_TRUE(child_cancelled);
     EXPECT_LT(child_iterations, 200);
+}
+
+// Whenever ConditionVariable::Wait throws for a cancellation, the mutex is
+// released — also when the cancellation was already pending on entry.
+TEST(TinyFiberCancel, CvWaitCancelledOnEntryLeavesTheMutexUnlocked) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        std::optional<bool> locked_in_handler;
+        std::optional<tf::Mutex::Guard> parent_lock(tf::Lock(mutex));
+        auto waiter = tf::Spawn([&] {
+            auto guard = tf::Lock(mutex); // parks here: not a cancellation point
+            try {
+                cv.Wait(guard);
+            } catch (const tf::CancelledError&) {
+                locked_in_handler = mutex.IsLocked();
+                throw;
+            }
+        });
+        tf::Yield(); // the waiter parks in Lock()
+        waiter.Cancel();
+        parent_lock.reset(); // the waiter gets the mutex with the cancellation pending
+        tf::WaitAll(waiter);
+        ASSERT_TRUE(locked_in_handler.has_value());
+        EXPECT_FALSE(*locked_in_handler);
+        EXPECT_FALSE(mutex.IsLocked());
+    });
 }

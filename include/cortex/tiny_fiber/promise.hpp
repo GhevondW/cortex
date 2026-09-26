@@ -30,10 +30,15 @@ namespace cortex::tiny_fiber {
  * kDeadlocked: the result is expected to come from outside. A blocking
  * Scheduler::Run() therefore keeps waiting for it (like std::future::wait)
  * instead of throwing DeadlockError — fulfil it via Post() from another
- * thread, or use Create() + RunFor() when it comes from an event loop. Destroying an
- * unfulfilled promise completes its future with BrokenPromiseError. A promise
- * may be fulfilled even after its scheduler is gone; the future then simply
- * holds the result.
+ * thread, or use Create() + RunFor() when it comes from an event loop. (In
+ * single-threaded WebAssembly nothing can arrive while Run() blocks, so there
+ * Run() throws DeadlockError instead.) Destroying an unfulfilled promise
+ * completes its future with BrokenPromiseError. A promise may be fulfilled
+ * even after its scheduler is gone; the future then simply holds the result.
+ *
+ * A promise belongs to its scheduler's thread: create, fulfil and destroy it
+ * there. Another thread hands it over with Scheduler::Post(), moving the
+ * promise into the posted work.
  *
  * @tparam T The value type (may be void).
  */
@@ -55,10 +60,13 @@ public:
     Promise(const Promise&) = delete;
     Promise& operator=(const Promise&) = delete;
 
+    /// Takes over `other`'s future; `other` is left empty.
     Promise(Promise&& other) noexcept
         : state_(std::move(other.state_))
         , future_taken_(other.future_taken_) {}
 
+    /// Abandons this promise's future if unfulfilled (BrokenPromiseError),
+    /// then takes over `other`'s.
     Promise& operator=(Promise&& other) noexcept {
         if (this != &other) {
             AbandonIfUnfulfilled();
@@ -117,6 +125,7 @@ public:
         state.MarkReady();
     }
 
+    /// Whether SetValue() or SetException() was called (false once moved from).
     [[nodiscard]] bool IsFulfilled() const noexcept {
         return state_ && state_->ready;
     }

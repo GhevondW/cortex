@@ -135,22 +135,31 @@ void ReportUnhandled(std::exception_ptr ex);
 // Fiber body for Spawn: runs `func` and publishes its result into `state`.
 template <typename R, typename F>
 auto MakeSpawnBody(std::shared_ptr<FutureState<R>> state, F&& func) {
-    return [state = std::move(state), f = std::forward<F>(func)]() mutable {
+    return [state = std::move(state), f = std::optional<std::decay_t<F>>(std::forward<F>(func))]() mutable {
+        std::exception_ptr failure;
         try {
             ThrowIfInterruptedAtStart();
             if constexpr (std::is_void_v<R>) {
-                f();
+                (*f)();
             } else {
-                state->result.emplace(f());
+                state->result.emplace((*f)());
             }
-            state->MarkReady();
         } catch (const cortex::detail::ForcedUnwind&) {
             // Internal unwind sentinel: it must reach the coroutine boundary,
             // and the Future must never see it.
             state->Abandon();
             throw;
         } catch (...) {
-            state->Fail(std::current_exception());
+            failure = std::current_exception();
+        }
+        // Destroy the captures now, inside the fiber and outside any catch
+        // handler (their destructors may use the scheduler, or even suspend to
+        // join a captured Future), before anyone waiting on this fiber wakes.
+        f.reset();
+        if (failure) {
+            state->Fail(std::move(failure));
+        } else {
+            state->MarkReady();
         }
     };
 }
@@ -158,14 +167,19 @@ auto MakeSpawnBody(std::shared_ptr<FutureState<R>> state, F&& func) {
 // Fiber body for fire-and-forget fibers (SpawnDetached, Scheduler::Create).
 template <typename F>
 auto MakeDetachedBody(F&& func) {
-    return [f = std::forward<F>(func)]() mutable {
+    return [f = std::optional<std::decay_t<F>>(std::forward<F>(func))]() mutable {
+        std::exception_ptr failure;
         try {
             ThrowIfInterruptedAtStart();
-            static_cast<void>(f());
+            static_cast<void>((*f)());
         } catch (const cortex::detail::ForcedUnwind&) {
             throw;
         } catch (...) {
-            ReportUnhandled(std::current_exception());
+            failure = std::current_exception();
+        }
+        f.reset(); // see MakeSpawnBody
+        if (failure) {
+            ReportUnhandled(std::move(failure));
         }
     };
 }

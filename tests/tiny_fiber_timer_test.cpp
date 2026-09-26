@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <stdexcept>
 #include <vector>
@@ -158,7 +159,9 @@ TEST(TinyFiberTimer, DeadlockIsNotConfusedWithWaiting) {
         auto guard = tf::Lock(mutex);
         cv.Wait(guard);
     });
-    scheduler->RunFor(1ms);
+    // RunFor() returns as soon as nothing is runnable; the generous budget only
+    // keeps slow (sanitizer, emulated) builds from running out mid-way.
+    scheduler->RunFor(1s);
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kWaiting); // the sleeper will wake
 }
 
@@ -267,6 +270,38 @@ TEST(TinyFiberCheckPoint, YieldsTheInnermostFiber) {
     EXPECT_TRUE(outer_finished);
 }
 
+// When iterations at one call site suddenly get expensive, CheckPoint() notices
+// within a bounded number of calls: its clock-read interval is capped.
+TEST(TinyFiberCheckPoint, CostJumpAtOneCallSiteYieldsWithinTheStrideCap) {
+    auto config = FakeClockConfig();
+    config.time_slice = 2ms;
+    int expensive_since_yield = 0;
+    int worst_run = 0; // most expensive iterations run in one slice
+    tf::Scheduler::Run(
+        [&] {
+            bool done = false;
+            auto observer = tf::Spawn([&] {
+                while (!done) {
+                    worst_run = std::max(worst_run, expensive_since_yield);
+                    expensive_since_yield = 0;
+                    tf::Yield();
+                }
+            });
+            for (int i = 0; i < 5000 + 400; ++i) {
+                if (i < 5000) {
+                    g_now += 1ns; // cheap: the stride grows to its cap
+                } else {
+                    g_now += 1ms; // expensive, at the same call site
+                    ++expensive_since_yield;
+                }
+                tf::CheckPoint();
+            }
+            done = true;
+        },
+        config);
+    EXPECT_LE(worst_run, 40); // stride cap (32) plus the ~2 iterations of a slice
+}
+
 // A cheap loop must not teach CheckPoint() to skip clock reads for so long
 // that a later expensive loop overruns its slice by orders of magnitude.
 TEST(TinyFiberCheckPoint, ExpensiveFiberAfterCheapFiberStillYieldsOnTime) {
@@ -322,4 +357,79 @@ TEST(TinyFiberCheckPoint, ExpensiveLoopAfterCheapLoopInSameFiberYieldsOnTime) {
     while (scheduler->Step()) {
     }
     EXPECT_EQ(expensive_iterations, 50);
+}
+
+// Due timers and posted work become runnable only in the next Step(), so a
+// fiber polling with YieldIfOthersReady() must still let them in.
+TEST(TinyFiberTimer, YieldIfOthersReadyLetsDueTimersFire) {
+    bool woke = false;
+    tf::Scheduler::Run([&woke] {
+        tf::SpawnDetached([&woke] {
+            tf::SleepFor(1ms);
+            woke = true;
+        });
+        const auto give_up = std::chrono::steady_clock::now() + 2s;
+        while (!woke && std::chrono::steady_clock::now() < give_up) {
+            tf::YieldIfOthersReady();
+        }
+        EXPECT_TRUE(woke);
+    });
+}
+
+TEST(TinyFiberTimer, YieldIfOthersReadyRunsPostedWork) {
+    bool ran = false;
+    tf::Scheduler::Run([&ran] {
+        tf::Scheduler::Current().Post([&ran] {
+            ran = true;
+        });
+        const auto give_up = std::chrono::steady_clock::now() + 2s;
+        while (!ran && std::chrono::steady_clock::now() < give_up) {
+            tf::YieldIfOthersReady();
+        }
+        EXPECT_TRUE(ran);
+    });
+}
+
+// A "forever" timeout such as milliseconds::max() must not overflow while it is
+// converted to the scheduler's clock and wrap around to an immediate timeout.
+TEST(TinyFiberTimer, HugeTimeoutsWaitForever) {
+    using Hours = std::chrono::time_point<std::chrono::steady_clock, std::chrono::hours>;
+    tf::Scheduler::Run([] {
+        tf::Promise<int> promise;
+        tf::Future<int> result = promise.GetFuture();
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        bool slept = false;
+
+        auto sleeper = tf::Spawn([&slept] {
+            tf::SleepFor(std::chrono::hours::max());
+            slept = true;
+        });
+        auto sleeper_until = tf::Spawn([&slept] {
+            tf::SleepUntil(Hours::max());
+            slept = true;
+        });
+        auto future_waiter = tf::Spawn([&result] {
+            return result.WaitFor(std::chrono::milliseconds::max());
+        });
+        auto cv_waiter = tf::Spawn([&mutex, &cv] {
+            auto guard = tf::Lock(mutex);
+            return cv.WaitFor(guard, std::chrono::seconds::max());
+        });
+
+        tf::SleepFor(20ms);
+        EXPECT_FALSE(future_waiter.IsReady());
+        EXPECT_FALSE(cv_waiter.IsReady());
+        EXPECT_FALSE(slept);
+
+        promise.SetValue(1);
+        {
+            auto guard = tf::Lock(mutex);
+            cv.NotifyAll();
+        }
+        EXPECT_TRUE(future_waiter.Get());
+        EXPECT_TRUE(cv_waiter.Get());
+        sleeper.Cancel();
+        sleeper_until.Cancel();
+    });
 }

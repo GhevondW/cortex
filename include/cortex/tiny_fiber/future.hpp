@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cortex/tiny_fiber/detail/duration.hpp>
 #include <cortex/tiny_fiber/detail/future_state.hpp>
 #include <cortex/tiny_fiber/errors/broken_promise_error.hpp>
 #include <cortex/tiny_fiber/errors/cancelled_error.hpp>
@@ -75,7 +76,7 @@ public:
             return AwaitStateUntil(state, Scheduler::TimePoint::max()); // throws the clear error
         }
         const auto now = scheduler->Now();
-        const auto step = std::chrono::ceil<Scheduler::Duration>(timeout);
+        const auto step = SaturatingCeil(timeout);
         const auto deadline = step >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + step;
         return AwaitStateUntil(state, deadline);
     }
@@ -85,6 +86,7 @@ public:
      *        scheduler's clock reaches `deadline`.
      *
      * @return true if the result is ready.
+     * @throws SchedulerStoppingError / CancelledError like Wait().
      */
     bool WaitUntil(Scheduler::TimePoint deadline) {
         return AwaitStateUntil(RequireState(), deadline);
@@ -98,6 +100,11 @@ public:
      * Channel operations), and is woken if it is parked in one. A fiber that
      * has not started never runs. Get()/Wait() then rethrow CancelledError
      * unless the fiber caught it. No effect once the fiber finished.
+     *
+     * The cancellation reaches the fibers it spawned and still holds Futures
+     * of: destroying those Futures while it unwinds cancels and joins them.
+     * Detached fibers (SpawnDetached(), Detach()) are not cancelled.
+     * Mutex::Lock() is not a cancellation point.
      */
     void Cancel() noexcept {
         if (!state_ || state_->ready || state_->fiber_id == 0) {
@@ -182,6 +189,9 @@ private:
  * the result is ready they may also be called from plain code. Calling them
  * from plain code before the result is ready throws std::logic_error.
  *
+ * Future<T>::Wait() only waits; Get() returns the value or rethrows the
+ * fiber's exception. Future<void> has no value, so its Wait() rethrows too.
+ *
  * @tparam T The return type of the fiber.
  */
 template <typename T>
@@ -193,6 +203,7 @@ public:
      * Does not rethrow the fiber's exception (Get() does).
      *
      * @throws SchedulerStoppingError if the scheduler is stopping.
+     * @throws CancelledError if the waiting fiber was cancelled.
      * @throws std::logic_error if not ready and not called from a fiber of
      *         the owning scheduler.
      */
@@ -209,6 +220,10 @@ public:
      * @throws Any exception thrown by the fiber (CancelledError if it was
      *         cancelled or its scheduler stopped, BrokenPromiseError if it
      *         was destroyed before finishing).
+     * @throws SchedulerStoppingError / CancelledError if the waiting fiber
+     *         is interrupted while it waits.
+     * @throws std::logic_error if the result was already retrieved, or if
+     *         called from plain code before the result is ready.
      */
     T Get() {
         auto& state = this->RequireState();

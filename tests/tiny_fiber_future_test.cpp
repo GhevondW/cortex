@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <chrono>
 #include <future>
 #include <optional>
@@ -13,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace tf = cortex::tiny_fiber;
@@ -462,13 +464,13 @@ TEST(TinyFiberPromise, FulfilledFromPlainCodeWakesFiber) {
         ++wakeups;
     });
 
-    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting); // waits on the outside world
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kWaiting); // waits on the outside world
     EXPECT_EQ(wakeups, 0);
 
     promise->SetValue(42); // e.g. from a JavaScript callback
     EXPECT_EQ(wakeups, 1);
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable);
-    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kDone);
     EXPECT_EQ(result, 42);
 }
 
@@ -484,9 +486,9 @@ TEST(TinyFiberPromise, DestroyedPromiseBreaksFuture) {
             broken = true;
         }
     });
-    scheduler->RunFor(1ms);
+    scheduler->RunFor(1s);
     promise.reset();
-    scheduler->RunFor(1ms);
+    scheduler->RunFor(1s);
     EXPECT_TRUE(broken);
 }
 
@@ -528,7 +530,7 @@ TEST(TinyFiberPromise, FiberToFiberDoesNotCallWakeupHandler) {
     scheduler->SetWakeupHandler([&] {
         ++wakeups;
     });
-    EXPECT_EQ(scheduler->RunFor(10ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kDone);
     EXPECT_EQ(wakeups, 0); // woken inside a step: the driver is already running
 }
 
@@ -561,7 +563,7 @@ TEST(TinyFiberPost, PostedWorkRunsOnNextStepAndMaySpawn) {
         });
     });
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable);
-    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kDone);
     EXPECT_TRUE(ran);
 }
 
@@ -653,4 +655,103 @@ TEST(TinyFiberPromise, TimerFiringInsideRunForDoesNotCallWakeupHandler) {
     g_now += 10ms;
     EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
     EXPECT_EQ(wakeups, 0);
+}
+
+namespace {
+
+// Records whether it was destroyed while a fiber was running.
+struct FiberContextProbe {
+    explicit FiberContextProbe(bool* in_fiber)
+        : in_fiber_(in_fiber) {}
+    FiberContextProbe(FiberContextProbe&& other) noexcept
+        : in_fiber_(std::exchange(other.in_fiber_, nullptr)) {}
+    FiberContextProbe(const FiberContextProbe&) = delete;
+    FiberContextProbe& operator=(const FiberContextProbe&) = delete;
+    FiberContextProbe& operator=(FiberContextProbe&&) = delete;
+    ~FiberContextProbe() {
+        if (in_fiber_ != nullptr) {
+            tf::Scheduler* scheduler = tf::Scheduler::TryCurrent();
+            *in_fiber_ = scheduler != nullptr && scheduler->GetCurrentFiber() != nullptr;
+        }
+    }
+
+private:
+    bool* in_fiber_;
+};
+
+} // namespace
+
+// What a fiber captured dies with the fiber, inside it: destructors may use
+// the scheduler (unlock a Mutex, break a Promise, join a Future).
+TEST(TinyFiberFuture, CapturesAreDestroyedInsideTheFiber) {
+    bool spawned_in_fiber = false;
+    bool detached_in_fiber = false;
+    tf::Scheduler::Run([&] {
+        auto future = tf::Spawn([probe = FiberContextProbe(&spawned_in_fiber)] {
+        });
+        tf::SpawnDetached([probe = FiberContextProbe(&detached_in_fiber)] {
+        });
+        future.Wait();
+    });
+    EXPECT_TRUE(spawned_in_fiber);
+    EXPECT_TRUE(detached_in_fiber);
+}
+
+// A promise owned by a fiber that finished without fulfilling it breaks in
+// the same step, so a driver never sees kWaiting with nothing to wait for.
+TEST(TinyFiberPromise, CapturedPromiseBreaksWhenItsFiberFinishes) {
+    bool broken = false;
+    auto scheduler = tf::Scheduler::Create([&broken] {
+        tf::Promise<int> promise;
+        auto future = promise.GetFuture();
+        tf::SpawnDetached([promise = std::move(promise)]() mutable {
+        });
+        try {
+            future.Get();
+        } catch (const tf::BrokenPromiseError&) {
+            broken = true;
+        }
+    });
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kDone);
+    EXPECT_TRUE(broken);
+}
+
+// Run() must not wait forever for a promise whose cancelled producer owned it.
+TEST(TinyFiberPromise, CancelledProducerBreaksItsPromise) {
+    EXPECT_THROW(tf::Scheduler::Run([] {
+                     tf::Promise<int> promise;
+                     auto future = promise.GetFuture();
+                     auto producer = tf::Spawn([promise = std::move(promise)]() mutable {
+                         tf::SleepFor(10s);
+                         promise.SetValue(1);
+                     });
+                     producer.Cancel();
+                     return future.Get();
+                 }),
+                 tf::BrokenPromiseError);
+}
+
+// Containers of futures work directly, not only std::span.
+TEST(TinyFiberWait, WaitAllAndWaitAnyTakeContainers) {
+    tf::Scheduler::Run([] {
+        std::vector<tf::Future<int>> futures;
+        for (int i = 0; i < 3; ++i) {
+            futures.push_back(tf::Spawn([i] {
+                tf::SleepFor(std::chrono::milliseconds(1 + i * 5));
+                return i;
+            }));
+        }
+        EXPECT_EQ(tf::WaitAny(futures), 0u);
+        tf::WaitAll(futures);
+        for (auto& future : futures) {
+            EXPECT_TRUE(future.IsReady());
+        }
+
+        std::array<tf::Future<void>, 2> pair {tf::Spawn([] {
+                                              }),
+                                              tf::Spawn([] {
+                                              })};
+        tf::WaitAll(pair);
+        EXPECT_TRUE(pair[0].IsReady() && pair[1].IsReady());
+    });
 }

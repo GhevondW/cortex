@@ -29,8 +29,16 @@ void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadl
 
     auto& scheduler = Scheduler::Current();
 
-    // A cancellation point: stopping or a cancelled fiber throws here.
-    scheduler.ThrowIfInterrupted(true);
+    // A cancellation point: stopping or a cancelled fiber throws here. Like
+    // every interrupted wait below, it leaves without the mutex.
+    try {
+        scheduler.ThrowIfInterrupted(true);
+    } catch (...) {
+        auto* mutex = guard.mutex_;
+        guard.mutex_ = nullptr;
+        mutex->Unlock();
+        throw;
+    }
 
     auto* current = scheduler.GetCurrentFiber();
     if (!current) {

@@ -34,11 +34,22 @@ namespace cortex::tiny_fiber {
  * an explicit scheduler (from plain code) is assumed to be fed from outside:
  * fibers waiting on it make the scheduler report kWaiting, not kDeadlocked.
  *
- * Like Mutex, a channel must outlive the fibers that use it.
+ * Like Mutex, a channel must outlive the fibers that use it. It is not
+ * thread-safe: other threads feed it through Scheduler::Post().
+ *
+ * @code
+ * tf::Channel<int> numbers(4); // room for 4: Send() waits while it is full
+ * auto producer = tf::Spawn([&] {
+ *     for (int i = 0; i < 100; ++i) numbers.Send(i);
+ *     numbers.Close();
+ * });
+ * for (int n : numbers) Use(n); // receives until closed and drained
+ * @endcode
  */
 template <typename T>
 class Channel {
 public:
+    /// Capacity of a channel that never makes Send() wait.
     static constexpr std::size_t kUnbounded = std::numeric_limits<std::size_t>::max();
 
     /**
@@ -147,6 +158,7 @@ public:
         }
     }
 
+    /// Whether Close() was called (values may still be buffered).
     [[nodiscard]] bool IsClosed() const noexcept {
         return closed_;
     }
@@ -156,6 +168,7 @@ public:
         return buffer_.size();
     }
 
+    /// Most values it buffers before Send() waits (kUnbounded: no limit).
     [[nodiscard]] std::size_t Capacity() const noexcept {
         return capacity_;
     }
@@ -221,6 +234,7 @@ public:
         return Iterator(this);
     }
 
+    /// Reached once the channel is closed and drained.
     [[nodiscard]] std::default_sentinel_t end() const noexcept {
         return std::default_sentinel;
     }

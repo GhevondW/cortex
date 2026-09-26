@@ -140,15 +140,17 @@ TEST(TinyFiberChannel, FedFromPlainCodeBetweenSteps) {
     });
     channel = std::make_unique<tf::Channel<int>>(*scheduler);
 
-    scheduler->RunFor(1ms);
+    // RunFor() returns as soon as nothing is runnable; the generous budget only
+    // keeps slow (sanitizer, emulated) builds from running out mid-way.
+    scheduler->RunFor(1s);
     // Bound to the scheduler from plain code: fed from outside, so waiting on
     // it is waiting on the outside world, not a deadlock.
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kWaiting);
     EXPECT_TRUE(channel->TrySend(1)); // e.g. from an input-event callback
     EXPECT_TRUE(channel->TrySend(2));
-    scheduler->RunFor(1ms);
+    scheduler->RunFor(1s);
     channel->Close();
-    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(scheduler->RunFor(1s), tf::Scheduler::Status::kDone);
     EXPECT_EQ(received, (std::vector<int> {1, 2}));
 }
 
@@ -198,7 +200,7 @@ TEST(TinyFiberChannel, StopWakesEveryKindOfWait) {
         }));
         // `sleeper` stays shared with the fibers above; the entry just returns.
     });
-    scheduler->RunFor(5ms);
+    scheduler->RunFor(1s);
     ASSERT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kWaiting);
     scheduler->Stop();
     while (!scheduler->IsDone()) {

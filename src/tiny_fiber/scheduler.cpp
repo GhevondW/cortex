@@ -10,6 +10,22 @@
 #include <thread>
 #include <utility>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+
+namespace {
+// clang-format off
+// Tells js/cortex.mjs that a scheduler is being destroyed, so a driver still
+// holding its address stops instead of driving whatever reuses the memory.
+EM_JS(void, cortex_js_forget, (void* scheduler), {
+    if (Module["cortexForget"]) {
+        Module["cortexForget"](scheduler);
+    }
+});
+// clang-format on
+} // namespace
+#endif
+
 namespace cortex::tiny_fiber {
 
 namespace {
@@ -63,6 +79,9 @@ Scheduler::Scheduler(Config config)
 }
 
 Scheduler::~Scheduler() {
+#if defined(__EMSCRIPTEN__)
+    cortex_js_forget(this);
+#endif
     // Nobody may be told to drive a scheduler that is going away. Taking the
     // lock also waits for a Post() still inside its critical section.
     {
@@ -251,8 +270,11 @@ void Scheduler::SleepUntilInternal(TimePoint deadline) {
 }
 
 void Scheduler::CheckPointCurrent(const std::source_location& where) {
-    // Upper bound on calls between two clock reads.
-    constexpr std::uint32_t kMaxCheckpointStride = 256;
+    // Upper bound on calls between two clock reads, and so on how many
+    // iterations late a yield can be when the iterations at one call site
+    // suddenly get expensive. Reading the clock every 32 calls costs about a
+    // nanosecond per call.
+    constexpr std::uint32_t kMaxCheckpointStride = 32;
 
     ThrowIfInterrupted(true);
 
@@ -598,7 +620,10 @@ void Scheduler::YieldCurrent() {
 }
 
 bool Scheduler::HasOtherReadyFibers() const {
-    return !ready_queue_.empty();
+    // Due timers and posted work become runnable fibers only in the next
+    // Step(), so they count too: a fiber polling with YieldIfOthersReady()
+    // must still let them in.
+    return !ready_queue_.empty() || has_posted_.load(std::memory_order_acquire) || HasDueTimer(config_.clock());
 }
 
 } // namespace cortex::tiny_fiber

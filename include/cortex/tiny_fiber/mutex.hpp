@@ -25,13 +25,16 @@ public:
      */
     class Guard {
     public:
+        /// Locks `mutex` (see Mutex::Lock()); the destructor unlocks it.
         explicit Guard(Mutex& mutex);
         ~Guard();
 
         Guard(const Guard&) = delete;
         Guard& operator=(const Guard&) = delete;
 
+        /// Takes over the lock; `other` no longer owns it.
         Guard(Guard&& other) noexcept;
+        /// Releases the lock held, if any, and takes over `other`'s.
         Guard& operator=(Guard&& other) noexcept;
 
     private:
@@ -49,8 +52,14 @@ public:
     /**
      * @brief Lock the mutex.
      *
-     * If the mutex is already locked, the current fiber yields
-     * until it becomes available.
+     * If the mutex is already locked, the current fiber waits (other fibers
+     * run) until it becomes available. Not a cancellation point: a
+     * cancelled fiber still gets the lock, and sees the cancellation at its
+     * next wait.
+     *
+     * @throws SchedulerStoppingError if the scheduler is stopping.
+     * @throws std::logic_error outside of a fiber, or if this fiber already
+     *         holds the mutex.
      */
     void Lock();
 

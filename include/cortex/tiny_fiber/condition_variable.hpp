@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cortex/tiny_fiber/detail/duration.hpp>
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 #include <cortex/tiny_fiber/detail/wait_queue.hpp>
 #include <cortex/tiny_fiber/mutex.hpp>
@@ -34,7 +35,14 @@ public:
      * The mutex must be locked by the current fiber. It will be
      * unlocked while waiting and re-locked before returning.
      *
+     * Unlike std::condition_variable, a wait that ends because the fiber was
+     * cancelled or the scheduler stops throws *without* re-locking: the
+     * mutex is released and `guard` no longer owns it. The same holds for
+     * WaitUntil() and WaitFor().
+     *
      * @param guard The lock guard holding the mutex.
+     * @throws CancelledError if the fiber was cancelled (Future::Cancel()).
+     * @throws SchedulerStoppingError if the scheduler is stopping.
      */
     void Wait(Mutex::Guard& guard);
 
@@ -56,6 +64,8 @@ public:
      *        `deadline`. The mutex is re-locked before returning normally.
      *
      * @return true if notified, false if the deadline passed.
+     * @throws CancelledError / SchedulerStoppingError like Wait(), without
+     *         the mutex.
      */
     bool WaitUntil(Mutex::Guard& guard, Scheduler::TimePoint deadline);
 
@@ -66,7 +76,7 @@ public:
      */
     template <typename Rep, typename Period>
     bool WaitFor(Mutex::Guard& guard, std::chrono::duration<Rep, Period> timeout) {
-        return WaitUntil(guard, DeadlineAfter(std::chrono::ceil<Scheduler::Duration>(timeout)));
+        return WaitUntil(guard, DeadlineAfter(detail::SaturatingCeil(timeout)));
     }
 
     /**
@@ -76,7 +86,7 @@ public:
      */
     template <typename Rep, typename Period, typename Predicate>
     bool WaitFor(Mutex::Guard& guard, std::chrono::duration<Rep, Period> timeout, Predicate pred) {
-        const auto deadline = DeadlineAfter(std::chrono::ceil<Scheduler::Duration>(timeout));
+        const auto deadline = DeadlineAfter(detail::SaturatingCeil(timeout));
         while (!pred()) {
             if (!WaitUntil(guard, deadline)) {
                 return pred();
@@ -86,12 +96,14 @@ public:
     }
 
     /**
-     * @brief Wake one waiting fiber.
+     * @brief Wake one waiting fiber. Call it from a fiber of the scheduler
+     *        (it throws std::logic_error from plain code).
      */
     void NotifyOne();
 
     /**
-     * @brief Wake all waiting fibers.
+     * @brief Wake all waiting fibers. Call it from a fiber of the scheduler
+     *        (it throws std::logic_error from plain code).
      */
     void NotifyAll();
 
