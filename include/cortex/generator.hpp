@@ -7,6 +7,8 @@
 #include <function2/function2.hpp>
 
 #include <cassert>
+#include <cstddef>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -22,6 +24,16 @@ namespace cortex {
 /**
  * @class Generator
  * @brief A stackful generator that yields values of type T.
+ *
+ * The body may yield from any depth of nested calls (e.g. a recursive tree
+ * walk). A Generator is an input range:
+ *
+ * @code
+ * auto numbers = cortex::Generator<int>::Make([](auto& yield) {
+ *     for (int i = 0; i < 3; ++i) yield(i);
+ * });
+ * for (int n : numbers) { ... }
+ * @endcode
  */
 template <typename T>
 class Generator final {
@@ -149,6 +161,73 @@ public:
 
         coroutine_.Resume();
         return state_->current.has_value();
+    }
+
+    /**
+     * @class Iterator
+     * @brief Input iterator over the yielded values. Dereferencing gives
+     *        access to the current value, which may be moved from.
+     */
+    class Iterator {
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using reference = T&;
+        using pointer = T*;
+
+        Iterator() = default;
+
+        reference operator*() const {
+            return *generator_->state_->current;
+        }
+
+        pointer operator->() const {
+            return &*generator_->state_->current;
+        }
+
+        Iterator& operator++() {
+            Advance();
+            return *this;
+        }
+
+        void operator++(int) {
+            Advance();
+        }
+
+        friend bool operator==(const Iterator& it, std::default_sentinel_t) noexcept {
+            return it.generator_ == nullptr;
+        }
+
+    private:
+        friend class Generator;
+
+        explicit Iterator(Generator* generator)
+            : generator_(generator) {
+            Advance();
+        }
+
+        void Advance() {
+            if (!generator_->Next()) {
+                generator_ = nullptr;
+            }
+        }
+
+        Generator* generator_ {nullptr};
+    };
+
+    /**
+     * @brief Start iterating: runs the body until its first yield.
+     */
+    Iterator begin() {
+        return Iterator(this);
+    }
+
+    /**
+     * @brief End sentinel: reached once the body returns.
+     */
+    [[nodiscard]] std::default_sentinel_t end() const noexcept {
+        return std::default_sentinel;
     }
 
     /**
