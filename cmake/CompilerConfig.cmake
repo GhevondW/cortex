@@ -1,5 +1,13 @@
-# Force C++ Standard
-set(CMAKE_CXX_STANDARD 23)
+# C++ standard. The library itself only requires C++20 (enforced on the target
+# with cxx_std_20); the repo's own tests, apps and examples use C++23. When
+# cortex is a subproject, respect whatever standard the consumer picked.
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+    if(PROJECT_IS_TOP_LEVEL)
+        set(CMAKE_CXX_STANDARD 23)
+    else()
+        set(CMAKE_CXX_STANDARD 20)
+    endif()
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

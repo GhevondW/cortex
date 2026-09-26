@@ -50,13 +50,16 @@ target_sources(cortex
 
 # Includes
 target_include_directories(cortex PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
 target_include_directories(cortex PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# Consumers only need C++20 to use the public headers.
+target_compile_features(cortex PUBLIC cxx_std_20)
 
 target_link_libraries(cortex PUBLIC function2::function2)
 

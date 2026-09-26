@@ -8,7 +8,7 @@ if(NOT EMSCRIPTEN)
         "BOOST_ENABLE_CMAKE ON" 
         "BOOST_SKIP_INSTALL_RULES ON"
         "BUILD_SHARED_LIBS OFF" 
-        "BOOST_INCLUDE_LIBRARIES context\\\;asio"
+        "BOOST_INCLUDE_LIBRARIES context"
     )
 
     if(CORTEX_USE_SANITIZERS)
