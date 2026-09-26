@@ -44,7 +44,10 @@ TEST(WasmAsyncify, DeepRecursionCanSuspendAtTheBottom) {
     int result = -1;
     std::vector<int> trail;
     auto coroutine = cortex::Coroutine::Make(
-        [&](cortex::CoroutineSuspendContext& ctx) { result = Descend(kDepth, ctx, trail); }, 1024 * 1024);
+        [&](cortex::CoroutineSuspendContext& ctx) {
+            result = Descend(kDepth, ctx, trail);
+        },
+        1024 * 1024);
 
     coroutine.Resume(); // runs down to the bottom and suspends there
     EXPECT_FALSE(coroutine.IsDone());

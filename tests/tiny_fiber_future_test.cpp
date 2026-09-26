@@ -60,7 +60,11 @@ TEST(TinyFiberFuture, GetOutsideFiberOnUnfinishedResultThrowsClearError) {
 
 TEST(TinyFiberFuture, WaitOutsideFiberOnUnfinishedResultThrowsClearError) {
     std::optional<tf::Future<void>> escaped;
-    auto scheduler = tf::Scheduler::Create([&] { escaped.emplace(tf::Spawn([] { tf::Yield(); })); });
+    auto scheduler = tf::Scheduler::Create([&] {
+        escaped.emplace(tf::Spawn([] {
+            tf::Yield();
+        }));
+    });
     scheduler->Step();
     EXPECT_THROW(escaped->Wait(), std::logic_error);
     while (scheduler->Step()) {
@@ -144,7 +148,11 @@ TEST(TinyFiberFuture, SpawnDetachedRuns) {
 TEST(TinyFiberFuture, UnstartedFiberNeverRunsBodyAfterStop) {
     bool body_ran = false;
     {
-        auto scheduler = tf::Scheduler::Create([&] { tf::SpawnDetached([&] { body_ran = true; }); });
+        auto scheduler = tf::Scheduler::Create([&] {
+            tf::SpawnDetached([&] {
+                body_ran = true;
+            });
+        });
         scheduler->Step(); // entry spawns the child; the child has not started
     } // teardown
     EXPECT_FALSE(body_ran);
@@ -205,8 +213,12 @@ TEST(TinyFiberWait, WaitAnyReturnsFirstReadyIndex) {
 
 TEST(TinyFiberWait, WaitAnyReturnsImmediatelyWhenOneIsReady) {
     tf::Scheduler::Run([] {
-        auto never = tf::Spawn([] { tf::SleepFor(1h); });
-        auto done = tf::Spawn([] { return 3; });
+        auto never = tf::Spawn([] {
+            tf::SleepFor(1h);
+        });
+        auto done = tf::Spawn([] {
+            return 3;
+        });
         tf::Yield();
         EXPECT_EQ(tf::WaitAny(never, done), 1u);
         never.Cancel();
@@ -254,7 +266,9 @@ TEST(TinyFiberWait, FutureWaitForTimesOut) {
     bool second_wait = false;
     auto scheduler = tf::Scheduler::Create(
         [&] {
-            auto slow = tf::Spawn([] { tf::SleepFor(20ms); });
+            auto slow = tf::Spawn([] {
+                tf::SleepFor(20ms);
+            });
             first_wait = slow.WaitFor(10ms);
             second_wait = slow.WaitFor(20ms);
         },
@@ -312,7 +326,9 @@ TEST(TinyFiberWait, CvWaitForWithPredicate) {
             cv.NotifyAll();
         });
         auto guard = tf::Lock(mutex);
-        EXPECT_TRUE(cv.WaitFor(guard, 1h, [&] { return flag; }));
+        EXPECT_TRUE(cv.WaitFor(guard, 1h, [&] {
+            return flag;
+        }));
     });
 }
 
@@ -362,9 +378,13 @@ TEST(TinyFiberWait, CvWaitForTimeoutLeavesNoStaleWake) {
 
 TEST(TinyFiberWait, WaitAnyInLoopDoesNotGrowWithoutBound) {
     tf::Scheduler::Run([] {
-        auto long_lived = tf::Spawn([] { tf::SleepFor(1h); });
+        auto long_lived = tf::Spawn([] {
+            tf::SleepFor(1h);
+        });
         for (int i = 0; i < 10000; ++i) {
-            auto tick = tf::Spawn([] { tf::Yield(); });
+            auto tick = tf::Spawn([] {
+                tf::Yield();
+            });
             EXPECT_EQ(tf::WaitAny(long_lived, tick), 1u);
         }
         EXPECT_LT(long_lived.StateInternal()->waiters.Size(), 32u);
@@ -374,9 +394,15 @@ TEST(TinyFiberWait, WaitAnyInLoopDoesNotGrowWithoutBound) {
 
 TEST(TinyFiberWait, CancelDuringWaitAnyWakesOnce) {
     tf::Scheduler::Run([] {
-        auto a = tf::Spawn([] { tf::SleepFor(10ms); });
-        auto b = tf::Spawn([] { tf::SleepFor(20ms); });
-        auto waiter = tf::Spawn([&] { return tf::WaitAny(a, b); });
+        auto a = tf::Spawn([] {
+            tf::SleepFor(10ms);
+        });
+        auto b = tf::Spawn([] {
+            tf::SleepFor(20ms);
+        });
+        auto waiter = tf::Spawn([&] {
+            return tf::WaitAny(a, b);
+        });
         tf::Yield();
         waiter.Cancel();
         EXPECT_THROW((void)waiter.Get(), tf::CancelledError);
@@ -396,7 +422,9 @@ TEST(TinyFiberPromise, FulfilledFromPlainCodeWakesFiber) {
         auto future = promise->GetFuture();
         result = future.Get();
     });
-    scheduler->SetWakeupHandler([&] { ++wakeups; });
+    scheduler->SetWakeupHandler([&] {
+        ++wakeups;
+    });
 
     EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting); // waits on the outside world
     EXPECT_EQ(wakeups, 0);
@@ -443,7 +471,9 @@ TEST(TinyFiberPromise, ExceptionIsDelivered) {
     tf::Scheduler::Run([] {
         tf::Promise<void> promise;
         auto future = promise.GetFuture();
-        auto fulfiller = tf::Spawn([&] { promise.SetException(std::make_exception_ptr(std::runtime_error("no"))); });
+        auto fulfiller = tf::Spawn([&] {
+            promise.SetException(std::make_exception_ptr(std::runtime_error("no")));
+        });
         EXPECT_THROW(future.Get(), std::runtime_error);
     });
 }
@@ -459,7 +489,9 @@ TEST(TinyFiberPromise, FiberToFiberDoesNotCallWakeupHandler) {
         });
         future.Wait();
     });
-    scheduler->SetWakeupHandler([&] { ++wakeups; });
+    scheduler->SetWakeupHandler([&] {
+        ++wakeups;
+    });
     EXPECT_EQ(scheduler->RunFor(10ms), tf::Scheduler::Status::kDone);
     EXPECT_EQ(wakeups, 0); // woken inside a step: the driver is already running
 }
@@ -468,7 +500,8 @@ TEST(TinyFiberPromise, FulfilledAfterSchedulerDestroyedIsSafe) {
     std::optional<tf::Promise<int>> promise;
     std::optional<tf::Future<int>> future;
     {
-        auto scheduler = tf::Scheduler::Create([] {});
+        auto scheduler = tf::Scheduler::Create([] {
+        });
         promise.emplace(*scheduler);
         future.emplace(promise->GetFuture());
         while (scheduler->Step()) {
@@ -481,11 +514,16 @@ TEST(TinyFiberPromise, FulfilledAfterSchedulerDestroyedIsSafe) {
 
 TEST(TinyFiberPost, PostedWorkRunsOnNextStepAndMaySpawn) {
     bool ran = false;
-    auto scheduler = tf::Scheduler::Create([] {});
+    auto scheduler = tf::Scheduler::Create([] {
+    });
     while (scheduler->Step()) {
     }
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kDone);
-    scheduler->Post([&] { tf::SpawnDetached([&] { ran = true; }); });
+    scheduler->Post([&] {
+        tf::SpawnDetached([&] {
+            ran = true;
+        });
+    });
     EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable);
     EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
     EXPECT_TRUE(ran);
@@ -499,7 +537,9 @@ TEST(TinyFiberPost, PostFromAnotherThreadCompletesPromiseWhileRunBlocks) {
         auto future = promise->GetFuture();
         std::thread worker([&scheduler, promise] {
             std::this_thread::sleep_for(5ms);
-            scheduler.Post([promise] { promise->SetValue(7); });
+            scheduler.Post([promise] {
+                promise->SetValue(7);
+            });
         });
         const int result = future.Get(); // Run() blocks the thread until Post
         worker.join();

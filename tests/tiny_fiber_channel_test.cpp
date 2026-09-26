@@ -87,8 +87,12 @@ TEST(TinyFiberChannel, CloseWakesBlockedReceiversAndSenders) {
         tf::Channel<int> full(1);
         full.Send(0);
         tf::Channel<int> empty;
-        auto sender = tf::Spawn([&] { return full.Send(1); });
-        auto receiver = tf::Spawn([&] { return empty.Receive(); });
+        auto sender = tf::Spawn([&] {
+            return full.Send(1);
+        });
+        auto receiver = tf::Spawn([&] {
+            return empty.Receive();
+        });
         tf::Yield();
         full.Close();
         empty.Close();
@@ -111,7 +115,9 @@ TEST(TinyFiberChannel, TrySendAndTryReceiveNeverBlock) {
 TEST(TinyFiberChannel, CancelBlockedReceiver) {
     tf::Scheduler::Run([] {
         tf::Channel<int> channel;
-        auto receiver = tf::Spawn([&] { return channel.Receive(); });
+        auto receiver = tf::Spawn([&] {
+            return channel.Receive();
+        });
         tf::Yield();
         receiver.Cancel();
         EXPECT_THROW((void)receiver.Get(), tf::CancelledError);
@@ -119,7 +125,9 @@ TEST(TinyFiberChannel, CancelBlockedReceiver) {
 }
 
 TEST(TinyFiberChannel, ZeroCapacityIsRejected) {
-    tf::Scheduler::Run([] { EXPECT_THROW(tf::Channel<int>(0), std::invalid_argument); });
+    tf::Scheduler::Run([] {
+        EXPECT_THROW(tf::Channel<int>(0), std::invalid_argument);
+    });
 }
 
 TEST(TinyFiberChannel, FedFromPlainCodeBetweenSteps) {
@@ -160,12 +168,22 @@ TEST(TinyFiberChannel, StopWakesEveryKindOfWait) {
             };
         };
         auto channel = std::make_shared<tf::Channel<int>>();
-        auto sleeper = std::make_shared<tf::Future<void>>(tf::Spawn([] { tf::SleepFor(1h); }));
-        tf::SpawnDetached(count_stop([] { tf::SleepFor(1h); }));
-        tf::SpawnDetached(count_stop([channel] { (void)channel->Receive(); }));
-        tf::SpawnDetached(count_stop([sleeper] { sleeper->Wait(); }));
+        auto sleeper = std::make_shared<tf::Future<void>>(tf::Spawn([] {
+            tf::SleepFor(1h);
+        }));
+        tf::SpawnDetached(count_stop([] {
+            tf::SleepFor(1h);
+        }));
+        tf::SpawnDetached(count_stop([channel] {
+            (void)channel->Receive();
+        }));
         tf::SpawnDetached(count_stop([sleeper] {
-            auto other = tf::Spawn([] { tf::SleepFor(1h); });
+            sleeper->Wait();
+        }));
+        tf::SpawnDetached(count_stop([sleeper] {
+            auto other = tf::Spawn([] {
+                tf::SleepFor(1h);
+            });
             (void)tf::WaitAny(*sleeper, other);
         }));
         tf::SpawnDetached(count_stop([] {
@@ -175,7 +193,9 @@ TEST(TinyFiberChannel, StopWakesEveryKindOfWait) {
             (void)cv.WaitFor(guard, 1h);
         }));
         auto promise = std::make_shared<tf::Promise<int>>();
-        tf::SpawnDetached(count_stop([promise] { (void)promise->GetFuture().Get(); }));
+        tf::SpawnDetached(count_stop([promise] {
+            (void)promise->GetFuture().Get();
+        }));
         // `sleeper` stays shared with the fibers above; the entry just returns.
     });
     scheduler->RunFor(5ms);

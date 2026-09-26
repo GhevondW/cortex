@@ -48,8 +48,7 @@ void SleepForImpl(std::chrono::steady_clock::duration duration) {
         throw std::logic_error("SleepFor() must be called from within a fiber");
     }
     const auto now = scheduler->Now();
-    const auto deadline =
-        duration >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + duration;
+    const auto deadline = duration >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + duration;
     scheduler->SleepUntilInternal(deadline);
 }
 

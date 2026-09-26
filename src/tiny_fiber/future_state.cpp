@@ -58,9 +58,8 @@ Scheduler& RequireWaitingFiberScheduler(const FutureStateBase& state) {
         throw std::logic_error("Future: the result is not ready and its scheduler has been destroyed");
     }
     if (Scheduler::TryCurrent() != scheduler || scheduler->GetCurrentFiber() == nullptr) {
-        throw std::logic_error(
-            "Future: the result is not ready and the caller is not a fiber of the owning scheduler. "
-            "Call Get()/Wait() from a fiber, or drive the scheduler until IsReady().");
+        throw std::logic_error("Future: the result is not ready and the caller is not a fiber of the owning scheduler. "
+                               "Call Get()/Wait() from a fiber, or drive the scheduler until IsReady().");
     }
     return *scheduler;
 }

@@ -12,7 +12,9 @@ namespace tf = cortex::tiny_fiber;
 TEST(TinyFiberNested, OuterFiberCanYieldAfterSteppingInnerScheduler) {
     bool outer_yield_ok = false;
     tf::Scheduler::Run([&] {
-        auto inner = tf::Scheduler::Create([] { tf::Yield(); });
+        auto inner = tf::Scheduler::Create([] {
+            tf::Yield();
+        });
         while (inner->Step()) {
         }
         tf::Yield(); // must yield the OUTER fiber
@@ -30,7 +32,9 @@ TEST(TinyFiberNested, CurrentIsInnermostInsideInnerFiber) {
     tf::Scheduler* after_inner = nullptr;
     tf::Scheduler::Run([&] {
         outer = tf::Scheduler::TryCurrent();
-        auto inner = tf::Scheduler::Create([&] { seen_inside = tf::Scheduler::TryCurrent(); });
+        auto inner = tf::Scheduler::Create([&] {
+            seen_inside = tf::Scheduler::TryCurrent();
+        });
         inner_ptr = inner.get();
         while (inner->Step()) {
         }
@@ -62,7 +66,9 @@ TEST(TinyFiberNested, DestroyingInnerSchedulerInsideFiberRestoresOuter) {
     tf::Scheduler::Run([&] {
         outer = tf::Scheduler::TryCurrent();
         {
-            auto inner = tf::Scheduler::Create([] { tf::Yield(); });
+            auto inner = tf::Scheduler::Create([] {
+                tf::Yield();
+            });
             inner->Step(); // leave a fiber unfinished so teardown has work to do
         }
         after_teardown = tf::Scheduler::TryCurrent();

@@ -69,7 +69,11 @@ void LiveCooperativeRenderer::Begin(const FrameBuffer& source, const LiveFilterP
     tf::Scheduler::Config config;
     config.time_slice = time_slice_;
     auto shared = state_;
-    scheduler_ = tf::Scheduler::Create([shared] { shared->chain.Apply(shared->input, shared->output); }, config);
+    scheduler_ = tf::Scheduler::Create(
+        [shared] {
+            shared->chain.Apply(shared->input, shared->output);
+        },
+        config);
 }
 
 bool LiveCooperativeRenderer::RunFor(std::chrono::microseconds budget) {

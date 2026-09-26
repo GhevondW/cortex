@@ -75,7 +75,11 @@ TEST(GuardedStackDeathTest, FiberStackOverflowCrashesInsteadOfCorrupting) {
         {
             tf::Scheduler::Config config;
             config.default_stack_size = 64 * 1024;
-            tf::Scheduler::Run([] { return Recurse(100000); }, config);
+            tf::Scheduler::Run(
+                [] {
+                    return Recurse(100000);
+                },
+                config);
         },
         "");
 }

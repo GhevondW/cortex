@@ -23,12 +23,14 @@ EM_JS_DEPS(cortex_web_await, "$Emval");
 
 // Attach settle callbacks to `handle`'s promise. Promise.resolve() also
 // accepts non-promise values, like JavaScript's `await`.
+// (JavaScript body: keep clang-format away from it.)
+// clang-format off
 EM_JS(void, cortex_web_then, (emscripten::EM_VAL handle, void* pending), {
-    Promise.resolve(Emval.toValue(handle))
-        .then(
-            (value) => Module["_cortex_web_settle"](pending, 1, Emval.toHandle(value)),
-            (reason) => Module["_cortex_web_settle"](pending, 0, Emval.toHandle(reason)));
+    Promise.resolve(Emval.toValue(handle)).then(
+        function (value) { Module["_cortex_web_settle"](pending, 1, Emval.toHandle(value)); },
+        function (reason) { Module["_cortex_web_settle"](pending, 0, Emval.toHandle(reason)); });
 });
+// clang-format on
 
 std::string DescribeReason(const val& reason) {
     std::string text;

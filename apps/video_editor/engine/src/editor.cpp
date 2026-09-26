@@ -98,8 +98,8 @@ public:
         if (!coop_renderer_ || coop_done_) {
             return false;
         }
-        const auto budget = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::duration<double, std::milli>(budget_ms));
+        const auto budget =
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::duration<double, std::milli>(budget_ms));
         return PublishIfDone(coop_renderer_->RunFor(budget));
     }
 

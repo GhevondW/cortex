@@ -151,8 +151,8 @@ private:
             return;
         }
         Scheduler* scheduler = state_->LiveScheduler();
-        if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler ||
-            scheduler->GetCurrentFiber() == nullptr || scheduler->IsStopping()) {
+        if (scheduler == nullptr || Scheduler::TryCurrent() != scheduler || scheduler->GetCurrentFiber() == nullptr ||
+            scheduler->IsStopping()) {
             return;
         }
         if (scheduler->GetCurrentFiber()->IsCancelRequested()) {

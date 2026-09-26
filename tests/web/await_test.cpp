@@ -35,7 +35,9 @@ val Delayed(int value, int ms) {
 extern "C" {
 
 EMSCRIPTEN_KEEPALIVE void* start_await_value() {
-    return Keep(tf::Scheduler::Create([] { g_int_result = cortex::web::Await(Delayed(42, 10)).as<int>(); }));
+    return Keep(tf::Scheduler::Create([] {
+        g_int_result = cortex::web::Await(Delayed(42, 10)).as<int>();
+    }));
 }
 
 EMSCRIPTEN_KEEPALIVE void* start_await_rejection() {
@@ -53,14 +55,20 @@ EMSCRIPTEN_KEEPALIVE void* start_await_rejection() {
 EMSCRIPTEN_KEEPALIVE void* start_await_two() {
     g_order.clear();
     return Keep(tf::Scheduler::Create([] {
-        auto slow = tf::Spawn([] { g_order.push_back(cortex::web::Await(Delayed(1, 30)).as<int>()); });
-        auto fast = tf::Spawn([] { g_order.push_back(cortex::web::Await(Delayed(2, 5)).as<int>()); });
+        auto slow = tf::Spawn([] {
+            g_order.push_back(cortex::web::Await(Delayed(1, 30)).as<int>());
+        });
+        auto fast = tf::Spawn([] {
+            g_order.push_back(cortex::web::Await(Delayed(2, 5)).as<int>());
+        });
     }));
 }
 
 // Awaits a promise that settles only after the scheduler was destroyed.
 EMSCRIPTEN_KEEPALIVE void* start_await_forever() {
-    return Keep(tf::Scheduler::Create([] { cortex::web::Await(Delayed(0, 30)); }));
+    return Keep(tf::Scheduler::Create([] {
+        cortex::web::Await(Delayed(0, 30));
+    }));
 }
 
 EMSCRIPTEN_KEEPALIVE int int_result() {
@@ -76,7 +84,9 @@ EMSCRIPTEN_KEEPALIVE int order_at(int index) {
 }
 
 EMSCRIPTEN_KEEPALIVE void destroy_scheduler(void* scheduler) {
-    std::erase_if(g_schedulers, [scheduler](const auto& owned) { return owned.get() == scheduler; });
+    std::erase_if(g_schedulers, [scheduler](const auto& owned) {
+        return owned.get() == scheduler;
+    });
 }
 
 } // extern "C"

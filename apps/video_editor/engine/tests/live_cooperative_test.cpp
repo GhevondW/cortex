@@ -104,9 +104,9 @@ TEST(LiveCooperative, MatchesSyncAcrossParamsAndSlices) {
         const FrameBuffer expected = RunSync(src, p);
         for (auto slice : {0us, 50us, 2000us}) {
             const FrameBuffer got = RunCooperative(src, p, slice);
-            SCOPED_TRACE(testing::Message()
-                         << "brightness=" << p.brightness << " contrast=" << p.contrast << " saturation="
-                         << p.saturation << " blur=" << p.blur_radius << " slice_us=" << slice.count());
+            SCOPED_TRACE(testing::Message() << "brightness=" << p.brightness << " contrast=" << p.contrast
+                                            << " saturation=" << p.saturation << " blur=" << p.blur_radius
+                                            << " slice_us=" << slice.count());
             ExpectByteIdentical(got, expected);
         }
     }

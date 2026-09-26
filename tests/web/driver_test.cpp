@@ -89,7 +89,9 @@ EMSCRIPTEN_KEEPALIVE int promise_result() {
 }
 
 EMSCRIPTEN_KEEPALIVE void destroy_scheduler(void* scheduler) {
-    std::erase_if(g_schedulers, [scheduler](const auto& owned) { return owned.get() == scheduler; });
+    std::erase_if(g_schedulers, [scheduler](const auto& owned) {
+        return owned.get() == scheduler;
+    });
 }
 
 } // extern "C"

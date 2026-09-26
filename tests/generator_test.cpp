@@ -100,7 +100,9 @@ TEST(GeneratorRangeTest, YieldsFromNestedRecursiveCalls) {
     const TreeNode one {1, nullptr, nullptr};
     const TreeNode three {3, nullptr, nullptr};
     const TreeNode two {2, &one, &three};
-    auto gen = cortex::Generator<int>::Make([&](auto& yield) { InOrder(&two, yield); });
+    auto gen = cortex::Generator<int>::Make([&](auto& yield) {
+        InOrder(&two, yield);
+    });
     std::vector<int> seen;
     for (int value : gen) {
         seen.push_back(value);
@@ -109,7 +111,8 @@ TEST(GeneratorRangeTest, YieldsFromNestedRecursiveCalls) {
 }
 
 TEST(GeneratorRangeTest, EmptyGeneratorHasNoElements) {
-    auto gen = cortex::Generator<int>::Make([](auto&) {});
+    auto gen = cortex::Generator<int>::Make([](auto&) {
+    });
     EXPECT_EQ(std::ranges::distance(gen.begin(), gen.end()), 0);
 }
 

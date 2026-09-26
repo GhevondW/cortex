@@ -49,10 +49,10 @@ void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadl
     // Woken by a notify, the deadline, Stop() or Cancel(). A deadline wake
     // leaves this wait's token in waiters_; its epoch keeps it from ever
     // waking a later wait.
-    scheduler.ParkCurrentUntil(deadline == Scheduler::TimePoint::max() ? "ConditionVariable::Wait"
-                                                                       : "ConditionVariable::WaitFor",
-                               true,
-                               deadline);
+    scheduler.ParkCurrentUntil(
+        deadline == Scheduler::TimePoint::max() ? "ConditionVariable::Wait" : "ConditionVariable::WaitFor",
+        true,
+        deadline);
 
     // Stopped or cancelled: leave without the mutex (the guard is detached, so
     // its destructor will not unlock).

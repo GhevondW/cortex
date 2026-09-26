@@ -23,15 +23,23 @@ void ParkForever() {
 } // namespace
 
 TEST(TinyFiberErrors, RunRethrowsEntryException) {
-    EXPECT_THROW(tf::Scheduler::Run([] { throw std::runtime_error("disk full"); }), std::runtime_error);
+    EXPECT_THROW(tf::Scheduler::Run([] {
+                     throw std::runtime_error("disk full");
+                 }),
+                 std::runtime_error);
 }
 
 TEST(TinyFiberErrors, RunReturnsEntryValue) {
-    EXPECT_EQ(tf::Scheduler::Run([] { return 42; }), 42);
+    EXPECT_EQ(tf::Scheduler::Run([] {
+                  return 42;
+              }),
+              42);
 }
 
 TEST(TinyFiberErrors, RunReturnsMoveOnlyValue) {
-    auto value = tf::Scheduler::Run([] { return std::make_unique<int>(7); });
+    auto value = tf::Scheduler::Run([] {
+        return std::make_unique<int>(7);
+    });
     ASSERT_NE(value, nullptr);
     EXPECT_EQ(*value, 7);
 }
@@ -52,16 +60,29 @@ TEST(TinyFiberErrors, RunReportsDeadlockWithDescription) {
 }
 
 TEST(TinyFiberErrors, RunReportsDeadlockOfDetachedFiber) {
-    EXPECT_THROW(tf::Scheduler::Run([] { tf::SpawnDetached([] { ParkForever(); }); }), tf::DeadlockError);
+    EXPECT_THROW(tf::Scheduler::Run([] {
+                     tf::SpawnDetached([] {
+                         ParkForever();
+                     });
+                 }),
+                 tf::DeadlockError);
 }
 
 TEST(TinyFiberErrors, RunRethrowsDetachedFiberException) {
-    EXPECT_THROW(tf::Scheduler::Run([] { tf::SpawnDetached([] { throw std::runtime_error("worker died"); }); }),
+    EXPECT_THROW(tf::Scheduler::Run([] {
+                     tf::SpawnDetached([] {
+                         throw std::runtime_error("worker died");
+                     });
+                 }),
                  std::runtime_error);
 }
 
 TEST(TinyFiberErrors, StepRethrowsDetachedFiberException) {
-    auto scheduler = tf::Scheduler::Create([] { tf::SpawnDetached([] { throw std::runtime_error("boom"); }); });
+    auto scheduler = tf::Scheduler::Create([] {
+        tf::SpawnDetached([] {
+            throw std::runtime_error("boom");
+        });
+    });
     EXPECT_THROW(
         {
             while (scheduler->Step()) {
@@ -71,7 +92,9 @@ TEST(TinyFiberErrors, StepRethrowsDetachedFiberException) {
 }
 
 TEST(TinyFiberErrors, StepRethrowsCreateEntryException) {
-    auto scheduler = tf::Scheduler::Create([] { throw std::runtime_error("entry failed"); });
+    auto scheduler = tf::Scheduler::Create([] {
+        throw std::runtime_error("entry failed");
+    });
     EXPECT_THROW(scheduler->Step(), std::runtime_error);
     EXPECT_TRUE(scheduler->IsDone());
 }
@@ -86,7 +109,11 @@ TEST(TinyFiberErrors, UnhandledHandlerReceivesException) {
             seen = e.what();
         }
     };
-    auto scheduler = tf::Scheduler::Create([] { throw std::runtime_error("create-entry"); }, config);
+    auto scheduler = tf::Scheduler::Create(
+        [] {
+            throw std::runtime_error("create-entry");
+        },
+        config);
     EXPECT_NO_THROW({
         while (scheduler->Step()) {
         }
@@ -121,14 +148,17 @@ TEST(TinyFiberErrors, StoppingIsNotReportedAsUnhandled) {
 }
 
 TEST(TinyFiberErrors, StatusDistinguishesDoneAndDeadlocked) {
-    auto stuck = tf::Scheduler::Create([] { ParkForever(); });
+    auto stuck = tf::Scheduler::Create([] {
+        ParkForever();
+    });
     while (stuck->Step()) {
     }
     EXPECT_EQ(stuck->GetStatus(), tf::Scheduler::Status::kDeadlocked);
     EXPECT_FALSE(stuck->IsDone());
     EXPECT_EQ(stuck->GetFiberCount(), 1u);
 
-    auto finished = tf::Scheduler::Create([] {});
+    auto finished = tf::Scheduler::Create([] {
+    });
     EXPECT_EQ(finished->GetStatus(), tf::Scheduler::Status::kRunnable);
     while (finished->Step()) {
     }

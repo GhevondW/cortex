@@ -90,7 +90,9 @@ TEST(TinyFiberTimer, SleepUntilUsesSchedulerClock) {
 
 TEST(TinyFiberTimer, RunBlocksUntilTimersFire) {
     const auto start = std::chrono::steady_clock::now();
-    tf::Scheduler::Run([] { tf::SleepFor(20ms); });
+    tf::Scheduler::Run([] {
+        tf::SleepFor(20ms);
+    });
     EXPECT_GE(std::chrono::steady_clock::now() - start, 20ms);
 }
 
@@ -148,7 +150,9 @@ TEST(TinyFiberTimer, SleepOutsideFiberThrows) {
 
 TEST(TinyFiberTimer, DeadlockIsNotConfusedWithWaiting) {
     auto scheduler = tf::Scheduler::Create([] {
-        tf::SpawnDetached([] { tf::SleepFor(1h); });
+        tf::SpawnDetached([] {
+            tf::SleepFor(1h);
+        });
         tf::Mutex mutex;
         tf::ConditionVariable cv;
         auto guard = tf::Lock(mutex);

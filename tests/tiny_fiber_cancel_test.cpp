@@ -26,7 +26,9 @@ TEST(TinyFiberCancel, CancelWakesSleepingFiberWithCancelledError) {
 TEST(TinyFiberCancel, CancelBeforeStartSkipsBody) {
     bool body_ran = false;
     tf::Scheduler::Run([&] {
-        auto never = tf::Spawn([&] { body_ran = true; });
+        auto never = tf::Spawn([&] {
+            body_ran = true;
+        });
         never.Cancel();
         EXPECT_THROW(never.Wait(), tf::CancelledError);
     });
@@ -57,7 +59,9 @@ TEST(TinyFiberCancel, CancelWakesFutureWaiter) {
             tf::SleepFor(30ms);
             return 1;
         });
-        auto waiter = tf::Spawn([&] { return slow.Get(); });
+        auto waiter = tf::Spawn([&] {
+            return slow.Get();
+        });
         tf::Yield();
         waiter.Cancel();
         EXPECT_THROW((void)waiter.Get(), tf::CancelledError);
@@ -96,9 +100,7 @@ TEST(TinyFiberCancel, MutexLockIsNotACancellationPoint) {
         contender.Cancel();
         tf::Yield();
         EXPECT_FALSE(acquired);
-        {
-            auto released = std::move(holder);
-        } // unlock: contender acquires
+        { auto released = std::move(holder); } // unlock: contender acquires
         EXPECT_THROW(contender.Wait(), tf::CancelledError);
     });
     EXPECT_TRUE(acquired);
@@ -150,7 +152,9 @@ TEST(TinyFiberCancel, CancellingParentCancelsChildren) {
 
 TEST(TinyFiberCancel, CancelFinishedFiberIsNoOp) {
     tf::Scheduler::Run([] {
-        auto done = tf::Spawn([] { return 5; });
+        auto done = tf::Spawn([] {
+            return 5;
+        });
         tf::Yield();
         ASSERT_TRUE(done.IsReady());
         done.Cancel();
@@ -160,7 +164,9 @@ TEST(TinyFiberCancel, CancelFinishedFiberIsNoOp) {
 
 TEST(TinyFiberCancel, CancelledFiberIsNotAnUnhandledError) {
     EXPECT_NO_THROW(tf::Scheduler::Run([] {
-        auto worker = tf::Spawn([] { tf::SleepFor(1h); });
+        auto worker = tf::Spawn([] {
+            tf::SleepFor(1h);
+        });
         tf::Yield();
         worker.Cancel();
         worker.Detach();

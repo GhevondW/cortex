@@ -188,8 +188,8 @@ auto Scheduler::Run(F&& entry, Config config) -> std::invoke_result_t<F> {
     {
         Scheduler scheduler(std::move(config));
         state = detail::MakeFutureState<ResultType>(scheduler, /*external=*/false);
-        state->fiber_id = scheduler.SpawnFiberInternal(
-            detail::MakeSpawnBody<ResultType>(state, std::forward<F>(entry)), scheduler.config_.default_stack_size);
+        state->fiber_id = scheduler.SpawnFiberInternal(detail::MakeSpawnBody<ResultType>(state, std::forward<F>(entry)),
+                                                       scheduler.config_.default_stack_size);
         try {
             if (scheduler.RunToCompletion() == Status::kDeadlocked) {
                 failure = std::make_exception_ptr(DeadlockError(scheduler.DeadlockMessage()));

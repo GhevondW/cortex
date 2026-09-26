@@ -239,9 +239,8 @@ private:
     // The scheduler, checked to be the one running the calling fiber.
     Scheduler& FiberScheduler() const {
         if (Scheduler::TryCurrent() != scheduler_ || scheduler_->GetCurrentFiber() == nullptr) {
-            throw std::logic_error(
-                "Channel::Send()/Receive() must be called from a fiber of the channel's scheduler; "
-                "use TrySend()/TryReceive() elsewhere");
+            throw std::logic_error("Channel::Send()/Receive() must be called from a fiber of the channel's scheduler; "
+                                   "use TrySend()/TryReceive() elsewhere");
         }
         return *scheduler_;
     }

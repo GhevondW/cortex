@@ -421,8 +421,7 @@ std::string Scheduler::DescribeFibers() const {
 }
 
 std::string Scheduler::DeadlockMessage() const {
-    return "tiny_fiber: deadlock - every remaining fiber is suspended and nothing can wake it.\n" +
-           DescribeFibers();
+    return "tiny_fiber: deadlock - every remaining fiber is suspended and nothing can wake it.\n" + DescribeFibers();
 }
 
 void Scheduler::ReportUnhandledInternal(std::exception_ptr ex) {
@@ -605,8 +604,13 @@ namespace {
 
 EM_JS_DEPS(cortex_scheduler_driver, "$UTF8ToString");
 
+// JavaScript bodies below: keep clang-format away from them.
+// clang-format off
+
 // Hands a message (deadlock description, exception text) to the driver.
-EM_JS(void, cortex_js_set_message, (const char* text), { Module["cortexMessage"] = UTF8ToString(text); });
+EM_JS(void, cortex_js_set_message, (const char* text), {
+    Module["cortexMessage"] = UTF8ToString(text);
+});
 
 // Tells the driver that a scheduler has runnable work again.
 EM_JS(void, cortex_js_wake, (void* scheduler), {
@@ -614,6 +618,8 @@ EM_JS(void, cortex_js_wake, (void* scheduler), {
         Module["cortexWake"](scheduler);
     }
 });
+
+// clang-format on
 
 // Scheduler::Status values plus one for "a fiber failed".
 constexpr int kStatusFailed = 4;
@@ -680,7 +686,9 @@ EMSCRIPTEN_KEEPALIVE double cortex_scheduler_next_timer_ms(void* scheduler) {
 
 // Route the scheduler's wake-up handler to Module.cortexWake(scheduler).
 EMSCRIPTEN_KEEPALIVE void cortex_scheduler_attach(void* scheduler) {
-    AsScheduler(scheduler).SetWakeupHandler([scheduler] { cortex_js_wake(scheduler); });
+    AsScheduler(scheduler).SetWakeupHandler([scheduler] {
+        cortex_js_wake(scheduler);
+    });
 }
 
 // Stop routing wake-ups to JavaScript (the driver stopped).
