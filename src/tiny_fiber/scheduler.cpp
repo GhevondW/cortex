@@ -10,6 +10,24 @@ namespace cortex::tiny_fiber {
 namespace {
 // Thread-local current scheduler (works in single-threaded WASM too)
 thread_local Scheduler* g_current_scheduler = nullptr;
+
+// Makes `scheduler` the current one for a scope and restores the previous
+// value afterwards, so a scheduler driven from inside another scheduler's
+// fiber hands "current" back to the outer one when it stops running.
+class CurrentSchedulerScope {
+public:
+    explicit CurrentSchedulerScope(Scheduler* scheduler) noexcept
+        : previous_(std::exchange(g_current_scheduler, scheduler)) {}
+    ~CurrentSchedulerScope() {
+        g_current_scheduler = previous_;
+    }
+
+    CurrentSchedulerScope(const CurrentSchedulerScope&) = delete;
+    CurrentSchedulerScope& operator=(const CurrentSchedulerScope&) = delete;
+
+private:
+    Scheduler* previous_;
+};
 } // namespace
 
 Scheduler& Scheduler::Current() {
@@ -17,6 +35,10 @@ Scheduler& Scheduler::Current() {
         throw std::logic_error("No scheduler is running. Scheduler::Current() must be called from within a fiber.");
     }
     return *g_current_scheduler;
+}
+
+Scheduler* Scheduler::TryCurrent() noexcept {
+    return g_current_scheduler;
 }
 
 Scheduler::Scheduler(Config config)
@@ -30,9 +52,9 @@ Scheduler::~Scheduler() {
         Stop();
     }
 
-    // Set ourselves as current scheduler during final cleanup so fibers can
-    // resolve Scheduler::Current() while unwinding.
-    g_current_scheduler = this;
+    // Be the current scheduler during final cleanup so fibers can resolve
+    // Scheduler::Current() while unwinding.
+    CurrentSchedulerScope scope(this);
 
     // Run remaining fibers so they catch SchedulerStoppingError and exit.
     while (!ready_queue_.empty()) {
@@ -52,7 +74,6 @@ Scheduler::~Scheduler() {
     running_ = false;
     // Clearing the slots triggers forced unwinding for any that didn't exit.
     fiber_slots_.clear();
-    g_current_scheduler = nullptr;
 }
 
 void Scheduler::Stop() {
@@ -89,15 +110,12 @@ bool Scheduler::Step() {
     ProcessPendingCleanup();
 
     if (ready_queue_.empty()) {
-        if (running_) {
-            running_ = false;
-            g_current_scheduler = nullptr;
-        }
+        running_ = false;
         return false;
     }
 
+    CurrentSchedulerScope scope(this);
     running_ = true;
-    g_current_scheduler = this;
 
     current_fiber_ = ready_queue_.front();
     ready_queue_.pop_front();
@@ -128,17 +146,15 @@ bool Scheduler::Step() {
 
     current_fiber_ = nullptr;
 
-    bool has_more = !ready_queue_.empty();
+    const bool has_more = !ready_queue_.empty();
     if (!has_more) {
         running_ = false;
-        g_current_scheduler = nullptr;
     }
     return has_more;
 }
 
 void Scheduler::RunLoop() {
     assert(!running_);
-    assert(g_current_scheduler == nullptr);
 
     while (Step()) {
     }

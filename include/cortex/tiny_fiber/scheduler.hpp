@@ -88,6 +88,13 @@ public:
      */
     static Scheduler& Current();
 
+    /**
+     * @brief Get the innermost scheduler running on this thread, if any.
+     *
+     * @return The running scheduler, or nullptr outside of fibers.
+     */
+    [[nodiscard]] static Scheduler* TryCurrent() noexcept;
+
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
     Scheduler(Scheduler&&) = delete;
