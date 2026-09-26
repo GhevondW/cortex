@@ -64,6 +64,11 @@ public:
     // Wakes every waiter whose token is still valid and clears the list.
     void WakeAll(Scheduler& scheduler);
 
+    // Drops entries whose wait already ended. Waits that give up early (a
+    // timeout, WaitAny) leave their token behind; pruning keeps a long-lived
+    // list from growing without bound.
+    void PruneStale(const Scheduler& scheduler);
+
     void Clear() noexcept {
         inline_count_ = 0;
         overflow_.clear();

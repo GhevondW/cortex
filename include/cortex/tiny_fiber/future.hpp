@@ -5,6 +5,7 @@
 #include <cortex/tiny_fiber/errors/cancelled_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
@@ -51,6 +52,39 @@ public:
      */
     [[nodiscard]] bool IsReady() const noexcept {
         return !state_ || state_->ready;
+    }
+
+    /**
+     * @brief Block the current fiber until the result is ready or `timeout`
+     *        elapsed.
+     *
+     * @return true if the result is ready.
+     * @throws SchedulerStoppingError / CancelledError like Wait().
+     */
+    template <typename Rep, typename Period>
+    bool WaitFor(std::chrono::duration<Rep, Period> timeout) {
+        auto& state = RequireState();
+        if (state.ready) {
+            return true;
+        }
+        Scheduler* scheduler = state.LiveScheduler();
+        if (scheduler == nullptr) {
+            return AwaitStateUntil(state, Scheduler::TimePoint::max()); // throws the clear error
+        }
+        const auto now = scheduler->Now();
+        const auto step = std::chrono::ceil<Scheduler::Duration>(timeout);
+        const auto deadline = step >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + step;
+        return AwaitStateUntil(state, deadline);
+    }
+
+    /**
+     * @brief Block the current fiber until the result is ready or the
+     *        scheduler's clock reaches `deadline`.
+     *
+     * @return true if the result is ready.
+     */
+    bool WaitUntil(Scheduler::TimePoint deadline) {
+        return AwaitStateUntil(RequireState(), deadline);
     }
 
     /**

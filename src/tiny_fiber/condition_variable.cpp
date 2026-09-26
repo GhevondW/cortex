@@ -9,6 +9,20 @@ namespace cortex::tiny_fiber {
 ConditionVariable::~ConditionVariable() = default;
 
 void ConditionVariable::Wait(Mutex::Guard& guard) {
+    WaitImpl(guard, Scheduler::TimePoint::max());
+}
+
+bool ConditionVariable::WaitUntil(Mutex::Guard& guard, Scheduler::TimePoint deadline) {
+    WaitImpl(guard, deadline);
+    return Scheduler::Current().Now() < deadline;
+}
+
+Scheduler::TimePoint ConditionVariable::DeadlineAfter(Scheduler::Duration timeout) {
+    const auto now = Scheduler::Current().Now();
+    return timeout >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + timeout;
+}
+
+void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadline) {
     if (!guard.mutex_) {
         throw std::logic_error("ConditionVariable::Wait() called with invalid guard");
     }
@@ -32,10 +46,16 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
     guard.mutex_ = nullptr;
     mutex->Unlock();
 
-    scheduler.ParkCurrent("ConditionVariable::Wait", true);
+    // Woken by a notify, the deadline, Stop() or Cancel(). A deadline wake
+    // leaves this wait's token in waiters_; its epoch keeps it from ever
+    // waking a later wait.
+    scheduler.ParkCurrentUntil(deadline == Scheduler::TimePoint::max() ? "ConditionVariable::Wait"
+                                                                       : "ConditionVariable::WaitFor",
+                               true,
+                               deadline);
 
-    // Woken by Stop() or Cancel(): leave without the mutex (the guard is
-    // detached, so its destructor will not unlock).
+    // Stopped or cancelled: leave without the mutex (the guard is detached, so
+    // its destructor will not unlock).
     scheduler.ThrowIfInterrupted(true);
 
     mutex->Lock();

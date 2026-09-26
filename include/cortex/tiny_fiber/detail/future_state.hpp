@@ -10,6 +10,7 @@
 #include <cortex/tiny_fiber/errors/deadlock_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -72,6 +73,14 @@ std::shared_ptr<FutureState<T>> MakeFutureState(Scheduler& scheduler, bool exter
 // once the scheduler is stopping, and (when `cancellable`) CancelledError if
 // the calling fiber is cancelled.
 void AwaitState(FutureStateBase& state, bool cancellable);
+
+// Like AwaitState (cancellable), but gives up at `deadline`. Returns whether
+// the state became ready.
+bool AwaitStateUntil(FutureStateBase& state, Scheduler::TimePoint deadline);
+
+// Parks until one of `states` is ready and returns its index. A null state
+// counts as ready. All states must belong to the same scheduler.
+std::size_t AwaitAnyState(FutureStateBase* const* states, std::size_t count);
 
 // Moves the result out (or rethrows the stored exception) and marks the
 // state retrieved.

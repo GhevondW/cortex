@@ -224,10 +224,8 @@ void Scheduler::SleepUntilInternal(TimePoint deadline) {
         YieldCurrent();
         return;
     }
-    detail::Fiber* fiber = current_fiber_;
-    (void)fiber->PrepareWait(); // new epoch: tokens from earlier waits can't wake this one
-    fiber->ArmTimer(timers_.emplace(deadline, fiber->GetId()));
-    fiber->Park("SleepFor", /*cancellable=*/true);
+    (void)current_fiber_->PrepareWait(); // new epoch: tokens from earlier waits can't wake this one
+    ParkCurrentUntil("SleepFor", /*cancellable=*/true, deadline);
     ThrowIfInterrupted(true);
 }
 
@@ -408,6 +406,14 @@ detail::Fiber* Scheduler::GetFiber(detail::Fiber::Id id) {
     return nullptr;
 }
 
+const detail::Fiber* Scheduler::GetFiber(detail::Fiber::Id id) const {
+    const auto index = static_cast<std::size_t>(id & kSlotIndexMask);
+    if (index < fiber_slots_.size() && fiber_slots_[index].id == id) {
+        return fiber_slots_[index].fiber.get();
+    }
+    return nullptr;
+}
+
 detail::WaiterRef Scheduler::PrepareWait() {
     if (!current_fiber_) {
         throw std::logic_error("No fiber is currently running");
@@ -422,12 +428,26 @@ void Scheduler::ParkCurrent(const char* reason, bool cancellable) {
     current_fiber_->Park(reason, cancellable);
 }
 
+void Scheduler::ParkCurrentUntil(const char* reason, bool cancellable, TimePoint deadline) {
+    if (!current_fiber_) {
+        throw std::logic_error("No fiber is currently running");
+    }
+    if (deadline != TimePoint::max()) {
+        current_fiber_->ArmTimer(timers_.emplace(deadline, current_fiber_->GetId()));
+    }
+    current_fiber_->Park(reason, cancellable);
+}
+
+bool Scheduler::IsWaiting(detail::WaiterRef ref) const {
+    const detail::Fiber* fiber = GetFiber(ref.id);
+    return fiber != nullptr && fiber->IsSuspended() && fiber->GetWaitEpoch() == ref.epoch;
+}
+
 bool Scheduler::WakeIfWaiting(detail::WaiterRef ref) {
-    auto* fiber = GetFiber(ref.id);
-    if (!fiber || !fiber->IsSuspended() || fiber->GetWaitEpoch() != ref.epoch) {
+    if (!IsWaiting(ref)) {
         return false;
     }
-    WakeFiber(fiber);
+    WakeFiber(GetFiber(ref.id));
     return true;
 }
 

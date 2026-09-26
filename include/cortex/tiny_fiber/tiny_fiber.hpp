@@ -13,6 +13,7 @@
 #include <cortex/tiny_fiber/future.hpp>
 #include <cortex/tiny_fiber/mutex.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
+#include <cortex/tiny_fiber/wait.hpp>
 #include <cortex/tiny_fiber/yield.hpp>
 
 /**

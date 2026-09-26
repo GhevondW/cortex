@@ -6,12 +6,32 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace tf = cortex::tiny_fiber;
+using namespace std::chrono_literals;
+
+namespace {
+
+tf::Scheduler::TimePoint g_now {};
+
+tf::Scheduler::TimePoint FakeNow() {
+    return g_now;
+}
+
+tf::Scheduler::Config FakeClockConfig() {
+    g_now = tf::Scheduler::TimePoint {} + 1h;
+    tf::Scheduler::Config config;
+    config.clock = &FakeNow;
+    return config;
+}
+
+} // namespace
 
 TEST(TinyFiberFuture, GetOutsideFiberOnUnfinishedResultThrowsClearError) {
     std::optional<tf::Future<int>> escaped;
@@ -149,4 +169,217 @@ TEST(TinyFiberFuture, GetFromAnotherSchedulersFiberThrows) {
         EXPECT_EQ(outer_future->Get(), 3);
     });
     EXPECT_TRUE(threw);
+}
+
+// --- Timed waits, WaitAll / WaitAny ----------------------------------------
+
+TEST(TinyFiberWait, WaitAnyReturnsFirstReadyIndex) {
+    std::size_t first = 99;
+    int slow_value = 0;
+    int fast_value = 0;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            auto slow = tf::Spawn([] {
+                tf::SleepFor(30ms);
+                return 1;
+            });
+            auto fast = tf::Spawn([] {
+                tf::SleepFor(5ms);
+                return 2;
+            });
+            first = tf::WaitAny(slow, fast);
+            fast_value = fast.Get();
+            slow_value = slow.Get();
+        },
+        FakeClockConfig());
+    scheduler->RunFor(1ms);
+    g_now += 5ms;
+    scheduler->RunFor(1ms);
+    EXPECT_EQ(first, 1u);
+    EXPECT_EQ(fast_value, 2);
+    g_now += 25ms;
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(slow_value, 1);
+}
+
+TEST(TinyFiberWait, WaitAnyReturnsImmediatelyWhenOneIsReady) {
+    tf::Scheduler::Run([] {
+        auto never = tf::Spawn([] { tf::SleepFor(1h); });
+        auto done = tf::Spawn([] { return 3; });
+        tf::Yield();
+        EXPECT_EQ(tf::WaitAny(never, done), 1u);
+        never.Cancel();
+        EXPECT_THROW(never.Wait(), tf::CancelledError);
+    });
+}
+
+TEST(TinyFiberWait, WaitAllWaitsForEvery) {
+    tf::Scheduler::Run([] {
+        std::vector<tf::Future<int>> futures;
+        for (int i = 0; i < 5; ++i) {
+            futures.push_back(tf::Spawn([i] {
+                for (int y = 0; y < i; ++y) {
+                    tf::Yield();
+                }
+                return i;
+            }));
+        }
+        tf::WaitAll(std::span(futures));
+        for (int i = 0; i < 5; ++i) {
+            ASSERT_TRUE(futures[static_cast<std::size_t>(i)].IsReady());
+            EXPECT_EQ(futures[static_cast<std::size_t>(i)].Get(), i);
+        }
+    });
+}
+
+TEST(TinyFiberWait, WaitAnyOverSpan) {
+    tf::Scheduler::Run([] {
+        std::vector<tf::Future<int>> futures;
+        futures.push_back(tf::Spawn([] {
+            tf::SleepFor(1h);
+            return 0;
+        }));
+        futures.push_back(tf::Spawn([] {
+            tf::Yield();
+            return 1;
+        }));
+        EXPECT_EQ(tf::WaitAny(std::span(futures)), 1u);
+        futures[0].Cancel();
+    });
+}
+
+TEST(TinyFiberWait, FutureWaitForTimesOut) {
+    bool first_wait = true;
+    bool second_wait = false;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            auto slow = tf::Spawn([] { tf::SleepFor(20ms); });
+            first_wait = slow.WaitFor(10ms);
+            second_wait = slow.WaitFor(20ms);
+        },
+        FakeClockConfig());
+    scheduler->RunFor(1ms);
+    g_now += 10ms;
+    scheduler->RunFor(1ms); // the 10 ms wait times out
+    EXPECT_FALSE(first_wait);
+    g_now += 10ms;
+    scheduler->RunFor(1ms); // the producer finishes inside the second wait
+    EXPECT_TRUE(second_wait);
+    EXPECT_TRUE(scheduler->IsDone());
+}
+
+TEST(TinyFiberWait, CvWaitForReportsTimeoutAndNotification) {
+    bool timed_out_result = true;
+    bool notified_result = false;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            tf::Mutex mutex;
+            tf::ConditionVariable cv;
+            {
+                auto guard = tf::Lock(mutex);
+                timed_out_result = cv.WaitFor(guard, 5ms);
+                EXPECT_TRUE(mutex.IsLocked()); // re-locked after a timeout
+            }
+            auto notifier = tf::Spawn([&] {
+                tf::SleepFor(1ms);
+                auto guard = tf::Lock(mutex);
+                cv.NotifyOne();
+            });
+            auto guard = tf::Lock(mutex);
+            notified_result = cv.WaitFor(guard, 1h);
+        },
+        FakeClockConfig());
+    scheduler->RunFor(1ms);
+    g_now += 5ms;
+    scheduler->RunFor(1ms);
+    g_now += 1ms;
+    scheduler->RunFor(1ms);
+    EXPECT_FALSE(timed_out_result);
+    EXPECT_TRUE(notified_result);
+    EXPECT_TRUE(scheduler->IsDone());
+}
+
+TEST(TinyFiberWait, CvWaitForWithPredicate) {
+    tf::Scheduler::Run([] {
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        bool flag = false;
+        auto setter = tf::Spawn([&] {
+            tf::Yield();
+            auto guard = tf::Lock(mutex);
+            flag = true;
+            cv.NotifyAll();
+        });
+        auto guard = tf::Lock(mutex);
+        EXPECT_TRUE(cv.WaitFor(guard, 1h, [&] { return flag; }));
+    });
+}
+
+// A waiter that timed out of a condition variable leaves a stale entry in the
+// CV's queue. When it later waits on something else, notifying the CV must
+// not wake it.
+TEST(TinyFiberWait, CvWaitForTimeoutLeavesNoStaleWake) {
+    std::string after_notify;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            tf::Mutex mutex;
+            tf::ConditionVariable cv;
+            auto producer = tf::Spawn([] {
+                tf::SleepFor(1h);
+                return 1;
+            });
+            auto waiter = tf::Spawn([&] {
+                tf::SetFiberName("waiter");
+                {
+                    auto guard = tf::Lock(mutex);
+                    (void)cv.WaitFor(guard, 5ms); // times out: stale entry stays in cv
+                }
+                (void)producer.Get(); // now parked on something unrelated
+            });
+            tf::SleepFor(10ms);
+            {
+                auto guard = tf::Lock(mutex);
+                cv.NotifyOne(); // must skip the stale entry
+            }
+            after_notify = tf::Scheduler::Current().DescribeFibers();
+            producer.Cancel();
+            try {
+                waiter.Wait();
+            } catch (const tf::CancelledError&) {
+            }
+        },
+        FakeClockConfig());
+    scheduler->RunFor(1ms);
+    g_now += 5ms;
+    scheduler->RunFor(1ms);
+    g_now += 5ms;
+    scheduler->RunFor(1ms);
+    EXPECT_NE(after_notify.find("\"waiter\" suspended in Future::Wait"), std::string::npos) << after_notify;
+    while (scheduler->Step()) {
+    }
+}
+
+TEST(TinyFiberWait, WaitAnyInLoopDoesNotGrowWithoutBound) {
+    tf::Scheduler::Run([] {
+        auto long_lived = tf::Spawn([] { tf::SleepFor(1h); });
+        for (int i = 0; i < 10000; ++i) {
+            auto tick = tf::Spawn([] { tf::Yield(); });
+            EXPECT_EQ(tf::WaitAny(long_lived, tick), 1u);
+        }
+        EXPECT_LT(long_lived.StateInternal()->waiters.Size(), 32u);
+        long_lived.Cancel();
+    });
+}
+
+TEST(TinyFiberWait, CancelDuringWaitAnyWakesOnce) {
+    tf::Scheduler::Run([] {
+        auto a = tf::Spawn([] { tf::SleepFor(10ms); });
+        auto b = tf::Spawn([] { tf::SleepFor(20ms); });
+        auto waiter = tf::Spawn([&] { return tf::WaitAny(a, b); });
+        tf::Yield();
+        waiter.Cancel();
+        EXPECT_THROW((void)waiter.Get(), tf::CancelledError);
+        a.Wait(); // completing both later wakes nobody stale
+        b.Wait();
+    });
 }

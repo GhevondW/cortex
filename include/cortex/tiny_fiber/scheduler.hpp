@@ -272,6 +272,13 @@ public:
     // that cancellation may interrupt.
     void ParkCurrent(const char* reason, bool cancellable);
 
+    // Like ParkCurrent(), but also wake at `deadline` (TimePoint::max() means
+    // no deadline). The caller decides afterwards whether it timed out.
+    void ParkCurrentUntil(const char* reason, bool cancellable, TimePoint deadline);
+
+    // Whether `ref` still names a fiber parked in that same wait.
+    [[nodiscard]] bool IsWaiting(detail::WaiterRef ref) const;
+
     // Wake the fiber `ref` names iff it is still parked in that same wait.
     // Stale tokens (fiber gone, already woken, or parked in a later wait)
     // are ignored. Returns whether a fiber was woken.
@@ -341,6 +348,7 @@ private:
 
     // Get fiber by ID
     detail::Fiber* GetFiber(detail::Fiber::Id id);
+    const detail::Fiber* GetFiber(detail::Fiber::Id id) const;
 
     // Yield current fiber (put back in ready queue)
     void YieldCurrent();
