@@ -11,7 +11,7 @@ natively (Boost.Context) and in WebAssembly (Emscripten).
 - @ref cortex::tiny_fiber "tiny_fiber": fibers, futures, promises, channels,
   timers, cancellation and cooperative sync primitives on one thread
 - @ref cortex::tiny_fiber::CheckPoint "CheckPoint()": time-slicing for hot
-  loops, ~2 ns when no yield is due and a no-op outside fibers
+  loops, a few ns when no yield is due and a no-op outside fibers
 - @ref cortex::web::Await "cortex::web::Await": a fiber awaits a JavaScript
   promise while the page keeps running
 - No silent failures: unobserved exceptions are rethrown, deadlocks are
@@ -74,7 +74,14 @@ for (int value : numbers) {
   @ref cortex::MakeGuardedStackResource "MakeGuardedStackResource": stack allocation
 
 @section resources Resources
-- Porting guide: docs/porting-guide.md
-- Live demos: https://GhevondW.github.io/cortex/
+- <a href="https://github.com/GhevondW/cortex/blob/main/docs/guide.md">tiny_fiber guide</a>:
+  every feature, with examples, and the reference for the JavaScript driver
+  (also under "Related Pages" here)
+- <a href="https://github.com/GhevondW/cortex/blob/main/docs/porting-guide.md">Porting guide</a>:
+  un-freezing an existing Emscripten app
+- <a href="https://github.com/GhevondW/cortex/blob/main/examples/linux/runtime_tour.cpp">examples/linux/runtime_tour.cpp</a>:
+  every feature, natively, in one runnable file
+- Live demos: https://GhevondW.github.io/cortex/ (start with
+  <a href="https://GhevondW.github.io/cortex/examples/responsive_demo.html">Responsive C++</a>)
 - API docs: https://GhevondW.github.io/cortex/docs/
 */

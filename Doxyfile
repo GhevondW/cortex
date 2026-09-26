@@ -31,8 +31,13 @@ DOT_IMAGE_FORMAT       = svg
 INPUT                  = ./include \
                          ./README.md \
                          ./DEVELOPMENT.md \
+                         ./docs/guide.md \
                          ./docs/porting-guide.md \
                          ./docsrc/mainpage.dox
+
+# GitHub-style heading anchors, so #section links in the Markdown guides work
+# on both GitHub and the generated site
+MARKDOWN_ID_STYLE      = GITHUB
 
 # Use a curated main page
 USE_MDFILE_AS_MAINPAGE = ./docsrc/mainpage.dox

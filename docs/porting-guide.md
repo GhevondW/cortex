@@ -15,7 +15,7 @@ Cortex runs such code in **fibers**: each has its own stack, so it can pause in 
 ## Setup
 
 1. Link `cortex::cortex` (and `cortex::web` if you await JavaScript promises). Linking adds `-sASYNCIFY` and `-fexceptions`.
-2. Build your module as an ES module (`-sMODULARIZE=1 -sEXPORT_ES6=1`) and copy [`js/cortex.mjs`](../js/cortex.mjs) next to it.
+2. Build your module as an ES module that keeps its runtime alive (`-sMODULARIZE=1 -sEXPORT_ES6=1`, and `-sEXIT_RUNTIME=0`, the default except with `-fsanitize=address`). Copy the driver, [`js/cortex.mjs`](https://github.com/GhevondW/cortex/blob/main/js/cortex.mjs), next to it: CMake's `${cortex_JS_DRIVER}` names it, whether you use `find_package(cortex)` or FetchContent.
 3. Export a function that creates a scheduler and returns it:
 
 ```cpp
@@ -54,7 +54,7 @@ done.catch((error) => console.error(error)); // deadlocks and escaped exceptions
 
 ## Recipe 1 — a long computation
 
-Add `tf::CheckPoint()` to the hot loops. It yields only when the fiber has used up its time slice (2 ms by default), costs about 2 ns otherwise, and does nothing when the code is not running in a fiber. The same function therefore keeps working in native builds, tests and tools.
+Add `tf::CheckPoint()` to the hot loops. It yields only when the fiber has used up its time slice (2 ms by default), costs a few nanoseconds otherwise, and does nothing when the code is not running in a fiber. The same function therefore keeps working in native builds, tests and tools.
 
 ```cpp
 void Blur(const Image& in, Image& out) {
@@ -65,7 +65,7 @@ void Blur(const Image& in, Image& out) {
 }
 ```
 
-That is exactly how the [video editor demo](../apps/video_editor) filters frames while the video plays: the real filters call `CheckPoint()` once per row, and the cooperative renderer just runs them in a fiber.
+That is exactly how the [video editor demo](https://github.com/GhevondW/cortex/tree/main/apps/video_editor) filters frames while the video plays: the real filters call `CheckPoint()` once per row, and the cooperative renderer just runs them in a fiber.
 
 For deep recursion, like a backtracking search, the checkpoint can live at any depth: fibers are stackful.
 
@@ -126,11 +126,13 @@ void OnSliderChanged(float value) { // runs in a fiber
     if (render) {
         render->Cancel(); // it stops at its next CheckPoint()
     }
+    // Replacing the future waits for the cancelled render to unwind: quick,
+    // since it stops at its next CheckPoint().
     render = tf::Spawn([value] { return RenderPreview(value); });
 }
 ```
 
-A cancelled fiber throws `tf::CancelledError` at its next suspension point (`CheckPoint`, `Yield`, `SleepFor`, a wait), and it also cancels the fibers it spawned.
+A cancelled fiber throws `tf::CancelledError` at its next suspension point (`CheckPoint`, `Yield`, `SleepFor`, a wait), and the fibers it spawned and still holds futures of are cancelled with it. The [Responsive C++ demo](https://github.com/GhevondW/cortex/blob/main/examples/wasm/responsive_demo.cpp) does exactly this when you click during a render.
 
 ## Recipe 5 — events from the page into fibers
 
@@ -163,8 +165,13 @@ Cortex and workers complement each other: workers for parallel number crunching 
 
 ## Pitfalls
 
+- **JavaScript exceptions must not unwind C++ frames.** Only promise rejections become C++ exceptions. A JavaScript exception thrown by a synchronous `val` call (`JSON.parse` on bad input, a DOM exception, a failed `as<T>()` conversion) unwinds WebAssembly without running C++ destructors. Inside a fiber it leaves the module unable to run fibers, and `drive()` rejects every drive on it with that error. Check values before converting them, or run code that may throw inside a promise and `Await()` it.
+- **Keep the runtime alive.** A module whose runtime has exited cannot switch fibers. `drive()` then rejects with an error that says so. `-fsanitize=address` turns `EXIT_RUNTIME` on by default, so pass `-sEXIT_RUNTIME=0` explicitly.
+- **Destroying a driven scheduler ends its drive:** `done` resolves. Call `stop()` first if you prefer; it only stops driving, and does not stop the fibers.
 - **Return values of exports that run fibers are unreliable.** Under Asyncify such an export still finishes before JavaScript regains control, but the value it returns is a placeholder. Poll state through a separate export (as `drive()` does with `cortex_scheduler_last_status`), or write results to memory.
 - **Don't suspend inside a `catch` block.** Exception state is per thread, and all fibers share one thread.
-- **Deep recursion that suspends** needs Asyncify buffer space (`CORTEX_WASM_ASYNCIFY_STACK_SIZE`, 64 KB by default, about 16–24 bytes per frame) as well as C stack (`Scheduler::Config::default_stack_size`, 256 KB by default).
-- **Don't call `Scheduler::Run()` in the browser.** It blocks until every fiber finishes. Use `Create()` + `drive()`.
+- **Deep recursion that suspends** needs Asyncify buffer space (`CORTEX_WASM_ASYNCIFY_STACK_SIZE`, 64 KB by default, about 16–24 bytes per frame, 2–3× that with `-fsanitize=address`) as well as C stack (`Scheduler::Config::default_stack_size`, 256 KB by default).
+- **Don't call `Scheduler::Run()` in the browser.** It blocks until every fiber finishes, and nothing from JavaScript can arrive meanwhile: a fiber waiting on a `Promise` makes it throw `DeadlockError`. Use `Create()` + `drive()`.
 - **Debugging a hang:** name fibers with `tf::SetFiberName("loader")`. A deadlock report, or `Scheduler::DescribeFibers()`, then lists each fiber and what it is waiting in.
+
+The [tiny_fiber guide](guide.md) documents every feature used here, including a reference for `drive()`.
