@@ -1,8 +1,7 @@
 #pragma once
 
 #include <cortex/tiny_fiber/detail/fiber.hpp>
-
-#include <deque>
+#include <cortex/tiny_fiber/detail/wait_queue.hpp>
 
 /**
  * @file mutex.hpp
@@ -26,13 +25,16 @@ public:
      */
     class Guard {
     public:
+        /// Locks `mutex` (see Mutex::Lock()); the destructor unlocks it.
         explicit Guard(Mutex& mutex);
         ~Guard();
 
         Guard(const Guard&) = delete;
         Guard& operator=(const Guard&) = delete;
 
+        /// Takes over the lock; `other` no longer owns it.
         Guard(Guard&& other) noexcept;
+        /// Releases the lock held, if any, and takes over `other`'s.
         Guard& operator=(Guard&& other) noexcept;
 
     private:
@@ -50,8 +52,14 @@ public:
     /**
      * @brief Lock the mutex.
      *
-     * If the mutex is already locked, the current fiber yields
-     * until it becomes available.
+     * If the mutex is already locked, the current fiber waits (other fibers
+     * run) until it becomes available. Not a cancellation point: a
+     * cancelled fiber still gets the lock, and sees the cancellation at its
+     * next wait.
+     *
+     * @throws SchedulerStoppingError if the scheduler is stopping.
+     * @throws std::logic_error outside of a fiber, or if this fiber already
+     *         holds the mutex.
      */
     void Lock();
 
@@ -79,12 +87,12 @@ public:
 private:
     friend class ConditionVariable;
 
-    // Waiters are stored by ID rather than pointer so a fiber that died (or was
-    // force-scheduled by Scheduler::Stop()) while still listed here is detected
-    // and skipped on the next Unlock — avoiding use-after-free of a stale Fiber*.
+    // Waiters are stored as tokens (fiber id + wait epoch) rather than
+    // pointers, so a fiber that died, or was woken by Scheduler::Stop() and
+    // is now waiting on something else, is skipped on the next Unlock.
     bool locked_ {false};
     detail::Fiber* owner_ {nullptr};
-    std::deque<detail::Fiber::Id> waiters_;
+    detail::WaitQueue waiters_;
 };
 
 /**

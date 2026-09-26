@@ -1,4 +1,4 @@
-#include <cortex/coroutine.hpp>
+#include <cortex/generator.hpp>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -24,17 +24,16 @@ void insert(std::unique_ptr<Node>& root, int value) {
     }
 }
 
-void traverse_in_order(Node* node, cortex::CoroutineSuspendContext& ctx, int& out_value) {
+// A plain recursive walk: the generator is stackful, so it can yield from any
+// depth of recursion.
+void traverse_in_order(Node* node, cortex::Generator<int>::YieldContext& yield) {
     if (!node) {
         return;
     }
 
-    traverse_in_order(node->left.get(), ctx, out_value);
-
-    out_value = node->value;
-    ctx.Suspend();
-
-    traverse_in_order(node->right.get(), ctx, out_value);
+    traverse_in_order(node->left.get(), yield);
+    yield(node->value);
+    traverse_in_order(node->right.get(), yield);
 }
 
 int main() {
@@ -50,19 +49,14 @@ int main() {
     }
     std::cout << "\n\n";
 
-    int current_yielded_value = 0;
-    auto generator = cortex::Coroutine::Make([&](cortex::CoroutineSuspendContext& ctx) {
-        traverse_in_order(root.get(), ctx, current_yielded_value);
+    auto in_order = cortex::Generator<int>::Make([&](cortex::Generator<int>::YieldContext& yield) {
+        traverse_in_order(root.get(), yield);
     });
 
-    std::cout << "Traversing tree in-order using coroutine:\n";
+    std::cout << "Traversing tree in-order using a generator:\n";
     int count = 0;
-    while (!generator.IsDone()) {
-        generator.Resume();
-
-        if (!generator.IsDone()) {
-            std::cout << "Yielded value [" << ++count << "]: " << current_yielded_value << "\n";
-        }
+    for (int value : in_order) {
+        std::cout << "Yielded value [" << ++count << "]: " << value << "\n";
     }
 
     std::cout << "\nTraversal complete!\n";

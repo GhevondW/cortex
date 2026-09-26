@@ -9,14 +9,35 @@ namespace cortex::tiny_fiber {
 ConditionVariable::~ConditionVariable() = default;
 
 void ConditionVariable::Wait(Mutex::Guard& guard) {
+    WaitImpl(guard, Scheduler::TimePoint::max());
+}
+
+bool ConditionVariable::WaitUntil(Mutex::Guard& guard, Scheduler::TimePoint deadline) {
+    WaitImpl(guard, deadline);
+    return Scheduler::Current().Now() < deadline;
+}
+
+Scheduler::TimePoint ConditionVariable::DeadlineAfter(Scheduler::Duration timeout) {
+    const auto now = Scheduler::Current().Now();
+    return timeout >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + timeout;
+}
+
+void ConditionVariable::WaitImpl(Mutex::Guard& guard, Scheduler::TimePoint deadline) {
     if (!guard.mutex_) {
         throw std::logic_error("ConditionVariable::Wait() called with invalid guard");
     }
 
     auto& scheduler = Scheduler::Current();
 
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
+    // A cancellation point: stopping or a cancelled fiber throws here. Like
+    // every interrupted wait below, it leaves without the mutex.
+    try {
+        scheduler.ThrowIfInterrupted(true);
+    } catch (...) {
+        auto* mutex = guard.mutex_;
+        guard.mutex_ = nullptr;
+        mutex->Unlock();
+        throw;
     }
 
     auto* current = scheduler.GetCurrentFiber();
@@ -24,7 +45,7 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
         throw std::logic_error("ConditionVariable::Wait() must be called from within a fiber");
     }
 
-    waiters_.push_back(current->GetId());
+    waiters_.Push(scheduler.PrepareWait(), scheduler);
 
     // Detach the guard from the mutex before unlocking so that, if any subsequent
     // step throws, the Guard destructor doesn't try to Unlock an unlocked mutex
@@ -33,10 +54,23 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
     guard.mutex_ = nullptr;
     mutex->Unlock();
 
-    scheduler.SuspendCurrent();
+    // Woken by a notify, the deadline, Stop() or Cancel(). A deadline wake
+    // leaves this wait's token in waiters_; its epoch keeps it from ever
+    // waking a later wait.
+    scheduler.ParkCurrentUntil(
+        deadline == Scheduler::TimePoint::max() ? "ConditionVariable::Wait" : "ConditionVariable::WaitFor",
+        true,
+        deadline);
 
-    if (scheduler.IsStopping()) {
-        throw SchedulerStoppingError();
+    // Stopped or cancelled: leave without the mutex (the guard is detached, so
+    // its destructor will not unlock). If a NotifyOne() picked this fiber, the
+    // notification would be lost with it: wake the next waiter instead (a
+    // spurious wake-up at worst, which condition-variable users handle).
+    try {
+        scheduler.ThrowIfInterrupted(true);
+    } catch (...) {
+        waiters_.WakeOne(scheduler);
+        throw;
     }
 
     mutex->Lock();
@@ -44,29 +78,11 @@ void ConditionVariable::Wait(Mutex::Guard& guard) {
 }
 
 void ConditionVariable::NotifyOne() {
-    auto& scheduler = Scheduler::Current();
-    // Skip stale entries (fibers that died or were force-scheduled).
-    while (!waiters_.empty()) {
-        auto id = waiters_.front();
-        waiters_.pop_front();
-        auto* waiter = scheduler.GetFiber(id);
-        if (waiter && waiter->IsSuspended()) {
-            scheduler.Schedule(waiter);
-            return;
-        }
-    }
+    waiters_.WakeOne(Scheduler::Current());
 }
 
 void ConditionVariable::NotifyAll() {
-    auto& scheduler = Scheduler::Current();
-    while (!waiters_.empty()) {
-        auto id = waiters_.front();
-        waiters_.pop_front();
-        auto* waiter = scheduler.GetFiber(id);
-        if (waiter && waiter->IsSuspended()) {
-            scheduler.Schedule(waiter);
-        }
-    }
+    waiters_.WakeAll(Scheduler::Current());
 }
 
 } // namespace cortex::tiny_fiber

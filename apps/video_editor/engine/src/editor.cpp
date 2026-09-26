@@ -3,16 +3,13 @@
 #include <video_editor/blocking_runner.hpp>
 #include <video_editor/cooperative_runner.hpp>
 #include <video_editor/filter_chain.hpp>
-#include <video_editor/filters/brightness.hpp>
-#include <video_editor/filters/contrast.hpp>
-#include <video_editor/filters/gaussian_blur.hpp>
-#include <video_editor/filters/saturation.hpp>
 #include <video_editor/live_cooperative.hpp>
 #include <video_editor/pipeline.hpp>
 #include <video_editor/procedural_source.hpp>
 #include <video_editor/uploaded_source.hpp>
 
 #include <algorithm>
+#include <chrono>
 
 namespace cortex::video_editor {
 
@@ -97,18 +94,20 @@ public:
         coop_renderer_->Begin(source_->At(idx), params);
     }
 
+    bool RunCooperativeFor(double budget_ms) {
+        if (!coop_renderer_ || coop_done_) {
+            return false;
+        }
+        const auto budget =
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::duration<double, std::milli>(budget_ms));
+        return PublishIfDone(coop_renderer_->RunFor(budget));
+    }
+
     bool StepCooperative() {
         if (!coop_renderer_ || coop_done_) {
             return false;
         }
-        const bool more = coop_renderer_->Step();
-        if (!more) {
-            // Publish the finished frame so Output(idx) / the bridge see it.
-            // Keep the renderer alive so the next frame's Begin reuses its buffers.
-            pipeline_->WriteOutput(coop_idx_, coop_renderer_->Output());
-            coop_done_ = true;
-        }
-        return more;
+        return PublishIfDone(coop_renderer_->Step());
     }
 
     bool CooperativeRenderDone() const noexcept {
@@ -142,23 +141,25 @@ public:
     }
 
 private:
+    // Returns `more`; once the render finished, publishes the frame so
+    // Output(idx) / the bridge see it. The renderer is kept alive so the next
+    // frame's Begin reuses its buffers.
+    bool PublishIfDone(bool more) {
+        if (!more) {
+            pipeline_->WriteOutput(coop_idx_, coop_renderer_->Output());
+            coop_done_ = true;
+        }
+        return more;
+    }
+
     void RebuildChain() {
-        chain_.Clear();
-        // Order is fixed and chosen for visual sanity: tonal adjustments
-        // first (brightness then contrast then saturation), spatial blur last
-        // so it operates on the already-color-corrected frame.
-        if (brightness_ != 0.0f) {
-            chain_.Add(std::make_unique<filters::BrightnessFilter>(brightness_));
+        // A cooperative Apply has fibers suspended inside the chain's filters:
+        // stop it before those filters are replaced under it.
+        if (runner_) {
+            runner_->Cancel();
+            runner_.reset();
         }
-        if (contrast_ != 1.0f) {
-            chain_.Add(std::make_unique<filters::ContrastFilter>(contrast_));
-        }
-        if (saturation_ != 1.0f) {
-            chain_.Add(std::make_unique<filters::SaturationFilter>(saturation_));
-        }
-        if (blur_radius_ > 0) {
-            chain_.Add(std::make_unique<filters::GaussianBlurFilter>(blur_radius_));
-        }
+        BuildFilterChain(chain_, LiveFilterParams {brightness_, contrast_, saturation_, blur_radius_});
     }
 
     void InstallProcedural(int w, int h, int n) {
@@ -252,6 +253,9 @@ void Editor::RenderPreview(int idx) {
 }
 void Editor::BeginCooperativeRender(int frame_idx) {
     impl_->BeginCooperativeRender(frame_idx);
+}
+bool Editor::RunCooperativeFor(double budget_ms) {
+    return impl_->RunCooperativeFor(budget_ms);
 }
 bool Editor::StepCooperative() {
     return impl_->StepCooperative();

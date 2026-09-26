@@ -54,3 +54,41 @@ TEST(LiveSingleFrame, ResetUploadedToSingleFrameReportsOneFrame) {
 }
 
 } // namespace
+
+namespace {
+
+class ApplyListener final : public cortex::video_editor::IProgressListener {
+public:
+    void OnProgress(float) override {}
+    void OnComplete() override {
+        completed = true;
+    }
+    void OnCancelled() override {
+        cancelled = true;
+    }
+    bool completed {false};
+    bool cancelled {false};
+};
+
+} // namespace
+
+// A cooperative Apply suspends its fibers inside the chain's filters. Changing
+// a filter rebuilds the chain, so the stale Apply must stop first instead of
+// resuming inside filters that were destroyed.
+TEST(LiveSingleFrame, ChangingAFilterStopsAnInFlightCooperativeApply) {
+    auto editor = Editor::Create(1280, 720, 4);
+    editor->SetBlurRadius(6);
+    ApplyListener listener;
+    editor->StartCooperativeApply(listener);
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_TRUE(editor->Step()); // workers are suspended mid-filter
+    }
+
+    editor->SetBlurRadius(3);
+    editor->RenderPreview(0); // rebuilds the chain
+
+    int steps = 0;
+    while (editor->Step() && steps++ < 100000) {
+    }
+    EXPECT_FALSE(listener.completed);
+}

@@ -148,6 +148,25 @@ void BenchFiberYield() {
     });
 }
 
+// CheckPoint() in a tight loop: the cost a hot loop pays for being
+// cooperative. The slice is long enough that it never actually yields.
+void BenchCheckPoint() {
+    RunBench("checkpoint (no yield due)", [] {
+        double ns = 0.0;
+        tf::Scheduler::Config config;
+        config.time_slice = std::chrono::hours(1);
+        tf::Scheduler::Run(
+            [&ns] {
+                constexpr std::uint64_t kIterations = 10'000'000;
+                ns = TimeNsPerOp(kIterations, [] {
+                    tf::CheckPoint();
+                });
+            },
+            config);
+        return ns;
+    });
+}
+
 // Generator Next()/DetachValue() round trip.
 void BenchGenerator() {
     RunBench("generator_next (yield int)", [] {
@@ -186,9 +205,11 @@ int main(int argc, char** argv) {
     BenchCoroutineCreateDestroy("coroutine_create_destroy (default alloc)", cortex::GetDefaultMemoryResource());
     BenchCoroutineCreateDestroy("coroutine_create_destroy (pooled alloc)", cortex::MakePooledMemoryResource());
     BenchFiberSpawnJoin("fiber_spawn_join (default config)", tf::Scheduler::Config {});
-    BenchFiberSpawnJoin("fiber_spawn_join (unpooled alloc)",
-                        tf::Scheduler::Config {.memory_resource = cortex::GetDefaultMemoryResource()});
+    tf::Scheduler::Config unpooled;
+    unpooled.memory_resource = cortex::GetDefaultMemoryResource();
+    BenchFiberSpawnJoin("fiber_spawn_join (unpooled alloc)", unpooled);
     BenchFiberYield();
+    BenchCheckPoint();
     BenchGenerator();
 
     return 0;

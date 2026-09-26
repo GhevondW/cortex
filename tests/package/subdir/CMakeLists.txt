@@ -1,0 +1,16 @@
+# Consumes cortex the way FetchContent/CPM users do: add_subdirectory().
+cmake_minimum_required(VERSION 3.28)
+project(cortex_subdir_consumer CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_subdirectory(${CORTEX_SOURCE_DIR} cortex)
+
+add_executable(consumer ../main.cpp)
+target_link_libraries(consumer PRIVATE cortex::cortex)
+
+# The browser driver ships with the package.
+if(NOT EXISTS "${cortex_JS_DRIVER}")
+    message(FATAL_ERROR "cortex_JS_DRIVER does not name the browser driver: '${cortex_JS_DRIVER}'")
+endif()

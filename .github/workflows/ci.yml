@@ -12,9 +12,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Job 1: Run native tests
+  # Job 1: Run native tests (GCC 13, the image's default c++)
   test-native:
-    name: Native Tests (Clang 19)
+    name: Native Tests (GCC 13)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
@@ -38,6 +38,25 @@ jobs:
             echo "=== Native Build Output ==="
             find build/native -name "*.log" -exec cat {} \;
           fi
+
+  # Job 1b: Run native tests built with Clang 19
+  test-native-clang:
+    name: Native Tests (Clang 19)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker compose build test-native-clang
+
+      - name: Run native tests (Clang 19)
+        run: docker compose up --abort-on-container-exit test-native-clang
 
   # Job 2: Run WASM tests
   test-wasm:
@@ -140,6 +159,26 @@ jobs:
       - name: Build AlgoViz
         run: docker compose up --abort-on-container-exit build-algoviz
 
+  # Job 5b: Packaging checks — cortex consumed via add_subdirectory
+  # (FetchContent/CPM) and via cmake --install + find_package.
+  test-package:
+    name: Packaging (add_subdirectory + find_package)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker compose build test-package
+
+      - name: Run packaging checks
+        run: docker compose run --rm test-package
+
   # Job 6: Check code formatting
   check-format:
     name: Check Code Formatting
@@ -221,7 +260,7 @@ jobs:
   ci-summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [test-native, test-wasm, test-sanitizers, build-example-native, build-example-wasm, build-algoviz, check-format, benchmark]
+    needs: [test-native, test-native-clang, test-wasm, test-sanitizers, test-package, build-example-native, build-example-wasm, build-algoviz, check-format, benchmark]
     if: always()
     
     steps:
@@ -229,9 +268,11 @@ jobs:
         run: |
           echo "=== CI Pipeline Summary ==="
           echo ""
-          echo "Native Tests:        ${{ needs.test-native.result }}"
+          echo "Native Tests (GCC):   ${{ needs.test-native.result }}"
+          echo "Native Tests (Clang): ${{ needs.test-native-clang.result }}"
           echo "WASM Tests:          ${{ needs.test-wasm.result }}"
           echo "Sanitizer Tests:     ${{ needs.test-sanitizers.result }}"
+          echo "Packaging:           ${{ needs.test-package.result }}"
           echo "Native Example:      ${{ needs.build-example-native.result }}"
           echo "WASM Example:        ${{ needs.build-example-wasm.result }}"
           echo "AlgoViz Build:       ${{ needs.build-algoviz.result }}"
@@ -240,8 +281,10 @@ jobs:
           echo ""
 
           if [ "${{ needs.test-native.result }}" != "success" ] || \
+             [ "${{ needs.test-native-clang.result }}" != "success" ] || \
              [ "${{ needs.test-wasm.result }}" != "success" ] || \
              [ "${{ needs.test-sanitizers.result }}" != "success" ] || \
+             [ "${{ needs.test-package.result }}" != "success" ] || \
              [ "${{ needs.build-example-native.result }}" != "success" ] || \
              [ "${{ needs.build-example-wasm.result }}" != "success" ] || \
              [ "${{ needs.build-algoviz.result }}" != "success" ] || \

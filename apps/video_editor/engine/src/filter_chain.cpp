@@ -1,5 +1,7 @@
 #include <video_editor/filter_chain.hpp>
 
+#include <video_editor/scratch_lease.hpp>
+
 #include <cassert>
 #include <utility>
 
@@ -28,9 +30,7 @@ void FilterChain::Apply(const FrameBuffer& in, FrameBuffer& out) const {
         return;
     }
 
-    if (scratch_.Width() != in.Width() || scratch_.Height() != in.Height()) {
-        scratch_ = FrameBuffer(in.Width(), in.Height());
-    }
+    ScratchLease scratch(scratch_, scratch_in_use_, in.Width(), in.Height());
 
     // Ping-pong: pick the final write target so the very last filter writes
     // directly into `out`. For N filters there are N reads/writes:
@@ -40,7 +40,7 @@ void FilterChain::Apply(const FrameBuffer& in, FrameBuffer& out) const {
     //   ...
     //   ?    -> out   (filter N-1)
     const FrameBuffer* read = &in;
-    FrameBuffer* ping = &scratch_;
+    FrameBuffer* ping = &scratch.Buffer();
     FrameBuffer* pong = &out;
 
     const std::size_t n = filters_.size();

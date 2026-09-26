@@ -30,8 +30,8 @@ void Mutex::Lock() {
             // Unlock() validates entries on pop, so we leave it for cleanup there.
             throw SchedulerStoppingError();
         }
-        waiters_.push_back(current->GetId());
-        scheduler.SuspendCurrent();
+        waiters_.Push(scheduler.PrepareWait(), scheduler);
+        scheduler.ParkCurrent("Mutex::Lock", false);
     }
 
     locked_ = true;
@@ -71,17 +71,9 @@ void Mutex::Unlock() {
         return;
     }
 
-    // Pop until we find a still-Suspended waiter. Entries can be stale if the
-    // fiber was force-scheduled by Stop() or has already completed.
-    while (!waiters_.empty()) {
-        auto id = waiters_.front();
-        waiters_.pop_front();
-        auto* waiter = scheduler.GetFiber(id);
-        if (waiter && waiter->IsSuspended()) {
-            scheduler.Schedule(waiter);
-            return;
-        }
-    }
+    // Hand the lock to the first waiter still parked in Lock(); stale entries
+    // (woken by Stop(), or finished) are skipped.
+    waiters_.WakeOne(scheduler);
 }
 
 // Guard implementation

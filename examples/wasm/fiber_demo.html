@@ -647,8 +647,6 @@
         // Initialize
         createFiberCards(3);
 
-        let stepInterval = null;
-
         Module.onRuntimeInitialized = () => {
             console.log("Cortex Fiber Runtime Ready!");
             startBtn.disabled = false;
@@ -667,18 +665,14 @@
                 resetUI(numWorkers);
                 setProgress(0, numTasks);
 
-                // Start workflow
-                await Module._start_workflow(numTasks, numWorkers);
-
-                // Step through the workflow with visible delays
-                stepInterval = setInterval(async () => {
-                    if (Module._is_workflow_done() === 1) {
-                        clearInterval(stepInterval);
-                        stepInterval = null;
-                        return;
-                    }
-                    await Module._step_workflow();
-                }, 250);  // 250ms between each step - slower, more visible!
+                // js/cortex.mjs runs the fibers between browser tasks, and
+                // sleeps while every fiber sleeps (SleepFor) or waits.
+                const { drive } = await import('./cortex.mjs');
+                const scheduler = Module._start_workflow(numTasks, numWorkers);
+                drive(Module, scheduler).done.catch((error) => {
+                    logMessage('Error: ' + error.message);
+                    workflowComplete();
+                });
             };
 
             // Preview fiber count

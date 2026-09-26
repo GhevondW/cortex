@@ -77,7 +77,7 @@
                 <li>Click <strong>Open video…</strong> to load any clip your browser can decode (MP4/H.264, WebM, …). It <strong>plays</strong>, and every displayed frame is downscaled, sent to the Cortex C++ engine compiled to WebAssembly, filtered, and drawn back to the canvas — <strong>in real time</strong>. Nothing is uploaded anywhere; it all runs locally.</li>
                 <li>Drag <strong>Brightness / Contrast / Saturation / Blur</strong> <em>while the video plays</em> — the picture changes instantly.</li>
                 <li>The <span class="badge">spinner</span> top-left is animated by <code>requestAnimationFrame</code>. As long as it keeps spinning, the main thread is free.</li>
-                <li>Turn on <strong>Cortex cooperative engine</strong> and crank <strong>Blur</strong>: the heavy per-frame filtering is split into row-bands that <code>Yield()</code> via <code>cortex::tiny_fiber</code>, so even an expensive filter never freezes the page — the video just processes as fast as the engine can.</li>
+                <li>Turn on <strong>Cortex cooperative engine</strong> and crank <strong>Blur</strong>: the real filters run in a <code>cortex::tiny_fiber</code> fiber and call <code>CheckPoint()</code> once per row, which hands the thread back whenever the 2&nbsp;ms slice is spent, so even an expensive filter never freezes the page — the video just processes as fast as the engine can.</li>
                 <li><strong>Use sample clip</strong> returns to a built-in procedurally-generated animation, so the editor is usable with no file at all.</li>
             </ul>
         </section>

@@ -94,20 +94,24 @@ if(EMSCRIPTEN)
     cortex_apply_warnings(sudoku_solver)
     cortex_apply_sanitizers(sudoku_solver)
 
-    # Fiber Workflow Demo - demonstrates tiny_fiber cooperative multitasking
+    # Fiber Workflow Demo - producer/worker fibers over a bounded Channel,
+    # driven by js/cortex.mjs
     add_executable(fiber_workflow wasm/fiber_workflow.cpp)
     target_link_libraries(fiber_workflow PRIVATE cortex::cortex)
     
     set_target_properties(fiber_workflow PROPERTIES SUFFIX ".js")
     
     target_link_options(fiber_workflow PRIVATE 
-        "-sEXPORTED_FUNCTIONS=['_main','_start_workflow','_step_workflow','_is_workflow_done']"
+        "-sEXPORTED_FUNCTIONS=['_main','_start_workflow']"
         "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString']"
         ${WASM_COMMON_LINK_FLAGS}
     )
     
-    # Copy HTML files to build directory
+    # Copy HTML files and the js/cortex.mjs driver to build directory
     add_custom_command(TARGET fiber_workflow POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${cortex_JS_DRIVER}
+                ${CMAKE_CURRENT_BINARY_DIR}/cortex.mjs
         COMMAND ${CMAKE_COMMAND} -E copy
                 ${CMAKE_CURRENT_SOURCE_DIR}/wasm/fiber_demo.html
                 ${CMAKE_CURRENT_BINARY_DIR}/fiber_demo.html
@@ -119,9 +123,44 @@ if(EMSCRIPTEN)
     
     cortex_apply_warnings(fiber_workflow)
     cortex_apply_sanitizers(fiber_workflow)
+
+    # Responsive C++ - the runtime showcase: fibers driven by js/cortex.mjs,
+    # CheckPoint(), Spawn/WaitAll, Future::Cancel(), a Channel fed from
+    # JavaScript, SleepFor(), web::Await(fetch()), deadlock reports
+    add_executable(responsive_demo wasm/responsive_demo.cpp)
+    target_link_libraries(responsive_demo PRIVATE cortex::web)
+    set_target_properties(responsive_demo PROPERTIES SUFFIX ".js")
+    target_link_options(responsive_demo PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=web,node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','UTF8ToString']"
+        "${WASM_ASSERTIONS_FLAG}"
+        "${WASM_OPTIMIZATION_FLAGS}"
+    )
+    add_custom_command(TARGET responsive_demo POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/responsive_demo.html
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/palette.json
+                ${cortex_JS_DRIVER}
+                ${CMAKE_CURRENT_SOURCE_DIR}/wasm/examples_index.html
+                ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Copying the Responsive C++ page, palette and js/cortex.mjs"
+    )
+    cortex_apply_warnings(responsive_demo)
+    cortex_apply_sanitizers(responsive_demo)
 else()
     add_executable(binary_tree_example linux/binary_tree.cpp)
     target_link_libraries(binary_tree_example PRIVATE cortex::cortex)
     cortex_apply_warnings(binary_tree_example)
     cortex_apply_sanitizers(binary_tree_example)
+
+    # A tour of the tiny_fiber runtime: slicing, timers, cancellation,
+    # channels, WaitAny, Promise + Post, deadlock reports, RunFor loops
+    add_executable(runtime_tour linux/runtime_tour.cpp)
+    target_link_libraries(runtime_tour PRIVATE cortex::cortex)
+    cortex_apply_warnings(runtime_tour)
+    cortex_apply_sanitizers(runtime_tour)
 endif()
