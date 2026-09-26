@@ -7,6 +7,7 @@
 #include <cortex/detail/forced_unwind.hpp>
 #include <cortex/memory_resource.hpp>
 #include <cortex/tiny_fiber/detail/wait_queue.hpp>
+#include <cortex/tiny_fiber/errors/deadlock_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
 #include <exception>
@@ -140,15 +141,38 @@ namespace cortex::tiny_fiber {
 
 // Scheduler template members
 template <typename F>
-void Scheduler::Run(F&& entry) {
-    Run(std::forward<F>(entry), Config {});
+auto Scheduler::Run(F&& entry) -> std::invoke_result_t<F> {
+    return Run(std::forward<F>(entry), Config {});
 }
 
 template <typename F>
-void Scheduler::Run(F&& entry, Config config) {
-    Scheduler scheduler(std::move(config));
-    scheduler.SpawnFiberInternal(std::forward<F>(entry), scheduler.config_.default_stack_size);
-    scheduler.RunLoop();
+auto Scheduler::Run(F&& entry, Config config) -> std::invoke_result_t<F> {
+    using ResultType = std::invoke_result_t<F>;
+
+    std::shared_ptr<detail::FutureState<ResultType>> state;
+    std::exception_ptr failure;
+    bool entry_finished = false;
+    {
+        Scheduler scheduler(std::move(config));
+        state = detail::MakeFutureState<ResultType>(scheduler, /*external=*/false);
+        state->fiber_id = scheduler.SpawnFiberInternal(
+            detail::MakeSpawnBody<ResultType>(state, std::forward<F>(entry)), scheduler.config_.default_stack_size);
+        try {
+            if (scheduler.RunToCompletion() == Status::kDeadlocked) {
+                failure = std::make_exception_ptr(DeadlockError(scheduler.DeadlockMessage()));
+            }
+        } catch (...) {
+            failure = std::current_exception(); // unhandled exception from a detached fiber
+        }
+        entry_finished = state->ready;
+    } // Tear the scheduler down with no exception in flight.
+
+    // The entry's own exception is the most specific error; otherwise report
+    // a detached fiber's failure or the deadlock.
+    if (failure && !(entry_finished && state->exception)) {
+        std::rethrow_exception(failure);
+    }
+    return detail::TakeResult(*state);
 }
 
 template <typename F>

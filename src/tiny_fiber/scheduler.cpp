@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <new>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -30,6 +31,10 @@ private:
     Scheduler* previous_;
 };
 } // namespace
+
+MemoryResourceSharedPtr MakeDefaultFiberResource() {
+    return MakePooledMemoryResource();
+}
 
 Scheduler& Scheduler::Current() {
     if (!g_current_scheduler) {
@@ -119,44 +124,120 @@ bool Scheduler::Step() {
         return false;
     }
 
-    CurrentSchedulerScope scope(this);
-    running_ = true;
+    {
+        CurrentSchedulerScope scope(this);
+        running_ = true;
 
-    current_fiber_ = ready_queue_.front();
-    ready_queue_.pop_front();
+        current_fiber_ = ready_queue_.front();
+        ready_queue_.pop_front();
 
-    assert(current_fiber_);
+        assert(current_fiber_);
 
-    try {
-        current_fiber_->Run();
-    } catch (...) {
-        // The entry fiber (created via Run() rather than Spawn()) has no
-        // future to deliver the exception to. Swallow during cooperative
-        // execution rather than tearing down the scheduler.
+        try {
+            current_fiber_->Run();
+        } catch (...) {
+            // Fiber bodies catch everything themselves; anything reaching
+            // here escaped the coroutine machinery. Nobody can observe it.
+            ReportUnhandledInternal(std::current_exception());
+        }
+
+        if (current_fiber_->IsDone()) {
+            current_fiber_->Complete();
+            --live_fibers_;
+            pending_cleanup_.push_back(current_fiber_->GetId());
+        }
+
+        current_fiber_ = nullptr;
     }
-
-    if (current_fiber_->IsDone()) {
-        current_fiber_->Complete();
-
-        pending_cleanup_.push_back(current_fiber_->GetId());
-    }
-
-    current_fiber_ = nullptr;
 
     const bool has_more = !ready_queue_.empty();
     if (!has_more) {
         running_ = false;
     }
+
+    DeliverUnhandled();
     return has_more;
 }
 
-void Scheduler::RunLoop() {
-    assert(!running_);
-
-    while (Step()) {
+Scheduler::Status Scheduler::GetStatus() const {
+    if (live_fibers_ == 0) {
+        return Status::kDone;
     }
+    if (!ready_queue_.empty() || current_fiber_ != nullptr) {
+        return Status::kRunnable;
+    }
+    return Status::kDeadlocked;
+}
 
-    ProcessPendingCleanup();
+Scheduler::Status Scheduler::RunToCompletion() {
+    for (;;) {
+        while (Step()) {
+        }
+        const Status status = GetStatus();
+        if (status != Status::kRunnable) {
+            ProcessPendingCleanup();
+            return status;
+        }
+    }
+}
+
+std::string Scheduler::DescribeFibers() const {
+    std::ostringstream out;
+    out << live_fibers_ << " live fiber(s):";
+    for (const auto& slot : fiber_slots_) {
+        const detail::Fiber* fiber = slot.fiber.get();
+        if (fiber == nullptr || fiber->IsDone()) {
+            continue;
+        }
+        out << "\n  #" << (slot.id >> kSlotIndexBits);
+        if (!fiber->GetName().empty()) {
+            out << " \"" << fiber->GetName() << '"';
+        }
+        switch (fiber->GetState()) {
+        case detail::FiberState::Ready:
+            out << " ready";
+            break;
+        case detail::FiberState::Running:
+            out << " running";
+            break;
+        case detail::FiberState::Suspended:
+            out << " suspended";
+            if (fiber->GetWaitReason() != nullptr) {
+                out << " in " << fiber->GetWaitReason();
+            }
+            break;
+        case detail::FiberState::Finished:
+            out << " finished";
+            break;
+        }
+    }
+    return out.str();
+}
+
+std::string Scheduler::DeadlockMessage() const {
+    return "tiny_fiber: deadlock - every remaining fiber is suspended and nothing can wake it.\n" +
+           DescribeFibers();
+}
+
+void Scheduler::ReportUnhandledInternal(std::exception_ptr ex) {
+    unhandled_.push_back(std::move(ex));
+}
+
+void Scheduler::DeliverUnhandled() {
+    if (unhandled_.empty()) {
+        return;
+    }
+    if (config_.on_unhandled_exception) {
+        auto pending = std::move(unhandled_);
+        unhandled_.clear();
+        for (auto& ex : pending) {
+            config_.on_unhandled_exception(ex);
+        }
+        return;
+    }
+    std::exception_ptr first = unhandled_.front();
+    unhandled_.erase(unhandled_.begin());
+    std::rethrow_exception(first);
 }
 
 detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::size_t stack_size) {
@@ -191,6 +272,7 @@ detail::Fiber::Id Scheduler::SpawnFiberInternal(detail::Fiber::Body func, std::s
     fiber_slots_[index].id = id;
     fiber_slots_[index].fiber = detail::FiberPtr(fiber_raw_ptr, detail::FiberDeleter {resource.get()});
     ready_queue_.push_back(fiber_raw_ptr);
+    ++live_fibers_;
 
     return id;
 }
@@ -231,8 +313,6 @@ void Scheduler::ThrowIfInterrupted([[maybe_unused]] bool cancellable) const {
         throw SchedulerStoppingError();
     }
 }
-
-void Scheduler::ReportUnhandledInternal([[maybe_unused]] std::exception_ptr ex) {}
 
 void Scheduler::WakeFiber(detail::Fiber* fiber) {
     assert(fiber && fiber->IsSuspended());

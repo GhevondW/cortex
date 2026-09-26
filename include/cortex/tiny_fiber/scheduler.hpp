@@ -7,7 +7,10 @@
 #include <cstdint>
 #include <deque>
 #include <exception>
+#include <functional>
 #include <memory>
+#include <string>
+#include <type_traits>
 #include <vector>
 
 /**
@@ -18,54 +21,80 @@
 namespace cortex::tiny_fiber {
 
 /**
+ * @brief The memory resource a Scheduler uses unless configured otherwise.
+ *
+ * A per-scheduler pool: fiber stacks are recycled instead of hitting the
+ * system allocator on every Spawn. Safe because a scheduler and its fibers
+ * live on a single thread.
+ */
+MemoryResourceSharedPtr MakeDefaultFiberResource();
+
+/**
  * @class Scheduler
  * @brief Manages cooperative execution of fibers.
  *
- * The scheduler maintains a ready queue of fibers and runs them
- * one at a time until all fibers complete.
+ * The scheduler maintains a ready queue of fibers and runs them one at a time
+ * on the calling thread.
  *
  * Two modes of operation:
  * 1. `Run()` - blocks until all fibers complete (simple usage)
  * 2. `Create()` + `Step()` - manual stepping for WASM/async integration
+ *
+ * Failures are never silent: an exception escaping a fiber that nobody can
+ * observe (the Create() entry, detached fibers) is rethrown by Step()/Run()
+ * or passed to Config::on_unhandled_exception, and Run() throws
+ * DeadlockError when fibers are left that can never finish.
  */
 class Scheduler {
 public:
+    /**
+     * @brief What a scheduler can do next.
+     */
+    enum class Status : std::uint8_t {
+        kRunnable, ///< Fibers are ready to run now: call Step() again.
+        kWaiting, ///< Nothing runnable, but fibers wait on timers or external events.
+        kDone, ///< Every fiber has finished.
+        kDeadlocked, ///< Fibers are suspended and nothing can ever wake them.
+    };
+
     /**
      * @struct Config
      * @brief Configuration options for the scheduler.
      */
     struct Config {
         std::size_t default_stack_size = cortex::Coroutine::kDefaultStackSizeBytes;
-        // Each scheduler gets its own stack pool by default: fiber stacks are
-        // recycled instead of hitting the system allocator on every Spawn.
-        // Safe because a scheduler and its fibers live on a single thread.
-        MemoryResourceSharedPtr memory_resource = MakePooledMemoryResource();
+        /// Where fibers, their stacks and future states are allocated.
+        MemoryResourceSharedPtr memory_resource = MakeDefaultFiberResource();
+        /// Receives exceptions that escape fibers nobody observes (the
+        /// Create() entry, detached fibers). Called from Step(), outside any
+        /// fiber. When empty, Step() / Run() rethrow them instead.
+        std::function<void(std::exception_ptr)> on_unhandled_exception;
     };
 
     /**
-     * @brief Run the scheduler with an initial fiber.
-     *
-     * Blocks until all fibers complete.
+     * @brief Run `entry` in a fiber and drive the scheduler until every fiber
+     *        has finished.
      *
      * @param entry The function to run in the initial fiber.
+     * @return What `entry` returned.
+     * @throws Whatever `entry` threw; an unhandled exception from a detached
+     *         fiber; DeadlockError if fibers remain that can never finish.
      */
     template <typename F>
-    static void Run(F&& entry);
+    static auto Run(F&& entry) -> std::invoke_result_t<F>;
 
     /**
-     * @brief Run the scheduler with an initial fiber and custom config.
-     *
-     * @param entry The function to run in the initial fiber.
-     * @param config Configuration options.
+     * @brief Run with a custom config. See Run(F&&).
      */
     template <typename F>
-    static void Run(F&& entry, Config config);
+    static auto Run(F&& entry, Config config) -> std::invoke_result_t<F>;
 
     /**
      * @brief Create a scheduler for manual stepping (WASM/async integration).
      *
      * Use Step() to advance the scheduler one fiber at a time.
      * This allows yielding back to JS event loop between fiber switches.
+     * An exception escaping `entry` is rethrown by the Step() that ran it.
      *
      * @param entry The function to run in the initial fiber.
      * @return A unique_ptr to the Scheduler instance.
@@ -105,19 +134,43 @@ public:
     /**
      * @brief Run one step of the scheduler.
      *
-     * Picks one ready fiber and runs it until it yields or completes.
-     * Use this for WASM integration with JS event loop.
+     * Picks one ready fiber and runs it until it yields, parks or completes.
      *
-     * @return true if there's more work to do, false if all fibers are done.
+     * @return true if more fibers are ready to run right now. false means
+     *         nothing is runnable: check GetStatus() to tell "done" from
+     *         "deadlocked".
+     * @throws An exception that escaped a fiber nobody observes, unless
+     *         Config::on_unhandled_exception is set.
      */
     bool Step();
 
     /**
-     * @brief Check if all fibers have completed.
+     * @brief What the scheduler can do next (see Status).
+     */
+    [[nodiscard]] Status GetStatus() const;
+
+    /**
+     * @brief Check if every fiber has finished.
+     *
+     * A scheduler whose fibers are all parked forever is not done: its
+     * status is Status::kDeadlocked.
      */
     [[nodiscard]] bool IsDone() const noexcept {
-        return ready_queue_.empty() && !current_fiber_;
+        return live_fibers_ == 0;
     }
+
+    /**
+     * @brief Number of fibers that have not finished yet.
+     */
+    [[nodiscard]] std::size_t GetFiberCount() const noexcept {
+        return live_fibers_;
+    }
+
+    /**
+     * @brief Human-readable list of live fibers: name, state and what each
+     *        suspended fiber waits in. Useful when debugging hangs.
+     */
+    [[nodiscard]] std::string DescribeFibers() const;
 
     /**
      * @brief Get the default stack size for new fibers.
@@ -189,7 +242,7 @@ public:
     void ThrowIfInterrupted(bool cancellable) const;
 
     // An exception escaped a fiber nobody observes (a detached fiber or the
-    // Create() entry). Currently discarded.
+    // Create() entry). Delivered by the Step() that ran the fiber.
     void ReportUnhandledInternal(std::exception_ptr ex);
 
     // Liveness token. A Future holds this weakly so its destructor / Wait / Get
@@ -213,7 +266,15 @@ private:
 
     explicit Scheduler(Config config);
 
-    void RunLoop();
+    // Drive the scheduler until nothing can make progress. Returns kDone or
+    // kDeadlocked.
+    Status RunToCompletion();
+
+    // The DeadlockError message: explanation plus DescribeFibers().
+    [[nodiscard]] std::string DeadlockMessage() const;
+
+    // Hand queued unhandled exceptions to the handler, or rethrow the first.
+    void DeliverUnhandled();
 
     // Get fiber by ID
     detail::Fiber* GetFiber(detail::Fiber::Id id);
@@ -245,11 +306,13 @@ private:
     bool stopping_ {false};
     // Sequence counter; starts at 1 so no fiber ID is ever the sentinel 0.
     std::uint64_t next_sequence_ {1};
+    std::size_t live_fibers_ {0};
     detail::Fiber* current_fiber_ {nullptr};
     std::deque<detail::Fiber*> ready_queue_;
     std::vector<FiberSlot> fiber_slots_;
     std::vector<std::uint32_t> vacant_slots_;
     std::vector<detail::Fiber::Id> pending_cleanup_;
+    std::vector<std::exception_ptr> unhandled_;
     // Owned liveness token; weak copies in Futures expire when this scheduler is
     // destroyed. Declared last so it outlives the other members during teardown.
     std::shared_ptr<void> alive_token_ {std::make_shared<char>()};

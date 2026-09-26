@@ -7,6 +7,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include <function2/function2.hpp>
 
@@ -73,6 +75,15 @@ public:
         return wait_reason_;
     }
 
+    // Optional human-readable name (diagnostics only).
+    [[nodiscard]] const std::string& GetName() const noexcept {
+        return name_;
+    }
+
+    void SetName(std::string_view name) {
+        name_.assign(name);
+    }
+
     // Whether the current park may be interrupted by cancellation.
     [[nodiscard]] bool IsCancellablePark() const noexcept {
         return cancellable_park_;
@@ -108,6 +119,7 @@ private:
     std::uint64_t wait_epoch_ {0};
     const char* wait_reason_ {nullptr};
     bool cancellable_park_ {false};
+    std::string name_;
 };
 
 // Deleter for fibers placement-constructed in MemoryResource storage. Holds

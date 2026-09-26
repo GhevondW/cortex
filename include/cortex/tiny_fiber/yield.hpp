@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 /**
  * @file yield.hpp
  * @brief Yield functions for cooperative multitasking.
@@ -36,5 +38,13 @@ bool YieldIfOthersReady();
  * @throws std::logic_error if called outside of a fiber.
  */
 bool IsStopping();
+
+/**
+ * @brief Name the current fiber. The name appears in
+ *        Scheduler::DescribeFibers() and in DeadlockError messages.
+ *
+ * @throws std::logic_error if called outside of a fiber.
+ */
+void SetFiberName(std::string_view name);
 
 } // namespace cortex::tiny_fiber
