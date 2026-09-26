@@ -5,6 +5,7 @@
  * @brief Convenience header that includes all tiny_fiber components.
  */
 
+#include <cortex/tiny_fiber/channel.hpp>
 #include <cortex/tiny_fiber/condition_variable.hpp>
 #include <cortex/tiny_fiber/errors/broken_promise_error.hpp>
 #include <cortex/tiny_fiber/errors/cancelled_error.hpp>
