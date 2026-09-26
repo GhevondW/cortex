@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <string_view>
 
 /**
@@ -38,6 +39,37 @@ bool YieldIfOthersReady();
  * @throws std::logic_error if called outside of a fiber.
  */
 bool IsStopping();
+
+namespace detail {
+void SleepForImpl(std::chrono::steady_clock::duration duration);
+void SleepUntilImpl(std::chrono::steady_clock::time_point deadline);
+} // namespace detail
+
+/**
+ * @brief Suspend the current fiber for at least `duration`; other fibers run
+ *        meanwhile. A zero or negative duration just yields.
+ *
+ * Time comes from the scheduler's Config::clock.
+ *
+ * @throws std::logic_error if called outside of a fiber.
+ * @throws SchedulerStoppingError if the scheduler is stopping.
+ */
+template <typename Rep, typename Period>
+void SleepFor(std::chrono::duration<Rep, Period> duration) {
+    detail::SleepForImpl(std::chrono::ceil<std::chrono::steady_clock::duration>(duration));
+}
+
+/**
+ * @brief Suspend the current fiber until `deadline` (a time point of the
+ *        scheduler's clock, see Scheduler::Now()).
+ *
+ * @throws std::logic_error if called outside of a fiber.
+ * @throws SchedulerStoppingError if the scheduler is stopping.
+ */
+template <typename Duration>
+void SleepUntil(std::chrono::time_point<std::chrono::steady_clock, Duration> deadline) {
+    detail::SleepUntilImpl(std::chrono::ceil<std::chrono::steady_clock::duration>(deadline));
+}
 
 /**
  * @brief Name the current fiber. The name appears in

@@ -4,11 +4,13 @@
 #include <cortex/pooled_memory_resource.hpp>
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -48,6 +50,10 @@ MemoryResourceSharedPtr MakeDefaultFiberResource();
  */
 class Scheduler {
 public:
+    using Clock = std::chrono::steady_clock;
+    using Duration = Clock::duration;
+    using TimePoint = Clock::time_point;
+
     /**
      * @brief What a scheduler can do next.
      */
@@ -70,6 +76,9 @@ public:
         /// Create() entry, detached fibers). Called from Step(), outside any
         /// fiber. When empty, Step() / Run() rethrow them instead.
         std::function<void(std::exception_ptr)> on_unhandled_exception;
+        /// Source of time for timers and budgets. Replace it to control time
+        /// (e.g. in tests); blocking Run() assumes it advances in real time.
+        TimePoint (*clock)() = &Clock::now;
     };
 
     /**
@@ -144,6 +153,36 @@ public:
      *         Config::on_unhandled_exception is set.
      */
     bool Step();
+
+    /**
+     * @brief Run fibers until `budget` is spent or nothing is runnable.
+     *
+     * The call a browser event loop should make once per tick: it never
+     * blocks, and returns as soon as the budget is used up (after the step in
+     * progress) or no fiber can run right now.
+     *
+     * @return The status afterwards. kWaiting: fibers sleep or wait for
+     *         external events — call again after NextTimerDeadline() (or when
+     *         woken). kRunnable: more work is ready now.
+     */
+    Status RunFor(Duration budget);
+
+    /**
+     * @brief Like RunFor(), with an absolute deadline.
+     */
+    Status RunUntil(TimePoint deadline);
+
+    /**
+     * @brief When the earliest sleeping fiber is due, if any fiber sleeps.
+     */
+    [[nodiscard]] std::optional<TimePoint> NextTimerDeadline() const;
+
+    /**
+     * @brief The scheduler's current time (Config::clock).
+     */
+    [[nodiscard]] TimePoint Now() const {
+        return config_.clock();
+    }
 
     /**
      * @brief What the scheduler can do next (see Status).
@@ -246,6 +285,9 @@ public:
     // Create() entry). Delivered by the Step() that ran the fiber.
     void ReportUnhandledInternal(std::exception_ptr ex);
 
+    // Park the current fiber until `deadline` (SleepFor/SleepUntil).
+    void SleepUntilInternal(TimePoint deadline);
+
     // Liveness token. A Future holds this weakly so its destructor / Wait / Get
     // can detect that the scheduler has been destroyed and skip dereferencing a
     // dangling pointer (a Future may legally outlive its scheduler).
@@ -267,9 +309,18 @@ private:
 
     explicit Scheduler(Config config);
 
-    // Drive the scheduler until nothing can make progress. Returns kDone or
-    // kDeadlocked.
+    // Drive the scheduler until nothing can make progress, sleeping while
+    // only timers are pending. Returns kDone or kDeadlocked.
     Status RunToCompletion();
+
+    // Wake every sleeping fiber whose deadline is <= now.
+    void FireDueTimers(TimePoint now);
+
+    // Whether the earliest timer is due at `now`.
+    [[nodiscard]] bool HasDueTimer(TimePoint now) const;
+
+    // Block the calling thread until the next timer is due.
+    void WaitForWork();
 
     // The DeadlockError message: explanation plus DescribeFibers().
     [[nodiscard]] std::string DeadlockMessage() const;
@@ -314,6 +365,9 @@ private:
     std::vector<std::uint32_t> vacant_slots_;
     std::vector<detail::Fiber::Id> pending_cleanup_;
     std::vector<std::exception_ptr> unhandled_;
+    detail::TimerMap timers_;
+    // Deadline of the RunFor()/RunUntil() in progress (max when none).
+    TimePoint run_deadline_ {TimePoint::max()};
     // Owned liveness token; weak copies in Futures expire when this scheduler is
     // destroyed. Declared last so it outlives the other members during teardown.
     std::shared_ptr<void> alive_token_ {std::make_shared<char>()};

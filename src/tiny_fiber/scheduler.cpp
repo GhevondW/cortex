@@ -6,6 +6,7 @@
 #include <new>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace cortex::tiny_fiber {
@@ -125,6 +126,9 @@ void Scheduler::ProcessPendingCleanup() {
 
 bool Scheduler::Step() {
     ProcessPendingCleanup();
+    if (!timers_.empty()) {
+        FireDueTimers(config_.clock());
+    }
 
     if (ready_queue_.empty()) {
         running_ = false;
@@ -157,13 +161,81 @@ bool Scheduler::Step() {
         current_fiber_ = nullptr;
     }
 
-    const bool has_more = !ready_queue_.empty();
+    const bool has_more = !ready_queue_.empty() || (!timers_.empty() && HasDueTimer(config_.clock()));
     if (!has_more) {
         running_ = false;
     }
 
     DeliverUnhandled();
     return has_more;
+}
+
+Scheduler::Status Scheduler::RunFor(Duration budget) {
+    const TimePoint now = config_.clock();
+    const TimePoint deadline = budget >= TimePoint::max() - now ? TimePoint::max() : now + budget;
+    return RunUntil(deadline);
+}
+
+Scheduler::Status Scheduler::RunUntil(TimePoint deadline) {
+    struct DeadlineScope {
+        TimePoint& slot;
+        TimePoint saved;
+        ~DeadlineScope() {
+            slot = saved;
+        }
+    } scope {run_deadline_, std::exchange(run_deadline_, deadline)};
+
+    while (Step() && config_.clock() < deadline) {
+    }
+    return GetStatus();
+}
+
+std::optional<Scheduler::TimePoint> Scheduler::NextTimerDeadline() const {
+    if (timers_.empty()) {
+        return std::nullopt;
+    }
+    return timers_.begin()->first;
+}
+
+bool Scheduler::HasDueTimer(TimePoint now) const {
+    return !timers_.empty() && timers_.begin()->first <= now;
+}
+
+void Scheduler::FireDueTimers(TimePoint now) {
+    while (HasDueTimer(now)) {
+        auto entry = timers_.begin();
+        detail::Fiber* fiber = GetFiber(entry->second);
+        timers_.erase(entry);
+        if (fiber != nullptr && fiber->HasTimer()) {
+            fiber->DisarmTimer();
+            WakeFiber(fiber);
+        }
+    }
+}
+
+void Scheduler::SleepUntilInternal(TimePoint deadline) {
+    ThrowIfInterrupted(true);
+    if (current_fiber_ == nullptr) {
+        throw std::logic_error("SleepFor()/SleepUntil() must be called from within a fiber");
+    }
+    if (deadline <= config_.clock()) {
+        YieldCurrent();
+        return;
+    }
+    detail::Fiber* fiber = current_fiber_;
+    (void)fiber->PrepareWait(); // new epoch: tokens from earlier waits can't wake this one
+    fiber->ArmTimer(timers_.emplace(deadline, fiber->GetId()));
+    fiber->Park("SleepFor", /*cancellable=*/true);
+    ThrowIfInterrupted(true);
+}
+
+void Scheduler::WaitForWork() {
+    if (auto deadline = NextTimerDeadline()) {
+        const Duration delay = *deadline - config_.clock();
+        if (delay > Duration::zero()) {
+            std::this_thread::sleep_for(delay);
+        }
+    }
 }
 
 Scheduler::Status Scheduler::GetStatus() const {
@@ -173,6 +245,9 @@ Scheduler::Status Scheduler::GetStatus() const {
     if (!ready_queue_.empty() || current_fiber_ != nullptr) {
         return Status::kRunnable;
     }
+    if (!timers_.empty()) {
+        return HasDueTimer(config_.clock()) ? Status::kRunnable : Status::kWaiting;
+    }
     return Status::kDeadlocked;
 }
 
@@ -181,6 +256,10 @@ Scheduler::Status Scheduler::RunToCompletion() {
         while (Step()) {
         }
         const Status status = GetStatus();
+        if (status == Status::kWaiting) {
+            WaitForWork();
+            continue;
+        }
         if (status != Status::kRunnable) {
             ProcessPendingCleanup();
             return status;
@@ -323,6 +402,9 @@ void Scheduler::ThrowIfInterrupted([[maybe_unused]] bool cancellable) const {
 
 void Scheduler::WakeFiber(detail::Fiber* fiber) {
     assert(fiber && fiber->IsSuspended());
+    if (fiber->HasTimer()) {
+        timers_.erase(fiber->DisarmTimer()); // woken early: drop its timer
+    }
     fiber->Wake();
     ready_queue_.push_back(fiber);
 }

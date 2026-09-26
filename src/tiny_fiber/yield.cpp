@@ -30,6 +30,29 @@ bool IsStopping() {
     return Scheduler::Current().IsStopping();
 }
 
+namespace detail {
+
+void SleepForImpl(std::chrono::steady_clock::duration duration) {
+    Scheduler* scheduler = Scheduler::TryCurrent();
+    if (scheduler == nullptr) {
+        throw std::logic_error("SleepFor() must be called from within a fiber");
+    }
+    const auto now = scheduler->Now();
+    const auto deadline =
+        duration >= Scheduler::TimePoint::max() - now ? Scheduler::TimePoint::max() : now + duration;
+    scheduler->SleepUntilInternal(deadline);
+}
+
+void SleepUntilImpl(std::chrono::steady_clock::time_point deadline) {
+    Scheduler* scheduler = Scheduler::TryCurrent();
+    if (scheduler == nullptr) {
+        throw std::logic_error("SleepUntil() must be called from within a fiber");
+    }
+    scheduler->SleepUntilInternal(deadline);
+}
+
+} // namespace detail
+
 void SetFiberName(std::string_view name) {
     auto* fiber = Scheduler::Current().GetCurrentFiber();
     if (fiber == nullptr) {

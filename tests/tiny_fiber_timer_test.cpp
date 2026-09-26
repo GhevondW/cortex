@@ -1,0 +1,159 @@
+// Timers and time-budgeted driving: SleepFor/SleepUntil, RunFor/RunUntil,
+// NextTimerDeadline and the kWaiting status.
+
+#include <cortex/tiny_fiber/tiny_fiber.hpp>
+
+#include <gtest/gtest.h>
+
+#include <chrono>
+#include <stdexcept>
+#include <vector>
+
+namespace tf = cortex::tiny_fiber;
+using namespace std::chrono_literals;
+
+namespace {
+
+// Deterministic time for tests that must not depend on the machine's speed.
+tf::Scheduler::TimePoint g_now {};
+
+tf::Scheduler::TimePoint FakeNow() {
+    return g_now;
+}
+
+tf::Scheduler::Config FakeClockConfig() {
+    g_now = tf::Scheduler::TimePoint {} + 1h; // arbitrary non-zero origin
+    tf::Scheduler::Config config;
+    config.clock = &FakeNow;
+    return config;
+}
+
+} // namespace
+
+TEST(TinyFiberTimer, SleepingFiberWaitsForItsDeadline) {
+    bool woke = false;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            tf::SleepFor(10ms);
+            woke = true;
+        },
+        FakeClockConfig());
+    const auto start = g_now;
+
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting);
+    ASSERT_TRUE(scheduler->NextTimerDeadline().has_value());
+    EXPECT_EQ(*scheduler->NextTimerDeadline(), start + 10ms);
+
+    g_now = start + 9ms;
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting);
+    EXPECT_FALSE(woke);
+
+    g_now = start + 10ms;
+    EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable); // the timer is due
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_TRUE(woke);
+    EXPECT_FALSE(scheduler->NextTimerDeadline().has_value());
+}
+
+TEST(TinyFiberTimer, TimersFireInDeadlineOrder) {
+    std::vector<int> order;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            for (int ms : {30, 10, 20}) {
+                tf::SpawnDetached([&order, ms] {
+                    tf::SleepFor(std::chrono::milliseconds(ms));
+                    order.push_back(ms);
+                });
+            }
+        },
+        FakeClockConfig());
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting);
+    g_now += 100ms;
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(order, (std::vector<int> {10, 20, 30}));
+}
+
+TEST(TinyFiberTimer, SleepUntilUsesSchedulerClock) {
+    bool woke = false;
+    auto scheduler = tf::Scheduler::Create(
+        [&] {
+            tf::SleepUntil(g_now + 5ms);
+            woke = true;
+        },
+        FakeClockConfig());
+    scheduler->RunFor(1ms);
+    EXPECT_FALSE(woke);
+    g_now += 5ms;
+    scheduler->RunFor(1ms);
+    EXPECT_TRUE(woke);
+}
+
+TEST(TinyFiberTimer, RunBlocksUntilTimersFire) {
+    const auto start = std::chrono::steady_clock::now();
+    tf::Scheduler::Run([] { tf::SleepFor(20ms); });
+    EXPECT_GE(std::chrono::steady_clock::now() - start, 20ms);
+}
+
+TEST(TinyFiberTimer, SleepForZeroYields) {
+    std::vector<int> order;
+    tf::Scheduler::Run([&] {
+        auto other = tf::Spawn([&] {
+            order.push_back(2);
+            tf::SleepFor(0ms);
+            order.push_back(4);
+        });
+        order.push_back(1);
+        tf::SleepFor(0ms);
+        order.push_back(3);
+        other.Wait();
+    });
+    EXPECT_EQ(order, (std::vector<int> {1, 2, 3, 4}));
+}
+
+TEST(TinyFiberTimer, StopWakesSleepersAndClearsTimers) {
+    bool stopped = false;
+    auto scheduler = tf::Scheduler::Create([&] {
+        try {
+            tf::SleepFor(1h);
+        } catch (const tf::SchedulerStoppingError&) {
+            stopped = true;
+        }
+    });
+    scheduler->Step();
+    ASSERT_TRUE(scheduler->NextTimerDeadline().has_value());
+    scheduler->Stop();
+    while (!scheduler->IsDone()) {
+        scheduler->Step();
+    }
+    EXPECT_TRUE(stopped);
+    EXPECT_FALSE(scheduler->NextTimerDeadline().has_value());
+}
+
+TEST(TinyFiberTimer, RunForReturnsWhenBudgetSpent) {
+    auto scheduler = tf::Scheduler::Create([] {
+        for (;;) {
+            tf::Yield();
+        }
+    });
+    const auto start = std::chrono::steady_clock::now();
+    EXPECT_EQ(scheduler->RunFor(2ms), tf::Scheduler::Status::kRunnable);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_GE(elapsed, 2ms);
+    EXPECT_LT(elapsed, 1s);
+}
+
+TEST(TinyFiberTimer, SleepOutsideFiberThrows) {
+    EXPECT_THROW(tf::SleepFor(1ms), std::logic_error);
+}
+
+TEST(TinyFiberTimer, DeadlockIsNotConfusedWithWaiting) {
+    auto scheduler = tf::Scheduler::Create([] {
+        tf::SpawnDetached([] { tf::SleepFor(1h); });
+        tf::Mutex mutex;
+        tf::ConditionVariable cv;
+        auto guard = tf::Lock(mutex);
+        cv.Wait(guard);
+    });
+    scheduler->RunFor(1ms);
+    EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kWaiting); // the sleeper will wake
+}

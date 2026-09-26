@@ -5,7 +5,9 @@
 #include <cortex/memory_resource.hpp>
 #include <cortex/tiny_fiber/detail/wait_queue.hpp>
 
+#include <chrono>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -17,6 +19,11 @@ class Scheduler;
 } // namespace cortex::tiny_fiber
 
 namespace cortex::tiny_fiber::detail {
+
+// Sleeping fibers, ordered by wake-up time. A fiber keeps the iterator of its
+// entry so waking it early (Stop, cancellation) erases the entry at once and
+// no stale timer is ever left behind.
+using TimerMap = std::multimap<std::chrono::steady_clock::time_point, FiberId>;
 
 // Internal fiber states
 enum class FiberState : std::uint8_t {
@@ -84,6 +91,21 @@ public:
         name_.assign(name);
     }
 
+    // Timer entry of the current sleep, if any.
+    void ArmTimer(TimerMap::iterator entry) noexcept {
+        timer_ = entry;
+        timer_armed_ = true;
+    }
+
+    [[nodiscard]] bool HasTimer() const noexcept {
+        return timer_armed_;
+    }
+
+    TimerMap::iterator DisarmTimer() noexcept {
+        timer_armed_ = false;
+        return timer_;
+    }
+
     // Whether the current park may be interrupted by cancellation.
     [[nodiscard]] bool IsCancellablePark() const noexcept {
         return cancellable_park_;
@@ -119,6 +141,8 @@ private:
     std::uint64_t wait_epoch_ {0};
     const char* wait_reason_ {nullptr};
     bool cancellable_park_ {false};
+    bool timer_armed_ {false};
+    TimerMap::iterator timer_ {};
     std::string name_;
 };
 
