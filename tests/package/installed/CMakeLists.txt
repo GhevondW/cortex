@@ -9,3 +9,8 @@ find_package(cortex CONFIG REQUIRED)
 
 add_executable(consumer ../main.cpp)
 target_link_libraries(consumer PRIVATE cortex::cortex)
+
+# The browser driver ships with the package.
+if(NOT EXISTS "${cortex_JS_DRIVER}")
+    message(FATAL_ERROR "cortex_JS_DRIVER does not name the browser driver: '${cortex_JS_DRIVER}'")
+endif()

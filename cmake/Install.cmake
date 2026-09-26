@@ -23,11 +23,34 @@ install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/cortex"
 
 # function2 is header-only and, when fetched by CPM, an imported target that
 # cannot be exported. Ship its header next to ours, under a cortex-owned
-# directory so it cannot clash with a separately installed function2; the
-# exported cortex target adds that directory to its include path.
-install(DIRECTORY "${function2_SOURCE_DIR}/include/function2"
+# directory that the exported cortex target adds to its include path. (A
+# consumer that uses its own function2 as well gets whichever copy comes first
+# on its include path.)
+set(_cortex_function2_dirs "")
+if(function2_SOURCE_DIR)
+    list(APPEND _cortex_function2_dirs "${function2_SOURCE_DIR}/include")
+endif()
+get_target_property(_cortex_function2_includes function2::function2 INTERFACE_INCLUDE_DIRECTORIES)
+if(_cortex_function2_includes)
+    list(APPEND _cortex_function2_dirs ${_cortex_function2_includes})
+endif()
+set(_cortex_function2_header_dir "")
+foreach(_dir IN LISTS _cortex_function2_dirs)
+    if(EXISTS "${_dir}/function2/function2.hpp")
+        set(_cortex_function2_header_dir "${_dir}/function2")
+        break()
+    endif()
+endforeach()
+if(NOT _cortex_function2_header_dir)
+    message(FATAL_ERROR "cortex: cannot find function2/function2.hpp to install it")
+endif()
+install(DIRECTORY "${_cortex_function2_header_dir}"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cortex/third_party"
 )
+
+# The browser driver (js/cortex.mjs); find_package() sets cortex_JS_DRIVER.
+set(CORTEX_INSTALL_JSDIR "${CMAKE_INSTALL_DATADIR}/cortex")
+install(FILES "${PROJECT_SOURCE_DIR}/js/cortex.mjs" DESTINATION "${CORTEX_INSTALL_JSDIR}")
 
 install(EXPORT cortexTargets
     NAMESPACE cortex::
@@ -44,6 +67,7 @@ configure_package_config_file(
     "${CMAKE_CURRENT_LIST_DIR}/cortexConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/cortexConfig.cmake"
     INSTALL_DESTINATION "${CORTEX_INSTALL_CMAKEDIR}"
+    PATH_VARS CORTEX_INSTALL_JSDIR
 )
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cortexConfigVersion.cmake"

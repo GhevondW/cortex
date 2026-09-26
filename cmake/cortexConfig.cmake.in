@@ -8,4 +8,7 @@ endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/cortexTargets.cmake")
 
+# The browser driver: copy it next to your Emscripten module.
+set_and_check(cortex_JS_DRIVER "@PACKAGE_CORTEX_INSTALL_JSDIR@/cortex.mjs")
+
 check_required_components(cortex)

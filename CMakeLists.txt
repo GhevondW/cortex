@@ -43,6 +43,11 @@ if(CORTEX_INSTALL AND NOT EMSCRIPTEN AND NOT CORTEX_USE_SYSTEM_BOOST)
         "a Boost fetched by CPM cannot be exported with the cortex package.")
 endif()
 
+# The browser driver, for projects that add cortex with add_subdirectory()
+# (FetchContent, CPM): copy it next to your Emscripten module. find_package()
+# sets the same variable to the installed copy.
+set(cortex_JS_DRIVER "${PROJECT_SOURCE_DIR}/js/cortex.mjs" CACHE INTERNAL "cortex's browser driver (js/cortex.mjs)")
+
 # --- Module Path ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
