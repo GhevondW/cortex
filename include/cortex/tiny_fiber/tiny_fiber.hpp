@@ -23,7 +23,8 @@
  * @brief Cooperative multitasking primitives built on cortex::Coroutine.
  *
  * This module provides fiber-based cooperative multitasking that works
- * on both native and WebAssembly platforms without any threading.
+ * on both native and WebAssembly platforms without any threading. In the
+ * browser, drive a scheduler with js/cortex.mjs (see Scheduler::RunFor()).
  *
  * ## Quick Start
  *
@@ -31,26 +32,29 @@
  * #include <cortex/tiny_fiber/tiny_fiber.hpp>
  *
  * int main() {
- *     cortex::tiny_fiber::Scheduler::Run([] {
+ *     const int result = cortex::tiny_fiber::Scheduler::Run([] {
  *         auto future = cortex::tiny_fiber::Spawn([] {
  *             cortex::tiny_fiber::Yield();
  *             return 42;
  *         });
- *
- *         int result = future.Get();
+ *         return future.Get();
  *     });
- *     return 0;
+ *     return result == 42 ? 0 : 1;
  * }
  * ```
  *
  * ## Components
  *
- * - **Scheduler**: Manages fiber execution
- * - **Future<T>**: Handle to a spawned fiber's result
- * - **Spawn()**: Create new fibers
- * - **Yield()**: Cooperative yielding
- * - **Mutex**: Cooperative locking
- * - **ConditionVariable**: Cooperative waiting
+ * - **Scheduler**: runs fibers; Run(), or Create() + RunFor()/Step(); status,
+ *   timers, Post(), wake-up handler, deadlock reports
+ * - **Spawn() / SpawnDetached() / Future<T>**: start fibers, wait, time out,
+ *   cancel, detach
+ * - **Promise<T>**: results delivered from outside fibers
+ * - **WaitAll() / WaitAny()**: wait on several futures
+ * - **Channel<T>**: FIFO message passing
+ * - **CheckPoint() / Yield() / SleepFor()**: cooperative slicing, yields, timers
+ * - **Mutex / ConditionVariable**: cooperative synchronization
+ * - **CancelledError / SchedulerStoppingError / DeadlockError / BrokenPromiseError**
  */
 
 namespace cortex::tiny_fiber {

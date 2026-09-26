@@ -1,84 +1,80 @@
 /**
-@mainpage Cortex Coroutine Library
+@mainpage Cortex
 
 @section intro Introduction
-Cortex is a C++ stackful coroutine library with WebAssembly (Emscripten) support.
-It provides cooperative multitasking with explicit suspend/resume semantics and
-works across native and WASM builds through a unified API.
+Cortex makes C++ behave in the browser: stackful fibers for C++20 that share
+the main thread fairly, sleep, cancel, and await JavaScript promises, so heavy
+C++ compiled to WebAssembly never freezes the page. The same code runs
+natively (Boost.Context) and in WebAssembly (Emscripten).
 
 @section highlights Highlights
-- Stackful coroutines with a simple @c Resume / @c Suspend model
-- Unified API for native (Boost.Context) and WASM (Emscripten fibers)
-- @b tiny_fiber module for single-thread cooperative multitasking (native + WASM)
-- Custom memory resource support for stack allocation
-- Designed for deterministic, cooperative control flow
+- @ref cortex::tiny_fiber "tiny_fiber": fibers, futures, promises, channels,
+  timers, cancellation and cooperative sync primitives on one thread
+- @ref cortex::tiny_fiber::CheckPoint "CheckPoint()": time-slicing for hot
+  loops, ~2 ns when no yield is due and a no-op outside fibers
+- @ref cortex::web::Await "cortex::web::Await": a fiber awaits a JavaScript
+  promise while the page keeps running
+- No silent failures: unobserved exceptions are rethrown, deadlocks are
+  reported with the stuck fibers, stack overflows hit a guard page
+- Low-level @ref cortex::Coroutine "Coroutine" and
+  @ref cortex::Generator "Generator" primitives underneath
 
-@section quickstart Quick Start
-@code
-#include <cortex/coroutine.hpp>
-
-auto co = cortex::Coroutine::Make([](cortex::CoroutineSuspendContext& ctx) {
-    // Do work...
-    ctx.Suspend(); // Yield back to caller
-    // Resume here...
-});
-
-co.Resume();
-co.Resume();
-@endcode
-
-@section tinyfiber tiny_fiber Module
-Higher-level cooperative multitasking built on Coroutine:
+@section tinyfiber tiny_fiber
 @code
 #include <cortex/tiny_fiber/tiny_fiber.hpp>
 namespace tf = cortex::tiny_fiber;
 
-tf::Scheduler::Run([] {
+int answer = tf::Scheduler::Run([] {
     auto future = tf::Spawn([] {
-        tf::Yield();  // Cooperative yield
+        tf::SleepFor(std::chrono::milliseconds(10));
         return 42;
     });
-    
-    tf::Yield();
-    int result = future.Get();  // Wait and get result
+    return future.Get(); // suspends this fiber, not the thread
 });
 @endcode
 
-For WASM integration with JS event loop:
+In the browser, create the scheduler once and let @c js/cortex.mjs drive it
+from the event loop in time-boxed slices:
 @code
-auto scheduler = tf::Scheduler::Create([]{
-    // Spawn fibers, use Mutex, ConditionVariable, etc.
-});
+std::unique_ptr<tf::Scheduler> g_scheduler;
 
-// Called from JS via setInterval
-while (!scheduler.IsDone()) {
-    scheduler.Step();  // Run one fiber until yield
+extern "C" EMSCRIPTEN_KEEPALIVE void* start() {
+    g_scheduler = tf::Scheduler::Create([] { RunMyApp(); });
+    return g_scheduler.get();
 }
 @endcode
+@code{.js}
+import { drive } from "./cortex.mjs";
+await drive(Module, Module._start(), { budgetMs: 8 }).done;
+@endcode
 
-@section generator Generator Example
+@section generator Generator
 @code
 #include <cortex/generator.hpp>
 
-auto gen = cortex::Generator<int>::Make([](auto& yield) {
+auto numbers = cortex::Generator<int>::Make([](auto& yield) {
     yield(1);
     yield(2);
     yield(3);
 });
 
-while (gen.Next()) {
-    int value = gen.DetachValue();
+for (int value : numbers) {
     // use value
 }
 @endcode
 
 @section structure API Overview
+- @ref cortex::tiny_fiber::Scheduler "Scheduler", @ref cortex::tiny_fiber::Future "Future",
+  @ref cortex::tiny_fiber::Promise "Promise", @ref cortex::tiny_fiber::Channel "Channel",
+  @ref cortex::tiny_fiber::Mutex "Mutex", @ref cortex::tiny_fiber::ConditionVariable "ConditionVariable"
 - @ref cortex::Coroutine "Coroutine": low-level stackful coroutine
 - @ref cortex::BaseCoroutine "BaseCoroutine": OO wrapper for coroutines
-- @ref cortex::Generator "Generator": yield values across resumes
-- @ref cortex::tiny_fiber "tiny_fiber": single-thread cooperative fibers (native + WASM)
+- @ref cortex::Generator "Generator": yield values across resumes (an input range)
+- @ref cortex::PooledMemoryResource "PooledMemoryResource",
+  @ref cortex::MakeGuardedStackResource "MakeGuardedStackResource": stack allocation
 
 @section resources Resources
+- Porting guide: docs/porting-guide.md
 - Live demos: https://GhevondW.github.io/cortex/
 - API docs: https://GhevondW.github.io/cortex/docs/
 */

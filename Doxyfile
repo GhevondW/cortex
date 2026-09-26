@@ -30,6 +30,8 @@ DOT_IMAGE_FORMAT       = svg
 # Input sources
 INPUT                  = ./include \
                          ./README.md \
+                         ./DEVELOPMENT.md \
+                         ./docs/porting-guide.md \
                          ./docsrc/mainpage.dox
 
 # Use a curated main page
