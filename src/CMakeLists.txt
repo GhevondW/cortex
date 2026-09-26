@@ -30,6 +30,7 @@ target_sources(cortex
         coroutine.cpp
         memory_resource.cpp
         pooled_memory_resource.cpp
+        guarded_stack_resource.cpp
         ${CORTEX_COROUTINE_SRC}
         ${CORTEX_TINY_FIBER_SRC}
         ${CORTEX_EXEC_SRC}

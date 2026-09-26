@@ -25,7 +25,8 @@ namespace cortex::tiny_fiber {
  *
  * A per-scheduler pool: fiber stacks are recycled instead of hitting the
  * system allocator on every Spawn. Safe because a scheduler and its fibers
- * live on a single thread.
+ * live on a single thread. On POSIX native builds the pooled stacks come from
+ * MakeGuardedStackResource(), so a stack overflow faults immediately.
  */
 MemoryResourceSharedPtr MakeDefaultFiberResource();
 

@@ -33,6 +33,22 @@ if(NOT EMSCRIPTEN)
             URL_HASH SHA256=2c5ec5edcdff47ff55e27ed9560b0a0b94b07bd07ed9928b476150e16b0efc57
             OPTIONS ${BOOST_OPTIONS}
         )
+
+        # Macros that change the layout of Boost.Context's activation record
+        # must be identical in Boost's compiled sources and in every user of
+        # its headers, so they travel with the target (PUBLIC).
+        if(CORTEX_USE_SANITIZERS)
+            # ASan stack-switch annotations (ucontext backend only).
+            target_compile_definitions(boost_context PUBLIC BOOST_USE_ASAN BOOST_USE_UBSAN)
+            if(APPLE)
+                # On macOS, ucontext_t only has room for the machine context
+                # when _XOPEN_SOURCE is defined before the first system header;
+                # otherwise getcontext() writes past the struct, off the top of
+                # the fiber stack. _DARWIN_C_SOURCE keeps the rest of the macOS
+                # API visible.
+                target_compile_definitions(boost_context PUBLIC _XOPEN_SOURCE=600 _DARWIN_C_SOURCE)
+            endif()
+        endif()
     endif()
 else()
     message(STATUS "WASM build detected: Skipping Boost (Using Emscripten built-ins)")

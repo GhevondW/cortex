@@ -1,3 +1,4 @@
+#include <cortex/guarded_stack_resource.hpp>
 #include <cortex/tiny_fiber/errors/scheduler_stopping_error.hpp>
 #include <cortex/tiny_fiber/scheduler.hpp>
 
@@ -33,6 +34,12 @@ private:
 } // namespace
 
 MemoryResourceSharedPtr MakeDefaultFiberResource() {
+    // Pool over guard-paged stacks where the platform supports it: recycled
+    // stacks keep their guard page, so overflow faults without making every
+    // Spawn pay for mmap.
+    if (HasGuardPageSupport()) {
+        return MakePooledMemoryResource(PooledMemoryResource::Config {.upstream = MakeGuardedStackResource()});
+    }
     return MakePooledMemoryResource();
 }
 
