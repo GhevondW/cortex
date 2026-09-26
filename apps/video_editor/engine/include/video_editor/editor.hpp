@@ -55,11 +55,13 @@ public:
     void RenderPreview(int frame_idx);
 
     // Cooperative single-frame render: filters frame_idx through the current
-    // parameters via tiny_fiber, split into horizontal row-bands that yield, so
-    // a heavy filter never blocks the main thread. Drive with StepCooperative()
-    // until CooperativeRenderDone() returns true; the finished frame lands in
+    // parameters in a tiny_fiber fiber; the filters yield (CheckPoint) once per
+    // row when their time slice is spent, so a heavy filter never blocks the
+    // main thread. Drive with RunCooperativeFor() (or StepCooperative()) until
+    // CooperativeRenderDone() returns true; the finished frame lands in
     // Output(frame_idx), byte-identical to RenderPreview(frame_idx).
     void BeginCooperativeRender(int frame_idx);
+    bool RunCooperativeFor(double budget_ms);
     bool StepCooperative();
     [[nodiscard]] bool CooperativeRenderDone() const noexcept;
 

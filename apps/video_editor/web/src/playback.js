@@ -140,12 +140,8 @@ export class Playback {
         // path closer to the synchronous one on heavy blur (it is inherently a bit
         // slower — it deliberately yields so the page never freezes).
         const budgetMs = 12;
-        const start = performance.now();
-        let done = client.cooperativeDone();
-        while (!done && performance.now() - start < budgetMs) {
-            client.stepCooperative();
-            done = client.cooperativeDone();
-        }
+        client.runCooperativeFor(budgetMs);
+        const done = client.cooperativeDone();
 
         if (done) {
             this._paint(this._coopIndex);

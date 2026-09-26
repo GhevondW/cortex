@@ -1,39 +1,44 @@
 #pragma once
 
+#include <video_editor/filter_chain.hpp>
 #include <video_editor/frame_buffer.hpp>
 
 #include <cortex/tiny_fiber/scheduler.hpp>
 
+#include <chrono>
 #include <memory>
 
 namespace cortex::video_editor {
 
 // The four live-editor filter parameters, in the fixed order the editor applies
-// them. Identity values (the defaults) are skipped, exactly matching
-// Editor::RebuildChain, so the cooperative output is byte-identical to the
-// synchronous FilterChain for the same parameters.
+// them. Identity values (the defaults) are skipped.
 struct LiveFilterParams {
     float brightness {0.0f}; // identity 0
     float contrast {1.0f}; // identity 1
     float saturation {1.0f}; // identity 1
     int blur_radius {0}; // identity 0
+
+    bool operator==(const LiveFilterParams&) const = default;
 };
 
-// Applies the filter chain to ONE frame cooperatively: the work is split into
-// horizontal row-bands and yields between them via cortex::tiny_fiber, so even a
-// heavy chain never blocks the calling thread for long. Drive it with Step()
-// (one scheduler step per call); Output() is valid once Done() returns true.
+// Fills `chain` with the filters for `params`: brightness, contrast,
+// saturation, then blur, skipping identity stages. Used by both the Editor's
+// synchronous chain and the cooperative renderer, so they cannot diverge.
+void BuildFilterChain(FilterChain& chain, const LiveFilterParams& params);
+
+// Applies the filter chain to ONE frame cooperatively: the real filters run in
+// a cortex::tiny_fiber fiber and call tiny_fiber::CheckPoint() once per row,
+// which yields whenever the time slice is spent — so even a heavy chain never
+// blocks the calling thread for long. Drive it with RunFor() (or Step());
+// Output() is valid once Done() returns true.
 //
 // This is the live editor's "Cortex cooperative engine" path — the synchronous
-// foil is Editor::RenderPreview. Output is byte-identical to the synchronous
-// chain (verified in live_cooperative_test.cpp).
+// foil is Editor::RenderPreview. It runs the very same filter code, so output
+// is byte-identical (verified in live_cooperative_test.cpp).
 class LiveCooperativeRenderer final {
 public:
-    // band_rows controls how many output rows are filtered between yields. Bigger
-    // bands mean fewer (cheaper-in-aggregate) fiber swaps per frame; the JS driver
-    // bounds per-tick work with its own time budget, so this is purely a swap-cost
-    // knob, not the responsiveness limit.
-    explicit LiveCooperativeRenderer(int band_rows = 32);
+    // time_slice: how long the filters run before a CheckPoint() yields.
+    explicit LiveCooperativeRenderer(std::chrono::microseconds time_slice = std::chrono::milliseconds(2));
     ~LiveCooperativeRenderer();
 
     LiveCooperativeRenderer(const LiveCooperativeRenderer&) = delete;
@@ -46,7 +51,12 @@ public:
     // in-flight render.
     void Begin(const FrameBuffer& source, const LiveFilterParams& params);
 
-    // Advance one scheduler step. Returns true while more work remains.
+    // Run the render for up to `budget` of CPU time. Returns true while more
+    // work remains.
+    bool RunFor(std::chrono::microseconds budget);
+
+    // Advance one scheduler step (one time slice). Returns true while more
+    // work remains.
     bool Step();
 
     [[nodiscard]] bool Done() const noexcept {
@@ -59,7 +69,12 @@ public:
 
 private:
     struct State;
-    int band_rows_;
+
+    // Record completion after the scheduler ran; returns true while more work
+    // remains.
+    bool Settle();
+
+    std::chrono::microseconds time_slice_;
     std::shared_ptr<State> state_;
     std::unique_ptr<cortex::tiny_fiber::Scheduler> scheduler_;
     bool done_ {true};

@@ -55,6 +55,16 @@ export class EditorClient {
             && typeof this._mod._editor_cooperative_done === "function";
     }
     beginCooperativeRender(frameIdx) { this._mod._editor_begin_cooperative_render(frameIdx); }
+    // Runs the render for up to `budgetMs`; the filters yield whenever their
+    // time slice is spent. Check cooperativeDone() afterwards.
+    runCooperativeFor(budgetMs) {
+        if (typeof this._mod._editor_run_cooperative_for === "function") {
+            this._mod._editor_run_cooperative_for(budgetMs);
+            return;
+        }
+        const start = performance.now(); // older builds: step within the budget
+        while (!this.cooperativeDone() && performance.now() - start < budgetMs) this.stepCooperative();
+    }
     stepCooperative()                { return this._mod._editor_step_cooperative() === 1; }
     cooperativeDone()                { return this._mod._editor_cooperative_done() === 1; }
 

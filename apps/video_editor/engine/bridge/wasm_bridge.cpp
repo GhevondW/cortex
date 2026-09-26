@@ -146,10 +146,19 @@ CORTEX_API void editor_render_preview(int idx) {
     if (g_editor) g_editor->RenderPreview(idx);
 }
 
-// Cooperative single-frame render. begin → step until done → read the result via
-// editor_get_output_frame(idx). Lets a heavy filter run without freezing the page.
+// Cooperative single-frame render. begin → run for a budget per tick until
+// editor_cooperative_done() → read the result via editor_get_output_frame(idx).
+// Lets a heavy filter run without freezing the page.
+//
+// Poll editor_cooperative_done() rather than using a return value: under
+// Asyncify, an export that switches fibers returns to JavaScript before its
+// real call completes, so its return value is unreliable.
 CORTEX_API void editor_begin_cooperative_render(int idx) {
     if (g_editor) g_editor->BeginCooperativeRender(idx);
+}
+
+CORTEX_API void editor_run_cooperative_for(double budget_ms) {
+    if (g_editor) g_editor->RunCooperativeFor(budget_ms);
 }
 
 CORTEX_API int editor_step_cooperative() {

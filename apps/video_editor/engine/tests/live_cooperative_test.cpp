@@ -1,7 +1,7 @@
-// The cooperative single-frame renderer must produce byte-identical output to
-// the synchronous FilterChain for the same parameters, across band sizes and
-// filter combinations. This guards against the duplicated filter math in
-// live_cooperative.cpp drifting from the real filters.
+// The cooperative single-frame renderer runs the real filters in a fiber; they
+// call tiny_fiber::CheckPoint() per row, which yields once the time slice is
+// spent. Output must be byte-identical to the synchronous FilterChain for the
+// same parameters, whatever the slice.
 
 #include <video_editor/filter_chain.hpp>
 #include <video_editor/filters/brightness.hpp>
@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -20,6 +21,7 @@
 namespace {
 
 using namespace cortex::video_editor;
+using namespace std::chrono_literals;
 
 FrameBuffer MakeNoise(int w, int h, std::uint32_t seed) {
     FrameBuffer fb(w, h);
@@ -56,17 +58,24 @@ FrameBuffer RunSync(const FrameBuffer& src, const LiveFilterParams& p) {
     return out;
 }
 
-FrameBuffer RunCooperative(const FrameBuffer& src, const LiveFilterParams& p, int band_rows) {
-    LiveCooperativeRenderer r(band_rows);
+// Renders cooperatively; returns the output and reports how many steps it took.
+FrameBuffer RunCooperative(const FrameBuffer& src,
+                           const LiveFilterParams& p,
+                           std::chrono::microseconds time_slice,
+                           int* steps_taken = nullptr) {
+    LiveCooperativeRenderer r(time_slice);
     r.Begin(src, p);
-    int guard = 0;
+    int steps = 1;
     while (r.Step()) {
-        if (++guard > 1'000'000) {
+        if (++steps > 1'000'000) {
             ADD_FAILURE() << "cooperative render did not converge";
             break;
         }
     }
     EXPECT_TRUE(r.Done());
+    if (steps_taken != nullptr) {
+        *steps_taken = steps;
+    }
     return r.Output(); // FrameBuffer is copyable
 }
 
@@ -77,8 +86,8 @@ void ExpectByteIdentical(const FrameBuffer& a, const FrameBuffer& b) {
     EXPECT_EQ(0, std::memcmp(a.Data(), b.Data(), a.SizeBytes()));
 }
 
-TEST(LiveCooperative, MatchesSyncAcrossParamsAndBandSizes) {
-    const int w = 37, h = 29; // odd dims to exercise band edges
+TEST(LiveCooperative, MatchesSyncAcrossParamsAndSlices) {
+    const int w = 37, h = 29; // odd dims
     const FrameBuffer src = MakeNoise(w, h, 0xC0FFEEu);
 
     const LiveFilterParams cases[] = {
@@ -93,19 +102,41 @@ TEST(LiveCooperative, MatchesSyncAcrossParamsAndBandSizes) {
 
     for (const auto& p : cases) {
         const FrameBuffer expected = RunSync(src, p);
-        for (int band : {1, 4, 8, 16, 100}) {
-            const FrameBuffer got = RunCooperative(src, p, band);
+        for (auto slice : {0us, 50us, 2000us}) {
+            const FrameBuffer got = RunCooperative(src, p, slice);
             SCOPED_TRACE(testing::Message()
-                         << "brightness=" << p.brightness << " contrast=" << p.contrast
-                         << " saturation=" << p.saturation << " blur=" << p.blur_radius << " band=" << band);
+                         << "brightness=" << p.brightness << " contrast=" << p.contrast << " saturation="
+                         << p.saturation << " blur=" << p.blur_radius << " slice_us=" << slice.count());
             ExpectByteIdentical(got, expected);
         }
     }
 }
 
+// A zero slice makes every CheckPoint() yield: the real filters must be
+// splitting their work (one checkpoint per row).
+TEST(LiveCooperative, RealFiltersYieldAtCheckPoints) {
+    const FrameBuffer src = MakeNoise(24, 24, 3u);
+    int steps = 0;
+    (void)RunCooperative(src, LiveFilterParams {0.1f, 1.2f, 0.8f, 3}, 0us, &steps);
+    EXPECT_GT(steps, 24); // at least one yield per row of one pass
+}
+
+TEST(LiveCooperative, RunForFinishesAFrameWithinRepeatedBudgets) {
+    const FrameBuffer src = MakeNoise(40, 30, 9u);
+    const LiveFilterParams params {0.0f, 1.0f, 1.0f, 4};
+    LiveCooperativeRenderer r(100us);
+    r.Begin(src, params);
+    int calls = 0;
+    while (r.RunFor(200us)) {
+        ASSERT_LT(++calls, 100000);
+    }
+    EXPECT_TRUE(r.Done());
+    ExpectByteIdentical(r.Output(), RunSync(src, params));
+}
+
 TEST(LiveCooperative, ReBeginReusesRenderer) {
     const FrameBuffer src = MakeNoise(16, 16, 42u);
-    LiveCooperativeRenderer r(8);
+    LiveCooperativeRenderer r;
 
     r.Begin(src, LiveFilterParams {0.5f, 1.0f, 1.0f, 0});
     while (r.Step()) {
@@ -121,9 +152,9 @@ TEST(LiveCooperative, ReBeginReusesRenderer) {
 
 TEST(LiveCooperative, DestroyingMidRenderIsClean) {
     const FrameBuffer src = MakeNoise(32, 32, 7u);
-    LiveCooperativeRenderer r(1);
+    LiveCooperativeRenderer r(0us); // yield at every checkpoint
     r.Begin(src, LiveFilterParams {-0.2f, 1.3f, 0.7f, 6});
-    r.Step(); // run a couple of bands, then drop the renderer mid-render
+    r.Step(); // run a couple of rows, then drop the renderer mid-render
     r.Step();
     SUCCEED(); // ~LiveCooperativeRenderer must tear the scheduler down cleanly
 }

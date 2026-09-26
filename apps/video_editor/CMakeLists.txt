@@ -48,6 +48,7 @@ if(EMSCRIPTEN)
 '_editor_set_blur_radius',\
 '_editor_render_preview',\
 '_editor_begin_cooperative_render',\
+'_editor_run_cooperative_for',\
 '_editor_step_cooperative',\
 '_editor_cooperative_done',\
 '_editor_start_apply_cooperative',\

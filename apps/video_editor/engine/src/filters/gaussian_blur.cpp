@@ -1,5 +1,7 @@
 #include <video_editor/filters/gaussian_blur.hpp>
 
+#include <cortex/tiny_fiber/yield.hpp>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -57,6 +59,9 @@ void BlurHorizontal(const FrameBuffer& in, FrameBuffer& out, const std::vector<f
             dst[dst_off + 2] = ClampByte(b);
             dst[dst_off + 3] = src[dst_off + 3];
         }
+        // Lets a fiber running this filter yield once its time slice is
+        // spent; a no-op when the filter is called outside a fiber.
+        tiny_fiber::CheckPoint();
     }
 }
 
@@ -85,6 +90,9 @@ void BlurVertical(const FrameBuffer& in, FrameBuffer& out, const std::vector<flo
             dst[dst_off + 2] = ClampByte(b);
             dst[dst_off + 3] = src[dst_off + 3];
         }
+        // Lets a fiber running this filter yield once its time slice is
+        // spent; a no-op when the filter is called outside a fiber.
+        tiny_fiber::CheckPoint();
     }
 }
 
