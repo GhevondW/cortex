@@ -30,7 +30,9 @@ namespace cortex::tiny_fiber {
  *
  * A channel belongs to one scheduler. TrySend(), TryReceive() and Close()
  * never suspend, so plain code — an event callback between scheduler steps,
- * a JavaScript handler — can use them to feed fibers.
+ * a JavaScript handler — can use them to feed fibers. A channel created with
+ * an explicit scheduler (from plain code) is assumed to be fed from outside:
+ * fibers waiting on it make the scheduler report kWaiting, not kDeadlocked.
  *
  * Like Mutex, a channel must outlive the fibers that use it.
  */
@@ -44,20 +46,14 @@ public:
      * @throws std::invalid_argument if capacity is 0.
      */
     explicit Channel(std::size_t capacity = kUnbounded)
-        : Channel(Scheduler::Current(), capacity) {}
+        : Channel(Scheduler::Current(), capacity, /*external=*/false) {}
 
     /**
-     * @brief Create a channel on `scheduler` (usable from plain code).
+     * @brief Create a channel on `scheduler`, to be fed from plain code.
      * @throws std::invalid_argument if capacity is 0.
      */
     explicit Channel(Scheduler& scheduler, std::size_t capacity = kUnbounded)
-        : scheduler_(&scheduler)
-        , alive_(scheduler.AliveTokenInternal())
-        , capacity_(capacity) {
-        if (capacity == 0) {
-            throw std::invalid_argument("Channel capacity must be at least 1");
-        }
-    }
+        : Channel(scheduler, capacity, /*external=*/true) {}
 
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
@@ -84,6 +80,7 @@ public:
                 return true;
             }
             senders_.Push(scheduler.PrepareWait());
+            detail::ExternalWaitScope external(scheduler, external_);
             scheduler.ParkCurrent("Channel::Send", true);
         }
     }
@@ -118,6 +115,7 @@ public:
                 return std::nullopt;
             }
             receivers_.Push(scheduler.PrepareWait());
+            detail::ExternalWaitScope external(scheduler, external_);
             scheduler.ParkCurrent("Channel::Receive", true);
         }
     }
@@ -224,6 +222,16 @@ public:
     }
 
 private:
+    Channel(Scheduler& scheduler, std::size_t capacity, bool external)
+        : scheduler_(&scheduler)
+        , alive_(scheduler.AliveTokenInternal())
+        , capacity_(capacity)
+        , external_(external) {
+        if (capacity == 0) {
+            throw std::invalid_argument("Channel capacity must be at least 1");
+        }
+    }
+
     [[nodiscard]] Scheduler* LiveScheduler() const noexcept {
         return alive_.expired() ? nullptr : scheduler_;
     }
@@ -258,6 +266,7 @@ private:
     Scheduler* scheduler_;
     std::weak_ptr<void> alive_;
     std::size_t capacity_;
+    bool external_;
     bool closed_ {false};
     std::deque<T> buffer_;
     detail::WaitQueue senders_;

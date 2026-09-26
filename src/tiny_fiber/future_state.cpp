@@ -82,6 +82,7 @@ void AwaitState(FutureStateBase& state, bool cancellable) {
     while (!state.ready) {
         scheduler.ThrowIfInterrupted(cancellable);
         Register(state, scheduler, scheduler.PrepareWait());
+        ExternalWaitScope external(scheduler, state.external);
         scheduler.ParkCurrent("Future::Wait", cancellable);
     }
 }
@@ -97,6 +98,7 @@ bool AwaitStateUntil(FutureStateBase& state, Scheduler::TimePoint deadline) {
             return false;
         }
         Register(state, scheduler, scheduler.PrepareWait());
+        ExternalWaitScope external(scheduler, state.external);
         scheduler.ParkCurrentUntil("Future::WaitFor", true, deadline);
     }
     return true;
@@ -132,9 +134,12 @@ std::size_t AwaitAnyState(FutureStateBase* const* states, std::size_t count) {
         // One token for this wait, registered everywhere: the first state to
         // become ready wakes the fiber, the rest become stale.
         const WaiterRef ref = scheduler.PrepareWait();
+        bool any_external = false;
         for (std::size_t i = 0; i < count; ++i) {
             Register(*states[i], scheduler, ref);
+            any_external = any_external || states[i]->external;
         }
+        ExternalWaitScope external(scheduler, any_external);
         scheduler.ParkCurrent("WaitAny", true);
         ready = first_ready();
     }

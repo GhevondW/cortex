@@ -4,12 +4,17 @@
 #include <cortex/pooled_memory_resource.hpp>
 #include <cortex/tiny_fiber/detail/fiber.hpp>
 
+#include <function2/function2.hpp>
+
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -59,7 +64,8 @@ public:
      */
     enum class Status : std::uint8_t {
         kRunnable, ///< Fibers are ready to run now: call Step() again.
-        kWaiting, ///< Nothing runnable, but fibers wait on timers or external events.
+        kWaiting, ///< Nothing runnable, but fibers wait on timers or on the outside
+                  ///< world (a Promise, a Channel fed from plain code).
         kDone, ///< Every fiber has finished.
         kDeadlocked, ///< Fibers are suspended and nothing can ever wake them.
     };
@@ -246,6 +252,29 @@ public:
     }
 
     /**
+     * @brief Queue `work` to run on this scheduler's thread at the start of
+     *        its next Step(), outside of any fiber.
+     *
+     * The one thread-safe entry point: other threads use it to hand results
+     * to fibers (e.g. fulfil a Promise) or to spawn work (SpawnDetached may
+     * be called from `work`). A blocking Run() wakes up for posted work.
+     * Exceptions escaping `work` are treated as unhandled.
+     */
+    void Post(fu2::unique_function<void()> work);
+
+    /**
+     * @brief Set a callback invoked when work becomes runnable while nobody
+     *        is stepping the scheduler — a Promise fulfilled from a
+     *        JavaScript callback, a Channel fed from plain code, Post().
+     *
+     * An event-loop driver uses it to schedule the next RunFor() instead of
+     * polling. It is called on the thread that made the work runnable (for
+     * Post, possibly another thread) and may be called more than once per
+     * burst of work. Set it before other threads start posting.
+     */
+    void SetWakeupHandler(std::function<void()> handler);
+
+    /**
      * @brief Signal all fibers to stop and wake suspended ones.
      *
      * Called automatically during destruction, but can be called
@@ -303,6 +332,17 @@ public:
     // Park the current fiber until `deadline` (SleepFor/SleepUntil).
     void SleepUntilInternal(TimePoint deadline);
 
+    // A fiber is about to park waiting for the outside world (a Promise, a
+    // Channel fed from plain code). While any such wait is in progress the
+    // scheduler reports kWaiting rather than kDeadlocked.
+    void BeginExternalWaitInternal() noexcept {
+        ++external_waiters_;
+    }
+
+    void EndExternalWaitInternal() noexcept {
+        --external_waiters_;
+    }
+
     // tf::CheckPoint() for the current fiber: yield iff its slice is spent.
     void CheckPointCurrent();
 
@@ -337,8 +377,13 @@ private:
     // Whether the earliest timer is due at `now`.
     [[nodiscard]] bool HasDueTimer(TimePoint now) const;
 
-    // Block the calling thread until the next timer is due.
-    void WaitForWork();
+    // Block the calling thread until the next timer is due or work is
+    // posted. Returns false when nothing can ever arrive (single-threaded
+    // WASM waiting on the outside world, which cannot run while we block).
+    bool WaitForWork();
+
+    // Run work queued by Post().
+    void RunPosted();
 
     // The DeadlockError message: explanation plus DescribeFibers().
     [[nodiscard]] std::string DeadlockMessage() const;
@@ -385,6 +430,17 @@ private:
     std::vector<detail::Fiber::Id> pending_cleanup_;
     std::vector<std::exception_ptr> unhandled_;
     detail::TimerMap timers_;
+    std::size_t external_waiters_ {0};
+    // True while this scheduler is inside Step(): wake-ups then need no
+    // wake-up handler call, the driver is already running.
+    bool in_step_ {false};
+    std::function<void()> wakeup_handler_;
+
+    // Post() queue: the only state shared with other threads.
+    std::mutex post_mutex_;
+    std::condition_variable post_cv_;
+    std::vector<fu2::unique_function<void()>> posted_;
+    std::atomic<bool> has_posted_ {false};
     // Deadline of the RunFor()/RunUntil() in progress (max when none).
     TimePoint run_deadline_ {TimePoint::max()};
 

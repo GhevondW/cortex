@@ -63,6 +63,9 @@ Scheduler::Scheduler(Config config)
 }
 
 Scheduler::~Scheduler() {
+    // Nobody may be told to drive a scheduler that is going away.
+    wakeup_handler_ = nullptr;
+
     if (!stopping_) {
         Stop();
     }
@@ -127,17 +130,28 @@ void Scheduler::ProcessPendingCleanup() {
 
 bool Scheduler::Step() {
     ProcessPendingCleanup();
+    if (has_posted_.load(std::memory_order_acquire)) {
+        RunPosted();
+    }
     if (!timers_.empty()) {
         FireDueTimers(config_.clock());
     }
 
     if (ready_queue_.empty()) {
         running_ = false;
+        DeliverUnhandled();
         return false;
     }
 
     {
         CurrentSchedulerScope scope(this);
+        struct InStepScope {
+            bool& flag;
+            ~InStepScope() {
+                flag = false;
+            }
+        } in_step {in_step_};
+        in_step_ = true;
         running_ = true;
 
         current_fiber_ = ready_queue_.front();
@@ -264,16 +278,41 @@ void Scheduler::CheckPointCurrent() {
     }
 }
 
-void Scheduler::WaitForWork() {
-    if (auto deadline = NextTimerDeadline()) {
+bool Scheduler::WaitForWork() {
+    const std::optional<TimePoint> deadline = NextTimerDeadline();
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    // Single-threaded WASM: nothing but a timer can make progress while this
+    // thread blocks — JavaScript callbacks cannot run. Use Create() +
+    // RunFor() from the event loop to await the outside world.
+    if (!deadline) {
+        return false;
+    }
+    const Duration delay = *deadline - config_.clock();
+    if (delay > Duration::zero()) {
+        std::this_thread::sleep_for(delay);
+    }
+    return true;
+#else
+    std::unique_lock lock(post_mutex_);
+    const auto has_posted = [this] {
+        return !posted_.empty();
+    };
+    if (deadline) {
         const Duration delay = *deadline - config_.clock();
         if (delay > Duration::zero()) {
-            std::this_thread::sleep_for(delay);
+            post_cv_.wait_for(lock, delay, has_posted);
         }
+    } else {
+        post_cv_.wait(lock, has_posted);
     }
+    return true;
+#endif
 }
 
 Scheduler::Status Scheduler::GetStatus() const {
+    if (has_posted_.load(std::memory_order_acquire)) {
+        return Status::kRunnable; // posted work may spawn fibers
+    }
     if (live_fibers_ == 0) {
         return Status::kDone;
     }
@@ -283,7 +322,50 @@ Scheduler::Status Scheduler::GetStatus() const {
     if (!timers_.empty()) {
         return HasDueTimer(config_.clock()) ? Status::kRunnable : Status::kWaiting;
     }
+    if (external_waiters_ > 0) {
+        return Status::kWaiting;
+    }
     return Status::kDeadlocked;
+}
+
+void Scheduler::Post(fu2::unique_function<void()> work) {
+    {
+        std::lock_guard lock(post_mutex_);
+        posted_.push_back(std::move(work));
+        has_posted_.store(true, std::memory_order_release);
+    }
+    post_cv_.notify_one();
+    if (wakeup_handler_) {
+        wakeup_handler_();
+    }
+}
+
+void Scheduler::SetWakeupHandler(std::function<void()> handler) {
+    wakeup_handler_ = std::move(handler);
+}
+
+void Scheduler::RunPosted() {
+    std::vector<fu2::unique_function<void()>> batch;
+    {
+        std::lock_guard lock(post_mutex_);
+        batch.swap(posted_);
+        has_posted_.store(false, std::memory_order_release);
+    }
+    CurrentSchedulerScope scope(this);
+    struct InStepScope {
+        bool& flag;
+        bool saved;
+        ~InStepScope() {
+            flag = saved;
+        }
+    } in_step {in_step_, std::exchange(in_step_, true)};
+    for (auto& work : batch) {
+        try {
+            work();
+        } catch (...) {
+            ReportUnhandledInternal(std::current_exception());
+        }
+    }
 }
 
 Scheduler::Status Scheduler::RunToCompletion() {
@@ -292,8 +374,11 @@ Scheduler::Status Scheduler::RunToCompletion() {
         }
         const Status status = GetStatus();
         if (status == Status::kWaiting) {
-            WaitForWork();
-            continue;
+            if (WaitForWork()) {
+                continue;
+            }
+            ProcessPendingCleanup();
+            return Status::kDeadlocked;
         }
         if (status != Status::kRunnable) {
             ProcessPendingCleanup();
@@ -477,7 +562,13 @@ void Scheduler::WakeFiber(detail::Fiber* fiber) {
         timers_.erase(fiber->DisarmTimer()); // woken early: drop its timer
     }
     fiber->Wake();
+    const bool was_idle = ready_queue_.empty();
     ready_queue_.push_back(fiber);
+    // Woken from outside any step (a JS callback fulfilling a Promise, ...):
+    // tell the driver there is work again.
+    if (was_idle && !in_step_ && wakeup_handler_) {
+        wakeup_handler_();
+    }
 }
 
 void Scheduler::YieldCurrent() {

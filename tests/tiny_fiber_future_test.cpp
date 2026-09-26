@@ -11,6 +11,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace tf = cortex::tiny_fiber;
@@ -383,3 +384,127 @@ TEST(TinyFiberWait, CancelDuringWaitAnyWakesOnce) {
         b.Wait();
     });
 }
+
+// --- Promise, Post, wake-up handler ------------------------------------------
+
+TEST(TinyFiberPromise, FulfilledFromPlainCodeWakesFiber) {
+    std::optional<tf::Promise<int>> promise;
+    int result = 0;
+    int wakeups = 0;
+    auto scheduler = tf::Scheduler::Create([&] {
+        promise.emplace();
+        auto future = promise->GetFuture();
+        result = future.Get();
+    });
+    scheduler->SetWakeupHandler([&] { ++wakeups; });
+
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kWaiting); // waits on the outside world
+    EXPECT_EQ(wakeups, 0);
+
+    promise->SetValue(42); // e.g. from a JavaScript callback
+    EXPECT_EQ(wakeups, 1);
+    EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable);
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(result, 42);
+}
+
+TEST(TinyFiberPromise, DestroyedPromiseBreaksFuture) {
+    std::optional<tf::Promise<int>> promise;
+    bool broken = false;
+    auto scheduler = tf::Scheduler::Create([&] {
+        promise.emplace();
+        auto future = promise->GetFuture();
+        try {
+            (void)future.Get();
+        } catch (const tf::BrokenPromiseError&) {
+            broken = true;
+        }
+    });
+    scheduler->RunFor(1ms);
+    promise.reset();
+    scheduler->RunFor(1ms);
+    EXPECT_TRUE(broken);
+}
+
+TEST(TinyFiberPromise, SetValueTwiceAndGetFutureTwiceThrow) {
+    tf::Scheduler::Run([] {
+        tf::Promise<int> promise;
+        auto future = promise.GetFuture();
+        EXPECT_THROW((void)promise.GetFuture(), std::logic_error);
+        promise.SetValue(1);
+        EXPECT_TRUE(promise.IsFulfilled());
+        EXPECT_THROW(promise.SetValue(2), std::logic_error);
+        EXPECT_THROW(promise.SetException(std::make_exception_ptr(std::runtime_error("x"))), std::logic_error);
+        EXPECT_EQ(future.Get(), 1);
+    });
+}
+
+TEST(TinyFiberPromise, ExceptionIsDelivered) {
+    tf::Scheduler::Run([] {
+        tf::Promise<void> promise;
+        auto future = promise.GetFuture();
+        auto fulfiller = tf::Spawn([&] { promise.SetException(std::make_exception_ptr(std::runtime_error("no"))); });
+        EXPECT_THROW(future.Get(), std::runtime_error);
+    });
+}
+
+TEST(TinyFiberPromise, FiberToFiberDoesNotCallWakeupHandler) {
+    int wakeups = 0;
+    auto scheduler = tf::Scheduler::Create([&] {
+        tf::Promise<void> promise;
+        auto future = promise.GetFuture();
+        auto fulfiller = tf::Spawn([&] {
+            tf::Yield();
+            promise.SetValue();
+        });
+        future.Wait();
+    });
+    scheduler->SetWakeupHandler([&] { ++wakeups; });
+    EXPECT_EQ(scheduler->RunFor(10ms), tf::Scheduler::Status::kDone);
+    EXPECT_EQ(wakeups, 0); // woken inside a step: the driver is already running
+}
+
+TEST(TinyFiberPromise, FulfilledAfterSchedulerDestroyedIsSafe) {
+    std::optional<tf::Promise<int>> promise;
+    std::optional<tf::Future<int>> future;
+    {
+        auto scheduler = tf::Scheduler::Create([] {});
+        promise.emplace(*scheduler);
+        future.emplace(promise->GetFuture());
+        while (scheduler->Step()) {
+        }
+    }
+    promise->SetValue(5); // must not touch the destroyed scheduler
+    ASSERT_TRUE(future->IsReady());
+    EXPECT_EQ(future->Get(), 5);
+}
+
+TEST(TinyFiberPost, PostedWorkRunsOnNextStepAndMaySpawn) {
+    bool ran = false;
+    auto scheduler = tf::Scheduler::Create([] {});
+    while (scheduler->Step()) {
+    }
+    EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kDone);
+    scheduler->Post([&] { tf::SpawnDetached([&] { ran = true; }); });
+    EXPECT_EQ(scheduler->GetStatus(), tf::Scheduler::Status::kRunnable);
+    EXPECT_EQ(scheduler->RunFor(1ms), tf::Scheduler::Status::kDone);
+    EXPECT_TRUE(ran);
+}
+
+#if !defined(__EMSCRIPTEN__) || defined(__EMSCRIPTEN_PTHREADS__)
+TEST(TinyFiberPost, PostFromAnotherThreadCompletesPromiseWhileRunBlocks) {
+    const int value = tf::Scheduler::Run([] {
+        auto& scheduler = tf::Scheduler::Current();
+        auto promise = std::make_shared<tf::Promise<int>>();
+        auto future = promise->GetFuture();
+        std::thread worker([&scheduler, promise] {
+            std::this_thread::sleep_for(5ms);
+            scheduler.Post([promise] { promise->SetValue(7); });
+        });
+        const int result = future.Get(); // Run() blocks the thread until Post
+        worker.join();
+        return result;
+    });
+    EXPECT_EQ(value, 7);
+}
+#endif

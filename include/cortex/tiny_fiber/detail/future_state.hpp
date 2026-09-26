@@ -68,6 +68,30 @@ std::shared_ptr<FutureState<T>> MakeFutureState(Scheduler& scheduler, bool exter
     return state;
 }
 
+// Marks the calling fiber's park as a wait on the outside world (see
+// Scheduler::Status::kWaiting) for as long as the scope lives.
+class ExternalWaitScope {
+public:
+    ExternalWaitScope(Scheduler& scheduler, bool external) noexcept
+        : scheduler_(external ? &scheduler : nullptr) {
+        if (scheduler_ != nullptr) {
+            scheduler_->BeginExternalWaitInternal();
+        }
+    }
+
+    ~ExternalWaitScope() {
+        if (scheduler_ != nullptr) {
+            scheduler_->EndExternalWaitInternal();
+        }
+    }
+
+    ExternalWaitScope(const ExternalWaitScope&) = delete;
+    ExternalWaitScope& operator=(const ExternalWaitScope&) = delete;
+
+private:
+    Scheduler* scheduler_;
+};
+
 // Parks the calling fiber until `state` is ready. Throws std::logic_error if
 // the caller is not a fiber of the state's scheduler, SchedulerStoppingError
 // once the scheduler is stopping, and (when `cancellable`) CancelledError if

@@ -22,6 +22,9 @@ namespace cortex::tiny_fiber {
 template <typename T>
 class Future;
 
+template <typename T>
+class Promise;
+
 namespace detail {
 
 // Members shared by Future<T> and Future<void>.
@@ -218,6 +221,8 @@ public:
 private:
     template <typename F>
     friend auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>>;
+    template <typename>
+    friend class Promise;
 
     explicit Future(std::shared_ptr<detail::FutureState<T>> state) noexcept
         : detail::FutureBase<T>(std::move(state)) {}
@@ -255,6 +260,8 @@ public:
 private:
     template <typename F>
     friend auto Spawn(F&& func, std::size_t stack_size) -> Future<std::invoke_result_t<F>>;
+    template <typename>
+    friend class Promise;
 
     explicit Future(std::shared_ptr<detail::FutureState<void>> state) noexcept
         : detail::FutureBase<void>(std::move(state)) {}
