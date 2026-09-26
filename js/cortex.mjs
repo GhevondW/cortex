@@ -23,8 +23,11 @@
 /** Mirrors cortex::tiny_fiber::Scheduler::Status, plus Failed. */
 export const Status = Object.freeze({ Runnable: 0, Waiting: 1, Done: 2, Deadlocked: 3, Failed: 4 });
 
-// Module -> Map(scheduler pointer -> wake function).
-const drivers = new WeakMap();
+// setTimeout() treats longer delays as 1 ms.
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+// Module -> { drivers: Map(scheduler pointer -> driver hooks), broken: error | null }.
+const modules = new WeakMap();
 
 // Queue `callback` as a new macrotask. Node's MessagePort drains messages
 // posted from a message handler before running timers, which would starve
@@ -60,27 +63,65 @@ function makeMacrotaskQueue(callback) {
     };
 }
 
-function driversOf(Module) {
-    let map = drivers.get(Module);
-    if (!map) {
-        map = new Map();
-        drivers.set(Module, map);
-        Module.cortexWake = (scheduler) => map.get(scheduler)?.();
+function stateOf(Module) {
+    let state = modules.get(Module);
+    if (!state) {
+        state = { drivers: new Map(), broken: null };
+        modules.set(Module, state);
+        // Called by the C++ side: a scheduler has runnable work again, or is
+        // being destroyed.
+        Module.cortexWake = (scheduler) => state.drivers.get(scheduler)?.wake();
+        Module.cortexForget = (scheduler) => state.drivers.get(scheduler)?.forget();
     }
-    return map;
+    return state;
+}
+
+// The error drivers report once the module cannot run fibers any more.
+function unusableModuleError(cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    return new Error(
+        `cortex: this WebAssembly module can no longer run fibers: a trap or a JavaScript ` +
+            `exception interrupted one (${reason})`,
+        { cause },
+    );
 }
 
 /**
  * Drive `scheduler` (a Scheduler* returned by your module) from the event loop.
  *
+ * - Drive a scheduler once at a time; calling drive() again for a scheduler
+ *   that is still being driven throws.
+ * - `done` resolves when every fiber finished, when `stop()` is called, or when
+ *   the scheduler is destroyed from C++. It rejects with an Error on a deadlock
+ *   (the message lists the stuck fibers), when an exception escapes a fiber
+ *   nobody waits for (its what()), and when a trap or a JavaScript exception
+ *   interrupts a fiber. The last one leaves the module unable to run fibers
+ *   (C++ destructors did not run, the fiber runtime is mid-switch), so every
+ *   other drive on the module rejects too, and later drive() calls reject
+ *   straight away.
+ * - `stop()` only stops driving: it resolves `done` and leaves the fibers where
+ *   they are. To cancel the work itself, call an export of yours that calls
+ *   Scheduler::Stop() or Future::Cancel(), or destroy the scheduler.
+ *
+ * The module must keep its runtime alive (-sEXIT_RUNTIME=0, the default except
+ * with -fsanitize=address).
+ *
  * @param {object} Module The instantiated Emscripten module.
  * @param {number} scheduler Pointer to a cortex::tiny_fiber::Scheduler.
- * @param {{budgetMs?: number}} [options] budgetMs: CPU time per slice (default 8).
+ * @param {{budgetMs?: number}} [options] budgetMs: longest a slice of fiber
+ *        work may run before the browser gets the thread back (default 8).
  * @returns {{done: Promise<void>, stop: () => void}}
  */
 export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
     if (typeof Module._cortex_scheduler_run_for !== "function") {
         throw new Error("cortex: this WebAssembly module does not link the cortex scheduler");
+    }
+    const state = stateOf(Module);
+    if (state.drivers.has(scheduler)) {
+        throw new Error("cortex: this scheduler is already being driven");
+    }
+    if (state.broken !== null) {
+        return { done: Promise.reject(unusableModuleError(state.broken)), stop() {} };
     }
 
     let resolveDone;
@@ -105,15 +146,27 @@ export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
         }
     };
 
-    const finish = () => {
+    // Stop driving. `detach` unless the scheduler is gone or the module broke.
+    const finish = (detach) => {
         finished = true;
         if (timer !== null) {
             clearTimeout(timer);
             timer = null;
         }
         macrotasks.close();
-        driversOf(Module).delete(scheduler);
-        Module._cortex_scheduler_detach(scheduler);
+        state.drivers.delete(scheduler);
+        if (detach) {
+            Module._cortex_scheduler_detach(scheduler);
+        }
+    };
+
+    // A trap or a JavaScript exception unwound the WebAssembly stack in the
+    // middle of a fiber: fail every drive on this module.
+    const breakModule = (error) => {
+        state.broken = error;
+        for (const other of [...state.drivers.values()]) {
+            other.fail(other.tick === tick ? error : unusableModuleError(error));
+        }
     };
 
     const tick = () => {
@@ -132,8 +185,7 @@ export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
             Module._cortex_scheduler_run_for(scheduler, budgetMs);
             status = Module._cortex_scheduler_last_status();
         } catch (error) {
-            finish();
-            rejectDone(error);
+            breakModule(error);
             return;
         }
 
@@ -146,26 +198,38 @@ export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
                 // through Module.cortexWake.
                 const ms = Module._cortex_scheduler_next_timer_ms(scheduler);
                 if (ms >= 0) {
-                    timer = setTimeout(tick, ms);
+                    timer = setTimeout(tick, Math.min(ms, MAX_TIMEOUT_MS));
                 }
                 break;
             }
             case Status.Done:
-                finish();
+                finish(true);
                 resolveDone();
                 break;
             case Status.Deadlocked:
-                finish();
+                finish(true);
                 rejectDone(new Error(Module.cortexMessage ?? "cortex: deadlock"));
                 break;
             default:
-                finish();
+                finish(true);
                 rejectDone(new Error(Module.cortexMessage ?? "cortex: a fiber failed"));
                 break;
         }
     };
 
-    driversOf(Module).set(scheduler, schedule);
+    state.drivers.set(scheduler, {
+        tick,
+        wake: schedule,
+        // The scheduler is being destroyed: its memory may be reused.
+        forget() {
+            finish(false);
+            resolveDone();
+        },
+        fail(error) {
+            finish(false);
+            rejectDone(error);
+        },
+    });
     Module._cortex_scheduler_attach(scheduler);
     schedule();
 
@@ -173,7 +237,7 @@ export function drive(Module, scheduler, { budgetMs = 8 } = {}) {
         done,
         stop() {
             if (!finished) {
-                finish();
+                finish(true);
                 resolveDone();
             }
         },

@@ -13,6 +13,7 @@ async function load() {
     const Module = await createModule();
     Module.makeDelayed = (value, ms) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
     Module.makeRejected = (reason) => Promise.reject(new Error(reason));
+    Module.makeUnprintableRejection = () => Promise.reject(Object.create(null));
     return Module;
 }
 
@@ -29,6 +30,14 @@ test("a rejected promise throws JsError with the reason", async () => {
     const scheduler = Module._start_await_rejection();
     await drive(Module, scheduler).done;
     assert.match(Module.UTF8ToString(Module._text_result()), /nope/);
+    Module._destroy_scheduler(scheduler);
+});
+
+test("a rejection reason String() cannot convert still wakes the fiber", { timeout: 5000 }, async () => {
+    const Module = await load();
+    const scheduler = Module._start_await_unprintable_rejection();
+    await drive(Module, scheduler).done;
+    assert.match(Module.UTF8ToString(Module._text_result()), /JavaScript promise rejected: \[object Object\]/);
     Module._destroy_scheduler(scheduler);
 });
 

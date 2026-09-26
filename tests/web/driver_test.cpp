@@ -14,6 +14,12 @@
 namespace tf = cortex::tiny_fiber;
 using namespace std::chrono_literals;
 
+// clang-format off
+EM_JS(void, throw_from_js, (), {
+    throw new Error("js boom");
+});
+// clang-format on
+
 namespace {
 
 std::vector<std::unique_ptr<tf::Scheduler>> g_schedulers;
@@ -77,6 +83,30 @@ EMSCRIPTEN_KEEPALIVE void* start_promise() {
         g_promise.emplace();
         auto future = g_promise->GetFuture();
         g_promise_result = future.Get();
+    }));
+}
+
+// A fiber that traps, like C++ crashing (a WebAssembly `unreachable`).
+EMSCRIPTEN_KEEPALIVE void* start_trap() {
+    return Keep(tf::Scheduler::Create([] {
+        tf::Yield();
+        __builtin_trap();
+    }));
+}
+
+// A fiber whose JavaScript call throws: a JavaScript exception, not a C++ one,
+// unwinds the fiber.
+EMSCRIPTEN_KEEPALIVE void* start_js_throw() {
+    return Keep(tf::Scheduler::Create([] {
+        tf::Yield();
+        throw_from_js();
+    }));
+}
+
+// A fiber that sleeps far longer than any test runs.
+EMSCRIPTEN_KEEPALIVE void* start_long_sleep() {
+    return Keep(tf::Scheduler::Create([] {
+        tf::SleepFor(1h);
     }));
 }
 

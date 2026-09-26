@@ -78,3 +78,35 @@ test("stop() ends driving", async () => {
     await driver.done;
     Module._destroy_scheduler(scheduler);
 });
+
+test("a trap in a fiber rejects done, and the module refuses further driving", async () => {
+    const Module = await createModule();
+    await assert.rejects(drive(Module, Module._start_trap()).done, /unreachable/);
+    await assert.rejects(drive(Module, Module._start_sleeps()).done, /can no longer run fibers/);
+});
+
+test("a JavaScript exception unwinding a fiber rejects done, and later drives say why", async () => {
+    const Module = await createModule();
+    const sleeping = drive(Module, Module._start_long_sleep());
+    await assert.rejects(drive(Module, Module._start_js_throw()).done, /js boom/);
+    // Every other driver on the module fails too, with the reason.
+    await assert.rejects(sleeping.done, /can no longer run fibers.*js boom/s);
+    await assert.rejects(drive(Module, Module._start_sleeps()).done, /can no longer run fibers.*js boom/s);
+});
+
+test("destroying a driven scheduler ends its drive", { timeout: 5000 }, async () => {
+    const Module = await createModule();
+    const scheduler = Module._start_long_sleep();
+    const { done } = drive(Module, scheduler);
+    setTimeout(() => Module._destroy_scheduler(scheduler), 10);
+    await done;
+});
+
+test("a scheduler can only be driven once at a time", async () => {
+    const Module = await createModule();
+    const scheduler = Module._start_sleeps();
+    const first = drive(Module, scheduler);
+    assert.throws(() => drive(Module, scheduler), /already being driven/);
+    await first.done;
+    Module._destroy_scheduler(scheduler);
+});

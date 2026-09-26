@@ -30,18 +30,35 @@ EM_JS(void, cortex_web_then, (emscripten::EM_VAL handle, void* pending), {
         function (value) { Module["_cortex_web_settle"](pending, 1, Emval.toHandle(value)); },
         function (reason) { Module["_cortex_web_settle"](pending, 0, Emval.toHandle(reason)); });
 });
+
+// A printable description of a rejection reason: its message, or String()
+// of it. Never throws, whatever the reason is (a JavaScript exception must not
+// unwind C++ frames).
+EM_JS(emscripten::EM_VAL, cortex_web_describe, (emscripten::EM_VAL handle), {
+    var reason = Emval.toValue(handle);
+    var text;
+    try {
+        if (typeof reason === "string") {
+            text = reason;
+        } else if (reason !== null && reason !== undefined && typeof reason.message === "string") {
+            text = reason.message;
+        } else {
+            text = String(reason);
+        }
+    } catch (e) {
+        try {
+            text = Object.prototype.toString.call(reason);
+        } catch (e2) {
+            text = "(a value that cannot be printed)";
+        }
+    }
+    return Emval.toHandle(text);
+});
 // clang-format on
 
 std::string DescribeReason(const val& reason) {
-    std::string text;
-    if (reason.isString()) {
-        text = reason.as<std::string>();
-    } else if (!reason.isNull() && !reason.isUndefined() && reason["message"].isString()) {
-        text = reason["message"].as<std::string>();
-    } else {
-        text = val::global("String")(reason).as<std::string>();
-    }
-    return "JavaScript promise rejected: " + text;
+    return "JavaScript promise rejected: " +
+           val::take_ownership(cortex_web_describe(reason.as_handle())).as<std::string>();
 }
 
 } // namespace

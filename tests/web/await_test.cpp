@@ -51,6 +51,19 @@ EMSCRIPTEN_KEEPALIVE void* start_await_rejection() {
     }));
 }
 
+// Module.makeUnprintableRejection(): rejected with a reason String() cannot
+// convert (an object without a prototype).
+EMSCRIPTEN_KEEPALIVE void* start_await_unprintable_rejection() {
+    return Keep(tf::Scheduler::Create([] {
+        try {
+            cortex::web::Await(val::module_property("makeUnprintableRejection")());
+            g_text_result = "no exception";
+        } catch (const cortex::web::JsError& error) {
+            g_text_result = error.what();
+        }
+    }));
+}
+
 // Two fibers await promises settling in the opposite order they started.
 EMSCRIPTEN_KEEPALIVE void* start_await_two() {
     g_order.clear();

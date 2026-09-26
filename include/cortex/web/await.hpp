@@ -19,6 +19,8 @@ namespace cortex::web {
  */
 class JsError : public std::runtime_error {
 public:
+    /// what() is "JavaScript promise rejected: " plus the reason's message
+    /// (or String(reason)).
     explicit JsError(emscripten::val reason);
 
     /// The rejection reason, as the JavaScript value.
@@ -46,6 +48,14 @@ private:
  *
  * Non-promise values are awaited like JavaScript's `await` does: they
  * resolve to themselves.
+ *
+ * Only a rejection becomes a C++ exception. A JavaScript exception thrown
+ * synchronously by a `val` call (JSON.parse on bad input, a DOM exception, a
+ * failed `as<T>()` conversion) is not one: it unwinds the WebAssembly stack
+ * without running C++ destructors and, inside a fiber, leaves the module
+ * unable to run fibers (js/cortex.mjs then rejects every drive with that
+ * error). Check values before converting them, or call code that may throw
+ * through a promise (`Promise.resolve().then(...)`) and Await() it.
  *
  * @return The fulfilled value.
  * @throws JsError if the promise is rejected.
