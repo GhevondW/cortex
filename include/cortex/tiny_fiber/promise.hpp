@@ -27,7 +27,10 @@ namespace cortex::tiny_fiber {
  * threads, fulfil it through Scheduler::Post().
  *
  * While fibers wait on a promise the scheduler reports Status::kWaiting, not
- * kDeadlocked: the result is expected to come from outside. Destroying an
+ * kDeadlocked: the result is expected to come from outside. A blocking
+ * Scheduler::Run() therefore keeps waiting for it (like std::future::wait)
+ * instead of throwing DeadlockError — fulfil it via Post() from another
+ * thread, or use Create() + RunFor() when it comes from an event loop. Destroying an
  * unfulfilled promise completes its future with BrokenPromiseError. A promise
  * may be fulfilled even after its scheduler is gone; the future then simply
  * holds the result.
