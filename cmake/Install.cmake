@@ -4,7 +4,13 @@ include(CMakePackageConfigHelpers)
 
 set(CORTEX_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/cortex")
 
-install(TARGETS cortex
+set(CORTEX_INSTALL_TARGETS cortex)
+if(TARGET cortex_web)
+    list(APPEND CORTEX_INSTALL_TARGETS cortex_web)
+    set_target_properties(cortex_web PROPERTIES EXPORT_NAME web)
+endif()
+
+install(TARGETS ${CORTEX_INSTALL_TARGETS}
     EXPORT cortexTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"

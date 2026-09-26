@@ -76,4 +76,22 @@ if(EMSCRIPTEN)
         COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/web/driver_test.mjs
                 ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_driver_test.mjs
                 ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
+
+    # cortex::web::Await: fibers awaiting JavaScript promises.
+    add_executable(cortex_web_await_test web/await_test.cpp)
+    target_link_libraries(cortex_web_await_test PRIVATE cortex::web)
+    cortex_apply_warnings(cortex_web_await_test)
+    set_target_properties(cortex_web_await_test PROPERTIES SUFFIX ".mjs")
+    target_link_options(cortex_web_await_test PRIVATE
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sENVIRONMENT=node"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXPORTED_RUNTIME_METHODS=UTF8ToString"
+        "-fexceptions"
+    )
+    add_test(NAME cortex_web_await_test
+        COMMAND node ${CMAKE_CURRENT_SOURCE_DIR}/web/await_test.mjs
+                ${CMAKE_CURRENT_BINARY_DIR}/cortex_web_await_test.mjs
+                ${PROJECT_SOURCE_DIR}/js/cortex.mjs)
 endif()

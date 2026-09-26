@@ -70,3 +70,12 @@ cortex_configure_platform(cortex)
 
 # Alias
 add_library(cortex::cortex ALIAS cortex)
+
+# cortex::web — awaiting JavaScript promises from fibers (WASM only; embind).
+if(EMSCRIPTEN)
+    add_library(cortex_web STATIC web/await.cpp)
+    target_link_libraries(cortex_web PUBLIC cortex)
+    target_link_options(cortex_web PUBLIC "-lembind")
+    cortex_apply_warnings(cortex_web)
+    add_library(cortex::web ALIAS cortex_web)
+endif()
