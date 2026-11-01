@@ -181,14 +181,14 @@ void LoadPalette() {
         // Check the shape before converting: a JavaScript exception thrown by
         // a failed conversion must not unwind C++ frames.
         const val array = val::global("Array");
-        if (!stops.instanceof (array)) {
+        if (!stops.instanceof(array)) {
             throw std::runtime_error("palette.json is not an array");
         }
         std::vector<Color> colors;
         for (int i = 0; i < stops["length"].as<int>(); ++i) {
             const val stop = stops[i];
-            if (!stop.instanceof (array) || stop["length"].as<int>() != 3 || !stop[0].isNumber() ||
-                                     !stop[1].isNumber() || !stop[2].isNumber()) {
+            if (!stop.instanceof(array) || stop["length"].as<int>() != 3 || !stop[0].isNumber() ||
+                !stop[1].isNumber() || !stop[2].isNumber()) {
                 throw std::runtime_error("palette.json entries must be [r, g, b]");
             }
             const auto channel = [&stop](int c) {

@@ -180,19 +180,21 @@ jobs:
         run: docker compose run --rm test-package
 
   # Job 6: Check code formatting
+  # Pinned to clang-format-19, the version in the Docker image: an unpinned
+  # clang-format follows ubuntu-latest and reformats unchanged code.
   check-format:
     name: Check Code Formatting
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install clang-format
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format
+          sudo apt-get install -y clang-format-19
       
       - name: Check formatting
         run: |
@@ -210,7 +212,7 @@ jobs:
           # Check if any files would be reformatted
           needs_format=false
           for file in $files; do
-            if ! clang-format --dry-run --Werror "$file" 2>/dev/null; then
+            if ! clang-format-19 --dry-run --Werror "$file" 2>/dev/null; then
               needs_format=true
               echo "❌ File needs formatting: $file"
             fi

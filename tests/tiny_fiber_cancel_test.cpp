@@ -102,7 +102,9 @@ TEST(TinyFiberCancel, MutexLockIsNotACancellationPoint) {
         contender.Cancel();
         tf::Yield();
         EXPECT_FALSE(acquired);
-        { auto released = std::move(holder); } // unlock: contender acquires
+        {
+            auto released = std::move(holder);
+        } // unlock: contender acquires
         EXPECT_THROW(contender.Wait(), tf::CancelledError);
     });
     EXPECT_TRUE(acquired);
